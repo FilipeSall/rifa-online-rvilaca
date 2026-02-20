@@ -1,5 +1,4 @@
-const NAV_LINKS = ['Sorteios Ativos', 'Ganhadores', 'Termos de Uso', 'Política de Privacidade']
-const SUPPORT_LINKS = ['Fale Conosco', 'Dúvidas Frequentes', 'Regulamento']
+import { FOOTER_NAV_LINKS, FOOTER_SUPPORT_LINKS } from '../../const/home'
 
 export default function Footer() {
   return (
@@ -38,7 +37,7 @@ export default function Footer() {
           <div>
             <h3 className="text-white font-bold text-xs uppercase tracking-widest mb-6">Navegação</h3>
             <ul className="space-y-3 text-sm text-gray-500">
-              {NAV_LINKS.map((item) => (
+              {FOOTER_NAV_LINKS.map((item) => (
                 <li key={item}>
                   <a className="hover:text-gold transition-colors" href="#">
                     {item}
@@ -51,7 +50,7 @@ export default function Footer() {
           <div>
             <h3 className="text-white font-bold text-xs uppercase tracking-widest mb-6">Suporte</h3>
             <ul className="space-y-3 text-sm text-gray-500">
-              {SUPPORT_LINKS.map((item) => (
+              {FOOTER_SUPPORT_LINKS.map((item) => (
                 <li key={item}>
                   <a className="hover:text-gold transition-colors" href="#">
                     {item}

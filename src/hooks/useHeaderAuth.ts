@@ -1,0 +1,96 @@
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, type AuthError } from 'firebase/auth'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { auth } from '../lib/firebase'
+import { getGoogleAuthErrorMessage } from '../utils/home'
+
+const googleProvider = new GoogleAuthProvider()
+googleProvider.setCustomParameters({ prompt: 'select_account' })
+
+export function useHeaderAuth() {
+  const [isLoggedIn, setIsLoggedIn] = useState(Boolean(auth.currentUser))
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
+  const [isSigningIn, setIsSigningIn] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const authMenuRef = useRef<HTMLDivElement>(null)
+
+  const closeAuthModal = useCallback(() => {
+    setIsAuthModalOpen(false)
+    setIsSigningIn(false)
+    setAuthError(null)
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsLoggedIn(Boolean(user))
+    })
+
+    return unsubscribe
+  }, [])
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      closeAuthModal()
+    }
+  }, [isLoggedIn, closeAuthModal])
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!isAuthModalOpen || !authMenuRef.current) {
+        return
+      }
+
+      if (!authMenuRef.current.contains(event.target as Node)) {
+        closeAuthModal()
+      }
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeAuthModal()
+      }
+    }
+
+    window.addEventListener('mousedown', handlePointerDown)
+    window.addEventListener('keydown', handleEscape)
+
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown)
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [isAuthModalOpen, closeAuthModal])
+
+  const handleAuthButtonClick = useCallback(() => {
+    if (isLoggedIn) {
+      return
+    }
+
+    setAuthError(null)
+    setIsSigningIn(false)
+    setIsAuthModalOpen((currentValue) => !currentValue)
+  }, [isLoggedIn])
+
+  const handleGoogleSignIn = useCallback(async () => {
+    setIsSigningIn(true)
+    setAuthError(null)
+
+    try {
+      await signInWithPopup(auth, googleProvider)
+      closeAuthModal()
+    } catch (error) {
+      const currentAuthError = error as AuthError
+      setAuthError(getGoogleAuthErrorMessage(currentAuthError.code))
+    } finally {
+      setIsSigningIn(false)
+    }
+  }, [closeAuthModal])
+
+  return {
+    isLoggedIn,
+    isAuthModalOpen,
+    isSigningIn,
+    authError,
+    authMenuRef,
+    handleAuthButtonClick,
+    handleGoogleSignIn,
+  }
+}

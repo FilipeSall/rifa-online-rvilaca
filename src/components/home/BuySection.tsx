@@ -1,9 +1,4 @@
-const PACK_OPTIONS = [
-  { amount: '+10', popular: false },
-  { amount: '+50', popular: true },
-  { amount: '+100', popular: false },
-  { amount: '+250', popular: false },
-]
+import { PACK_OPTIONS } from '../../const/home'
 
 export default function BuySection() {
   return (

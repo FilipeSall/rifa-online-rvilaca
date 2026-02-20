@@ -1,43 +1,6 @@
-type PrizeCardProps = {
-  badge: string
-  badgeClassName: string
-  title: string
-  description: string
-  imageSrc?: string
-  imageAlt?: string
-  icon?: string
-}
+import { PRIZES, type PrizeCardData } from '../../const/home'
 
-const PRIZES: PrizeCardProps[] = [
-  {
-    badge: '1º Prêmio',
-    badgeClassName: 'bg-gold text-black',
-    title: 'BMW R 1200 GS',
-    description:
-      'A máquina definitiva para suas aventuras. Completa, com acessórios e documentação grátis.',
-    imageAlt: 'BMW Motorcycle',
-    imageSrc:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuDaQF11hNB5K8OrSxcTvxNOx5hgNg1ADcoHxYzDLBIsbbeH_5iAWjd-AboztLottNaaNPlPIG8UHvAY3crWR6zGTWK4JgzYQlU1JEadKFDe4wimQeFcTl4nboPuYNSoQTsiCiz7CpWKyN_0iqn0DGk3AZdWYkzXlhPtcL7sV1mbKzzCTpG52RRuJq1dIaFlCWEsVWKWA2g1tkKXaBW_yIdfhx3OzWszMoNNcpteERd6bjDmzkNMWQKl5nsaiOmrgyfxwyWII69GMJ6g',
-  },
-  {
-    badge: '2º Prêmio',
-    badgeClassName: 'bg-white text-black',
-    title: 'Honda CG 160 Titan',
-    description: 'Economia e agilidade para o dia a dia. Tanque cheio e emplacada.',
-    imageAlt: 'Honda Motorcycle',
-    imageSrc:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuC9vPUnNi9GeVGuP8cEk_bTws-UD92OhX5CitQJ9GO5u3efdLU1VLwR1o2Qa8Kl4BxvKw6RcuQI3Mj2YmsnNd_soxwmzryanwI14UB0BMaFaDaYh0kZriOw8gfFK-ORFT4P2qCKIWDJxxo34SUo8cohk2QGBT3ewqAl98N7WgZYuKWhykkiyvKwPwMrM5piDUBiwiYvDssRbWKK8x24li1gZ2tbopzr0txQJYHFAqktbdEut_4XEtZuTFJgMHGUmeb-QfE4npTZUpjj',
-  },
-  {
-    badge: 'Bilhetes Premiados',
-    badgeClassName: 'bg-white text-black',
-    title: '20x Pix de R$ 1.000',
-    description: 'Prêmios instantâneos escondidos nos números. Achou, ganhou na hora!',
-    icon: 'payments',
-  },
-]
-
-function PrizeCard({ badge, badgeClassName, title, description, imageSrc, imageAlt, icon }: PrizeCardProps) {
+function PrizeCard({ badge, badgeClassName, title, description, imageSrc, imageAlt, icon }: PrizeCardData) {
   return (
     <div className="group bg-luxury-bg border border-white/5 rounded-xl overflow-hidden hover:border-gold/50 transition-all duration-300 hover:shadow-card-hover">
       <div className="aspect-[16/10] bg-gray-900 relative overflow-hidden flex items-center justify-center">

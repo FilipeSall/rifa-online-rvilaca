@@ -1,25 +1,5 @@
-const RANKING = [
-  { pos: 1, name: 'Rafael M.', cotas: 520, isGold: true },
-  { pos: 2, name: 'Ana Paula S.', cotas: 415, isGold: false },
-  { pos: 3, name: 'Carlos E.', cotas: 380, isGold: false },
-  { pos: 4, name: 'Julia R.', cotas: 250, isGold: false },
-  { pos: 5, name: 'Marcos V.', cotas: 210, isGold: false },
-]
-
-const FAQ_ITEMS = [
-  {
-    q: 'Como recebo meu prêmio?',
-    a: 'Após a apuração do resultado, nossa equipe entrará em contato via WhatsApp e telefone para alinhar a entrega do prêmio. Para prêmios físicos como a moto, cobrimos todos os custos de envio.',
-  },
-  {
-    q: 'O sorteio é confiável?',
-    a: 'Sim! Utilizamos os números da Loteria Federal para definir os ganhadores, garantindo 100% de imparcialidade e transparência. Você pode conferir o resultado diretamente no site da Caixa.',
-  },
-  {
-    q: 'Posso pagar com cartão de crédito?',
-    a: 'Atualmente aceitamos exclusivamente PIX, pois permite a baixa automática e instantânea dos seus números, garantindo sua participação imediata no sorteio.',
-  },
-]
+import { FAQ_ITEMS, RANKING } from '../../const/home'
+import { getRankingPositionClass } from '../../utils/home'
 
 function RankingTable() {
   return (
@@ -38,13 +18,7 @@ function RankingTable() {
             <div key={pos} className="p-4 flex justify-between items-center hover:bg-white/5 transition-colors">
               <div className="flex items-center gap-3">
                 <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
-                    pos === 1
-                      ? 'bg-gold text-black'
-                      : pos === 2
-                        ? 'bg-gray-700 text-white'
-                        : 'bg-gray-900 text-gray-400'
-                  }`}
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${getRankingPositionClass(pos)}`}
                 >
                   {pos}
                 </div>

@@ -1,102 +1,11 @@
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, type AuthError } from 'firebase/auth'
-import { useEffect, useRef, useState } from 'react'
 import { FcGoogle } from 'react-icons/fc'
 import { HiOutlineArrowRight } from 'react-icons/hi2'
-import { auth } from '../../lib/firebase'
-
-const NAV_ITEMS = [
-  { label: 'Início', href: '#', isActive: true },
-  { label: 'Como Funciona', href: '#como-funciona', isActive: false },
-  { label: 'Ganhadores', href: '#ganhadores', isActive: false },
-  { label: 'FAQ', href: '#faq', isActive: false },
-  { label: 'Regulamento', href: '#', isActive: false },
-]
-
-const googleProvider = new GoogleAuthProvider()
-googleProvider.setCustomParameters({ prompt: 'select_account' })
+import { HEADER_NAV_ITEMS } from '../../const/home'
+import { useHeaderAuth } from '../../hooks/useHeaderAuth'
 
 export default function Header() {
-  const [isLoggedIn, setIsLoggedIn] = useState(Boolean(auth.currentUser))
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
-  const [isSigningIn, setIsSigningIn] = useState(false)
-  const [authError, setAuthError] = useState<string | null>(null)
-  const authMenuRef = useRef<HTMLDivElement>(null)
-
-  const closeAuthModal = () => {
-    setIsAuthModalOpen(false)
-    setIsSigningIn(false)
-    setAuthError(null)
-  }
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsLoggedIn(Boolean(user))
-    })
-
-    return unsubscribe
-  }, [])
-
-  useEffect(() => {
-    if (isLoggedIn) {
-      closeAuthModal()
-    }
-  }, [isLoggedIn])
-
-  useEffect(() => {
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!isAuthModalOpen || !authMenuRef.current) {
-        return
-      }
-
-      if (!authMenuRef.current.contains(event.target as Node)) {
-        closeAuthModal()
-      }
-    }
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closeAuthModal()
-      }
-    }
-
-    window.addEventListener('mousedown', handlePointerDown)
-    window.addEventListener('keydown', handleEscape)
-
-    return () => {
-      window.removeEventListener('mousedown', handlePointerDown)
-      window.removeEventListener('keydown', handleEscape)
-    }
-  }, [isAuthModalOpen])
-
-  const handleAuthButtonClick = () => {
-    if (isLoggedIn) {
-      return
-    }
-
-    setAuthError(null)
-    setIsSigningIn(false)
-    setIsAuthModalOpen((currentValue) => !currentValue)
-  }
-
-  const handleGoogleSignIn = async () => {
-    setIsSigningIn(true)
-    setAuthError(null)
-
-    try {
-      await signInWithPopup(auth, googleProvider)
-      closeAuthModal()
-    } catch (error) {
-      const authError = error as AuthError
-
-      if (authError.code === 'auth/popup-closed-by-user') {
-        setAuthError(null)
-      } else {
-        setAuthError('Não foi possível entrar com Google agora. Tente novamente.')
-      }
-    } finally {
-      setIsSigningIn(false)
-    }
-  }
+  const { isLoggedIn, isAuthModalOpen, isSigningIn, authError, authMenuRef, handleAuthButtonClick, handleGoogleSignIn } =
+    useHeaderAuth()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-luxury-bg/90 backdrop-blur-md">
@@ -112,7 +21,7 @@ export default function Header() {
           </div>
 
           <nav className="hidden lg:flex items-center gap-8">
-            {NAV_ITEMS.map(({ label, href, isActive }) => (
+            {HEADER_NAV_ITEMS.map(({ label, href, isActive }) => (
               <a
                 key={label}
                 className={`text-xs font-bold hover:text-gold transition-colors uppercase tracking-widest ${

@@ -1,4 +1,5 @@
 import { Route, Routes } from 'react-router-dom'
+import { PLACEHOLDER_ROUTES } from './const/app'
 import HomePage from './pages/HomePage'
 import PlaceholderPage from './pages/PlaceholderPage'
 
@@ -8,13 +9,23 @@ export default function App() {
       <Route path="/" element={<HomePage />} />
       <Route
         path="/checkout"
-        element={<PlaceholderPage title="Checkout" description="Tela reservada para fluxo de pagamento via PIX." />}
+        element={
+          <PlaceholderPage
+            title={PLACEHOLDER_ROUTES.checkout.title}
+            description={PLACEHOLDER_ROUTES.checkout.description}
+          />
+        }
       />
       <Route
         path="/resultado"
-        element={<PlaceholderPage title="Resultado" description="Tela reservada para histórico de sorteios e ganhadores." />}
+        element={
+          <PlaceholderPage
+            title={PLACEHOLDER_ROUTES.resultado.title}
+            description={PLACEHOLDER_ROUTES.resultado.description}
+          />
+        }
       />
-      <Route path="*" element={<PlaceholderPage title="Página não encontrada" />} />
+      <Route path="*" element={<PlaceholderPage title={PLACEHOLDER_ROUTES.notFound.title} />} />
     </Routes>
   )
 }
