@@ -32,10 +32,9 @@ service cloud.firestore {
     }
 
     // User profile: each user can manage only their own document.
+    // Canonical owner rule from Firebase docs.
     match /users/{uid} {
-      allow create: if isOwner(uid) && request.resource.data.uid == uid;
-      allow read: if isOwner(uid);
-      allow update: if isOwner(uid) && request.resource.data.uid == uid;
+      allow read, write: if isOwner(uid);
       allow delete: if false;
     }
 

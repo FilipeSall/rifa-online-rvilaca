@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
+    "deploy:rules": "firebase deploy --only firestore:rules --project rifa-online-395d9",
     "seed:firestore": "bun run scripts/seed-firestore.ts"
   },
   "dependencies": {
