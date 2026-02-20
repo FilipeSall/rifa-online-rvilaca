@@ -56,7 +56,7 @@ export const HEADER_NAV_ITEMS: NavItem[] = [
 
 export const HERO_CONFIG = {
   countdownDurationMs: ((2 * 24 + 14) * 60 * 60 + 45 * 60 + 30) * 1000,
-  targetSoldPercentage: 67,
+  targetSoldPercentage: 65,
   progressAnimationDelayMs: 120,
   progressAnimationDurationMs: 1600,
 }

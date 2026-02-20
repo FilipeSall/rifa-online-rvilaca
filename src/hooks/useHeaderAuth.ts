@@ -1,13 +1,14 @@
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, type AuthError } from 'firebase/auth'
+import { GoogleAuthProvider, signInWithPopup, type AuthError } from 'firebase/auth'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { auth } from '../lib/firebase'
+import { useAuthStore } from '../stores/authStore'
 import { getGoogleAuthErrorMessage } from '../utils/home'
 
 const googleProvider = new GoogleAuthProvider()
 googleProvider.setCustomParameters({ prompt: 'select_account' })
 
 export function useHeaderAuth() {
-  const [isLoggedIn, setIsLoggedIn] = useState(Boolean(auth.currentUser))
+  const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [isSigningIn, setIsSigningIn] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
@@ -17,14 +18,6 @@ export function useHeaderAuth() {
     setIsAuthModalOpen(false)
     setIsSigningIn(false)
     setAuthError(null)
-  }, [])
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsLoggedIn(Boolean(user))
-    })
-
-    return unsubscribe
   }, [])
 
   useEffect(() => {
