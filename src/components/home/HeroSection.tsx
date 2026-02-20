@@ -66,16 +66,11 @@ export default function HeroSection() {
             </div>
 
             {/* Countdown */}
-            <div className="grid grid-cols-4 gap-3 max-w-sm mt-1">
+            <div className="grid grid-cols-4 gap-4 max-w-md mt-2">
               {countdownItems.map(({ value, label }) => (
-                <div
-                  key={label}
-                  className="text-center bg-gray-900 border border-white/10 rounded-lg py-3 px-2"
-                >
+                <div key={label} className="text-center">
                   <span className="block text-2xl font-black text-white font-mono">{value}</span>
-                  <span className="text-[9px] uppercase text-gray-500 tracking-wider font-semibold">
-                    {label}
-                  </span>
+                  <span className="text-[10px] uppercase text-gray-500 tracking-wider">{label}</span>
                 </div>
               ))}
             </div>
