@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Public campaign data used by landing page.
+    match /campaigns/{campaignId} {
+      allow read: if true;
+      allow write: if false;
+
+      match /{document=**} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
+    // Public draw/winner visibility.
+    match /draws/{drawId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /winners/{winnerId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // User profile: each user can manage only their own document.
+    match /users/{uid} {
+      allow create: if isOwner(uid) && request.resource.data.uid == uid;
+      allow read: if isOwner(uid);
+      allow update: if isOwner(uid) && request.resource.data.uid == uid;
+      allow delete: if false;
+    }
+
+    // Sensitive/transactional collections are backend-only for now.
+    match /orders/{orderId} {
+      allow read, write: if false;
+    }
+
+    match /payments/{paymentId} {
+      allow read, write: if false;
+    }
+
+    match /auditLogs/{logId} {
+      allow read, write: if false;
+    }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
