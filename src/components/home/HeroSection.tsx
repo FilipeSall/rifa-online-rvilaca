@@ -173,7 +173,7 @@ export default function HeroSection() {
                 src="https://lh3.googleusercontent.com/aida-public/AB6AXuDaQF11hNB5K8OrSxcTvxNOx5hgNg1ADcoHxYzDLBIsbbeH_5iAWjd-AboztLottNaaNPlPIG8UHvAY3crWR6zGTWK4JgzYQlU1JEadKFDe4wimQeFcTl4nboPuYNSoQTsiCiz7CpWKyN_0iqn0DGk3AZdWYkzXlhPtcL7sV1mbKzzCTpG52RRuJq1dIaFlCWEsVWKWA2g1tkKXaBW_yIdfhx3OzWszMoNNcpteERd6bjDmzkNMWQKl5nsaiOmrgyfxwyWII69GMJ6g"
               />
             </div>
-            <div className="absolute -bottom-6 right-0 md:right-10 bg-luxury-card border border-gold/30 p-4 rounded-lg shadow-xl max-w-[200px]">
+            <div className="absolute bottom-4 right-0 md:right-10 bg-luxury-card border border-gold/30 p-4 rounded-lg shadow-xl max-w-[200px]">
               <div className="flex items-center gap-2 mb-1">
                 <span className="material-symbols-outlined text-gold">verified</span>
                 <span className="text-xs font-bold text-white">IPVA 2024 PAGO</span>

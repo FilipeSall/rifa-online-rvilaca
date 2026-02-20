@@ -1,4 +1,4 @@
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup } from 'firebase/auth'
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, type AuthError } from 'firebase/auth'
 import { useEffect, useRef, useState } from 'react'
 import { FcGoogle } from 'react-icons/fc'
 import { HiOutlineArrowRight } from 'react-icons/hi2'
@@ -22,6 +22,12 @@ export default function Header() {
   const [authError, setAuthError] = useState<string | null>(null)
   const authMenuRef = useRef<HTMLDivElement>(null)
 
+  const closeAuthModal = () => {
+    setIsAuthModalOpen(false)
+    setIsSigningIn(false)
+    setAuthError(null)
+  }
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setIsLoggedIn(Boolean(user))
@@ -32,8 +38,7 @@ export default function Header() {
 
   useEffect(() => {
     if (isLoggedIn) {
-      setIsAuthModalOpen(false)
-      setAuthError(null)
+      closeAuthModal()
     }
   }, [isLoggedIn])
 
@@ -44,13 +49,13 @@ export default function Header() {
       }
 
       if (!authMenuRef.current.contains(event.target as Node)) {
-        setIsAuthModalOpen(false)
+        closeAuthModal()
       }
     }
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setIsAuthModalOpen(false)
+        closeAuthModal()
       }
     }
 
@@ -69,6 +74,7 @@ export default function Header() {
     }
 
     setAuthError(null)
+    setIsSigningIn(false)
     setIsAuthModalOpen((currentValue) => !currentValue)
   }
 
@@ -78,9 +84,15 @@ export default function Header() {
 
     try {
       await signInWithPopup(auth, googleProvider)
-      setIsAuthModalOpen(false)
-    } catch {
-      setAuthError('Não foi possível entrar com Google agora. Tente novamente.')
+      closeAuthModal()
+    } catch (error) {
+      const authError = error as AuthError
+
+      if (authError.code === 'auth/popup-closed-by-user') {
+        setAuthError(null)
+      } else {
+        setAuthError('Não foi possível entrar com Google agora. Tente novamente.')
+      }
     } finally {
       setIsSigningIn(false)
     }
