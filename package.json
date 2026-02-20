@@ -8,11 +8,13 @@
     "build": "vite build",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "seed:firestore": "bun run scripts/seed-firestore.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
     "firebase": "^12.9.0",
+    "firebase-admin": "^13.6.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-icons": "^5.5.0",
