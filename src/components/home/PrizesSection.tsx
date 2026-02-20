@@ -2,7 +2,7 @@ import { PRIZES, type PrizeCardData } from '../../const/home'
 
 function PrizeCard({ badge, badgeClassName, title, description, imageSrc, imageAlt, icon }: PrizeCardData) {
   return (
-    <div className="group bg-luxury-bg border border-white/5 rounded-xl overflow-hidden hover:border-gold/50 transition-all duration-300 hover:shadow-card-hover">
+    <div className="group bg-luxury-bg border border-white/5 rounded-xl overflow-hidden">
       <div className="aspect-[16/10] bg-gray-900 relative overflow-hidden flex items-center justify-center">
         <div
           className={`absolute top-3 left-3 text-[10px] font-black px-2 py-1 uppercase tracking-wider rounded-sm z-10 ${badgeClassName}`}
@@ -12,12 +12,12 @@ function PrizeCard({ badge, badgeClassName, title, description, imageSrc, imageA
         {imageSrc ? (
           <img
             alt={imageAlt}
-            className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500 group-hover:scale-105"
+            className="w-full h-full object-cover transform-gpu opacity-80 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:opacity-100 group-hover:scale-105"
             src={imageSrc}
           />
         ) : (
           <>
-            <span className="material-symbols-outlined text-6xl text-gold group-hover:scale-110 transition-transform duration-500">
+            <span className="material-symbols-outlined text-6xl text-gold transform-gpu transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-110">
               {icon}
             </span>
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />

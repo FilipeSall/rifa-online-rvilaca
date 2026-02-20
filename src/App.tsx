@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import { Route, Routes, useLocation } from 'react-router-dom'
+import { ToastContainer } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
 import { PLACEHOLDER_ROUTES } from './const/app'
 import HomePage from './pages/HomePage'
 import PlaceholderPage from './pages/PlaceholderPage'
@@ -18,6 +20,14 @@ export default function App() {
   return (
     <>
       <ScrollToTop />
+      <ToastContainer
+        position="bottom-right"
+        theme="dark"
+        autoClose={5000}
+        hideProgressBar={false}
+        closeOnClick
+        pauseOnHover
+      />
       <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/comprar-numeros" element={<PurchaseNumbersPage />} />

@@ -1,10 +1,12 @@
 import { FirebaseError } from 'firebase/app'
 import { signOut, updateProfile } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import Header from '../components/home/Header'
-import { auth, db } from '../lib/firebase'
+import { auth, db, storage } from '../lib/firebase'
 import { useAuthStore } from '../stores/authStore'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -206,7 +208,7 @@ type EditProfileModalProps = {
   currentName: string
   currentEmail: string | null
   onClose: () => void
-  onSaved: (newName: string) => void
+  onSaved: (newName: string, newPhone: string) => void
 }
 
 function EditProfileModal({ userId, currentName, currentEmail, onClose, onSaved }: EditProfileModalProps) {
@@ -279,7 +281,7 @@ function EditProfileModal({ userId, currentName, currentEmail, onClose, onSaved 
       // Ensure token is fresh before hitting Firestore (mirrors upsertUserProfile)
       if (auth.currentUser) await auth.currentUser.getIdToken()
       await persist()
-      onSaved(name.trim())
+      onSaved(name.trim(), phone.trim())
       onClose()
     } catch (err) {
       const isPermissionDenied =
@@ -289,7 +291,7 @@ function EditProfileModal({ userId, currentName, currentEmail, onClose, onSaved 
         try {
           await auth.currentUser.getIdToken(true)
           await persist()
-          onSaved(name.trim())
+          onSaved(name.trim(), phone.trim())
           onClose()
           return
         } catch {
@@ -428,6 +430,9 @@ export default function UserDashboardPage() {
 
   const [activeSection, setActiveSection] = useState<Section>('numeros')
   const [isEditOpen, setIsEditOpen] = useState(false)
+  const [firestorePhone, setFirestorePhone] = useState<string | null>(null)
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
+  const photoInputRef = useRef<HTMLInputElement>(null)
 
   // Meus Números state
   const [ticketFilter, setTicketFilter] = useState('Todos')
@@ -440,6 +445,43 @@ export default function UserDashboardPage() {
   useEffect(() => {
     if (isAuthReady && !isLoggedIn) navigate('/')
   }, [isAuthReady, isLoggedIn, navigate])
+
+  // Load phone from Firestore on mount
+  useEffect(() => {
+    if (!user) return
+    const load = async () => {
+      try {
+        if (auth.currentUser) await auth.currentUser.getIdToken()
+        const snap = await getDoc(doc(db, 'users', user.uid))
+        if (snap.exists()) setFirestorePhone(snap.data().phone ?? null)
+      } catch {
+        // Ignore — phone simply won't be shown
+      }
+    }
+    load()
+  }, [user])
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !auth.currentUser) return
+    // Reset input so the same file can be re-selected if needed
+    if (photoInputRef.current) photoInputRef.current.value = ''
+    setIsUploadingPhoto(true)
+    try {
+      await auth.currentUser.getIdToken()
+      const avatarRef = storageRef(storage, `users/${auth.currentUser.uid}/avatar`)
+      await uploadBytes(avatarRef, file)
+      const url = await getDownloadURL(avatarRef)
+      await updateProfile(auth.currentUser, { photoURL: url })
+      useAuthStore.getState().setAuthUser(auth.currentUser)
+    } catch {
+      toast.error('Não foi possível alterar a foto agora. Tente novamente mais tarde.', {
+        position: 'bottom-right',
+      })
+    } finally {
+      setIsUploadingPhoto(false)
+    }
+  }
 
   const handleSignOut = async () => {
     await signOut(auth)
@@ -500,7 +542,7 @@ export default function UserDashboardPage() {
           currentName={displayName}
           currentEmail={user.email}
           onClose={() => setIsEditOpen(false)}
-          onSaved={() => {}}
+          onSaved={(_name, newPhone) => setFirestorePhone(newPhone || null)}
         />
       )}
 
@@ -550,6 +592,15 @@ export default function UserDashboardPage() {
                 <div className="flex flex-col items-center gap-5 text-center md:flex-row md:items-start md:text-left">
                   {/* Avatar */}
                   <div className="relative flex-shrink-0">
+                    {/* Hidden file input */}
+                    <input
+                      ref={photoInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handlePhotoChange}
+                    />
+
                     {user.photoURL ? (
                       <img
                         src={user.photoURL}
@@ -562,9 +613,21 @@ export default function UserDashboardPage() {
                         {initials}
                       </div>
                     )}
-                    <div className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full border-2 border-luxury-card bg-gold text-black">
-                      <span className="material-symbols-outlined" style={{ fontSize: 14 }}>verified</span>
-                    </div>
+
+                    {/* Upload / loading overlay button */}
+                    <button
+                      type="button"
+                      onClick={() => photoInputRef.current?.click()}
+                      disabled={isUploadingPhoto}
+                      title="Alterar foto"
+                      className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-luxury-card bg-gold text-black shadow-sm transition-transform hover:scale-110 disabled:opacity-60"
+                    >
+                      {isUploadingPhoto ? (
+                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-black border-t-transparent" />
+                      ) : (
+                        <span className="material-symbols-outlined" style={{ fontSize: 13 }}>edit</span>
+                      )}
+                    </button>
                   </div>
 
                   {/* Info */}
@@ -575,6 +638,12 @@ export default function UserDashboardPage() {
                         <div className="flex items-center justify-center gap-2 md:justify-start">
                           <span className="material-symbols-outlined" style={{ fontSize: 15 }}>mail</span>
                           <span>{user.email}</span>
+                        </div>
+                      )}
+                      {firestorePhone && (
+                        <div className="flex items-center justify-center gap-2 md:justify-start">
+                          <span className="material-symbols-outlined" style={{ fontSize: 15 }}>call</span>
+                          <span>{firestorePhone}</span>
                         </div>
                       )}
                     </div>

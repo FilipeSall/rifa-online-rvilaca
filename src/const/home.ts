@@ -60,8 +60,8 @@ export const HEADER_NAV_ITEMS: NavItem[] = [
 export const HERO_CONFIG = {
   countdownDurationMs: ((2 * 24 + 14) * 60 * 60 + 45 * 60 + 30) * 1000,
   targetSoldPercentage: 65,
-  progressAnimationDelayMs: 120,
-  progressAnimationDurationMs: 1600,
+  progressAnimationDelayMs: 40,
+  progressAnimationDurationMs: 900,
 }
 
 export const HERO_COUNTDOWN_LABELS = ['Dias', 'Horas', 'Min', 'Seg'] as const

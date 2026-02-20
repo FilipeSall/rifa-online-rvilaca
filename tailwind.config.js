@@ -24,7 +24,7 @@ export default {
       },
       animation: {
         'pulse-gold': 'pulseGold 2s infinite',
-        shimmer: 'shimmer 2.5s infinite linear',
+        shimmer: 'shimmer 1.4s infinite linear',
       },
       keyframes: {
         pulseGold: {
