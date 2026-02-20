@@ -54,7 +54,6 @@ export const HEADER_NAV_ITEMS: NavItem[] = [
   { label: 'Como Funciona', href: '#como-funciona', isActive: false },
   { label: 'Ganhadores', href: '#ganhadores', isActive: false },
   { label: 'FAQ', href: '#faq', isActive: false },
-  { label: 'Regulamento', href: '#regulamento', isActive: false },
 ]
 
 export const HERO_CONFIG = {
@@ -141,13 +140,6 @@ export const FAQ_ITEMS: FaqItem[] = [
     q: 'Posso pagar com cartão de crédito?',
     a: 'Atualmente aceitamos exclusivamente PIX, pois permite a baixa automática e instantânea dos seus números, garantindo sua participação imediata no sorteio.',
   },
-]
-
-export const REGULAMENTO_ITEMS = [
-  'Os números são gerados automaticamente e não se repetem.',
-  'A cota só pertence ao participante após confirmação do pagamento PIX.',
-  'Números podem ficar reservados por tempo limitado durante o pagamento.',
-  'A apuração dos ganhadores utiliza critério transparente e auditável.',
 ]
 
 export const TRUST_BADGES: TrustBadge[] = [

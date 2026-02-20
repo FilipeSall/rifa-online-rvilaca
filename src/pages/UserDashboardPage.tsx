@@ -1,7 +1,7 @@
 import { FirebaseError } from 'firebase/app'
 import { signOut, updateProfile } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
+import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -53,6 +53,81 @@ const NAV_ITEMS: { icon: string; label: string; section: Section | null }[] = [
   { icon: 'receipt_long', label: 'Comprovantes', section: 'comprovantes' },
   { icon: 'emoji_events', label: 'Resultados', section: null },
 ]
+
+function getAvatarUploadErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message === 'avatar-upload-timeout') {
+    return 'Upload indisponível no momento. O serviço demorou para responder.'
+  }
+
+  if (!(error instanceof FirebaseError)) {
+    return 'Não foi possível alterar a foto agora. Tente novamente mais tarde.'
+  }
+
+  if (error.code === 'storage/unauthorized') {
+    return 'Sem permissão para enviar foto. Verifique as regras do Firebase Storage.'
+  }
+
+  if (error.code === 'storage/quota-exceeded') {
+    return 'Upload indisponível: cota/plano do Firebase Storage excedido. Ative o Blaze para continuar.'
+  }
+
+  if (error.code === 'storage/bucket-not-found' || error.code === 'storage/project-not-found') {
+    return 'Upload indisponível: bucket do Firebase Storage não está provisionado neste projeto.'
+  }
+
+  const serverResponse =
+    typeof (error as FirebaseError & { serverResponse?: unknown }).serverResponse === 'string'
+      ? (error as FirebaseError & { serverResponse?: string }).serverResponse?.toLowerCase() || ''
+      : ''
+  const combined = `${error.code} ${error.message}`.toLowerCase()
+  const looksLikeStorageProvisioningIssue =
+    serverResponse.includes('cors') ||
+    serverResponse.includes('preflight') ||
+    serverResponse.includes('billing') ||
+    serverResponse.includes('blaze') ||
+    combined.includes('cors') ||
+    combined.includes('preflight')
+
+  if (looksLikeStorageProvisioningIssue) {
+    return 'Upload indisponível neste projeto. Ative o plano Blaze e provisione/configure o Firebase Storage.'
+  }
+
+  return 'Não foi possível alterar a foto agora. Tente novamente mais tarde.'
+}
+
+async function uploadAvatarWithTimeout(file: File, path: string, timeoutMs = 12000) {
+  const avatarRef = storageRef(storage, path)
+  const uploadTask = uploadBytesResumable(avatarRef, file)
+
+  const snapshot = await new Promise<(typeof uploadTask)['snapshot']>((resolve, reject) => {
+    let settled = false
+    const timeoutId = window.setTimeout(() => {
+      if (settled) return
+      settled = true
+      reject(new Error('avatar-upload-timeout'))
+      uploadTask.cancel()
+    }, timeoutMs)
+
+    uploadTask.on(
+      'state_changed',
+      () => undefined,
+      (error) => {
+        if (settled) return
+        settled = true
+        window.clearTimeout(timeoutId)
+        reject(error)
+      },
+      () => {
+        if (settled) return
+        settled = true
+        window.clearTimeout(timeoutId)
+        resolve(uploadTask.snapshot)
+      },
+    )
+  })
+
+  return snapshot
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -185,13 +260,6 @@ function ReceiptCard({ order }: { order: MockOrder }) {
               >
                 <span className="material-symbols-outlined text-[18px]">block</span>
                 Indisponível
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 px-4 py-2.5 text-sm font-bold text-text-muted transition-all hover:border-white/20 hover:text-white"
-              >
-                <span className="material-symbols-outlined text-[18px]">support_agent</span>
-                Ajuda
               </button>
             </>
           )}
@@ -469,13 +537,13 @@ export default function UserDashboardPage() {
     setIsUploadingPhoto(true)
     try {
       await auth.currentUser.getIdToken()
-      const avatarRef = storageRef(storage, `users/${auth.currentUser.uid}/avatar`)
-      await uploadBytes(avatarRef, file)
-      const url = await getDownloadURL(avatarRef)
+      const uploadSnapshot = await uploadAvatarWithTimeout(file, `users/${auth.currentUser.uid}/avatar`)
+      const url = await getDownloadURL(uploadSnapshot.ref)
       await updateProfile(auth.currentUser, { photoURL: url })
       useAuthStore.getState().setAuthUser(auth.currentUser)
-    } catch {
-      toast.error('Não foi possível alterar a foto agora. Tente novamente mais tarde.', {
+    } catch (error) {
+      console.error('Avatar upload failed:', error)
+      toast.error(getAvatarUploadErrorMessage(error), {
         position: 'bottom-right',
       })
     } finally {
@@ -620,7 +688,7 @@ export default function UserDashboardPage() {
                       onClick={() => photoInputRef.current?.click()}
                       disabled={isUploadingPhoto}
                       title="Alterar foto"
-                      className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-luxury-card bg-gold text-black shadow-sm transition-transform hover:scale-110 disabled:opacity-60"
+                      className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-luxury-card bg-gold text-black shadow-sm transition-transform hover:scale-110 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isUploadingPhoto ? (
                         <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-black border-t-transparent" />
