@@ -1,12 +1,23 @@
-import { Route, Routes } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Route, Routes, useLocation } from 'react-router-dom'
 import { PLACEHOLDER_ROUTES } from './const/app'
 import HomePage from './pages/HomePage'
 import PlaceholderPage from './pages/PlaceholderPage'
 import PurchaseNumbersPage from './pages/PurchaseNumbersPage'
 
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
+  return null
+}
+
 export default function App() {
   return (
-    <Routes>
+    <>
+      <ScrollToTop />
+      <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/comprar-numeros" element={<PurchaseNumbersPage />} />
       <Route path="/comprar" element={<PurchaseNumbersPage />} />
@@ -39,5 +50,6 @@ export default function App() {
       />
       <Route path="*" element={<PlaceholderPage title={PLACEHOLDER_ROUTES.notFound.title} />} />
     </Routes>
+    </>
   )
 }

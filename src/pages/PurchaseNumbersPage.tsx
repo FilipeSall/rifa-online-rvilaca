@@ -1,200 +1,42 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import AnnouncementBar from '../components/home/AnnouncementBar'
-import Header from '../components/home/Header'
+import { Link } from 'react-router-dom'
 import Footer from '../components/home/Footer'
-
-type SelectionMode = 'automatico' | 'manual'
-type NumberStatus = 'disponivel' | 'reservado' | 'pago'
-
-type NumberSlot = {
-  number: number
-  status: NumberStatus
-}
-
-const UNIT_PRICE = 0.99
-const MIN_QUANTITY = 10
-const MAX_QUANTITY = 300
-const RESERVATION_SECONDS = 10 * 60
-
-const PACKS = [10, 50, 100, 250]
-
-const COUPONS: Record<string, number> = {
-  PIX10: 0.1,
-  COMBO20: 0.2,
-}
-
-const NUMBER_POOL: NumberSlot[] = Array.from({ length: 120 }, (_, index) => {
-  const number = 540001 + index
-
-  if ((index + 3) % 11 === 0) {
-    return { number, status: 'reservado' }
-  }
-
-  if ((index + 5) % 17 === 0) {
-    return { number, status: 'pago' }
-  }
-
-  return { number, status: 'disponivel' }
-})
-
-function formatCurrency(value: number) {
-  return value.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  })
-}
-
-function formatTimer(totalSeconds: number) {
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-}
-
-function pickRandomNumbers(pool: number[], quantity: number) {
-  const numbers = [...pool]
-
-  for (let index = numbers.length - 1; index > 0; index -= 1) {
-    const randomIndex = Math.floor(Math.random() * (index + 1))
-    ;[numbers[index], numbers[randomIndex]] = [numbers[randomIndex], numbers[index]]
-  }
-
-  return numbers.slice(0, quantity).sort((a, b) => a - b)
-}
+import Header from '../components/home/Header'
+import AnnouncementBar from '../components/home/AnnouncementBar'
+import { usePurchaseNumbers } from '../hooks/usePurchaseNumbers'
+import {
+  MIN_QUANTITY,
+  PURCHASE_PACKS,
+  UNIT_PRICE,
+  formatCurrency,
+  formatTimer,
+} from '../utils/purchaseNumbers'
 
 export default function PurchaseNumbersPage() {
-  const navigate = useNavigate()
-  const [selectionMode, setSelectionMode] = useState<SelectionMode>('automatico')
-  const [quantity, setQuantity] = useState(MIN_QUANTITY)
-  const [selectedNumbers, setSelectedNumbers] = useState<number[]>([])
-  const [couponCode, setCouponCode] = useState('')
-  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null)
-  const [couponFeedback, setCouponFeedback] = useState<string | null>(null)
-  const [reservationSeconds, setReservationSeconds] = useState<number | null>(null)
-  const [hasExpiredReservation, setHasExpiredReservation] = useState(false)
-
-  const availableNumbers = useMemo(
-    () => NUMBER_POOL.filter((item) => item.status === 'disponivel').map((item) => item.number),
-    [],
-  )
-
-  const selectedCount = selectedNumbers.length
-  const subtotal = selectedCount * UNIT_PRICE
-  const discountRate = appliedCoupon ? COUPONS[appliedCoupon] ?? 0 : 0
-  const discountAmount = subtotal * discountRate
-  const totalAmount = Math.max(subtotal - discountAmount, 0)
-  const canProceed = selectedCount >= MIN_QUANTITY
-
-  useEffect(() => {
-    if (selectionMode !== 'automatico') {
-      return
-    }
-
-    const nextQuantity = Math.min(quantity, availableNumbers.length)
-    setSelectedNumbers(pickRandomNumbers(availableNumbers, nextQuantity))
-  }, [selectionMode, quantity, availableNumbers])
-
-  useEffect(() => {
-    if (selectionMode !== 'manual') {
-      return
-    }
-
-    setSelectedNumbers((currentSelection) => {
-      if (currentSelection.length <= quantity) {
-        return currentSelection
-      }
-
-      return currentSelection.slice(0, quantity)
-    })
-  }, [quantity, selectionMode])
-
-  useEffect(() => {
-    if (reservationSeconds === null) {
-      return
-    }
-
-    if (reservationSeconds <= 0) {
-      setReservationSeconds(null)
-      setHasExpiredReservation(true)
-      return
-    }
-
-    const timer = window.setInterval(() => {
-      setReservationSeconds((currentTime) => {
-        if (currentTime === null) {
-          return null
-        }
-
-        return currentTime - 1
-      })
-    }, 1000)
-
-    return () => window.clearInterval(timer)
-  }, [reservationSeconds])
-
-  const handleSetQuantity = (value: number) => {
-    const nextValue = Number.isFinite(value) ? value : MIN_QUANTITY
-    const safeValue = Math.max(MIN_QUANTITY, Math.min(nextValue, MAX_QUANTITY, availableNumbers.length))
-    setQuantity(safeValue)
-    setReservationSeconds(null)
-    setHasExpiredReservation(false)
-  }
-
-  const handleToggleNumber = (slot: NumberSlot) => {
-    if (selectionMode !== 'manual' || slot.status !== 'disponivel') {
-      return
-    }
-
-    setSelectedNumbers((currentSelection) => {
-      const alreadySelected = currentSelection.includes(slot.number)
-
-      if (alreadySelected) {
-        return currentSelection.filter((selectedNumber) => selectedNumber !== slot.number)
-      }
-
-      if (currentSelection.length >= quantity) {
-        return currentSelection
-      }
-
-      return [...currentSelection, slot.number].sort((a, b) => a - b)
-    })
-    setReservationSeconds(null)
-    setHasExpiredReservation(false)
-  }
-
-  const handleApplyCoupon = () => {
-    const normalizedCode = couponCode.trim().toUpperCase()
-
-    if (!normalizedCode) {
-      setAppliedCoupon(null)
-      setCouponFeedback('Digite um cupom válido.')
-      return
-    }
-
-    if (!COUPONS[normalizedCode]) {
-      setAppliedCoupon(null)
-      setCouponFeedback('Cupom não encontrado.')
-      return
-    }
-
-    setAppliedCoupon(normalizedCode)
-    setCouponFeedback(`Cupom ${normalizedCode} aplicado com sucesso.`)
-  }
-
-  const handleProceed = () => {
-    if (!canProceed) {
-      return
-    }
-
-    if (reservationSeconds === null) {
-      setReservationSeconds(RESERVATION_SECONDS)
-      setHasExpiredReservation(false)
-      return
-    }
-
-    navigate('/checkout')
-  }
+  const {
+    numberPool,
+    selectionMode,
+    setSelectionMode,
+    quantity,
+    maxSelectable,
+    availableNumbersCount,
+    selectedNumbers,
+    selectedCount,
+    couponCode,
+    setCouponCode,
+    appliedCoupon,
+    couponFeedback,
+    couponHint,
+    reservationSeconds,
+    hasExpiredReservation,
+    subtotal,
+    discountAmount,
+    totalAmount,
+    canProceed,
+    handleSetQuantity,
+    handleToggleNumber,
+    handleApplyCoupon,
+    handleProceed,
+  } = usePurchaseNumbers()
 
   return (
     <div className="bg-luxury-bg font-display text-text-main overflow-x-hidden selection:bg-gold selection:text-black">
@@ -249,11 +91,13 @@ export default function PurchaseNumbersPage() {
                       <p className="text-[10px] uppercase tracking-[0.22em] text-gray-500">1. Quantidade de cotas</p>
                       <h2 className="mt-2 text-xl font-bold text-white">Defina quantos números deseja comprar</h2>
                     </div>
-                    <p className="text-xs text-gray-400">Total disponível no lote exibido: {availableNumbers.length}</p>
+                    <p className="text-xs text-gray-400">
+                      Total disponível no lote exibido: {availableNumbersCount}
+                    </p>
                   </div>
 
                   <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {PACKS.map((pack) => (
+                    {PURCHASE_PACKS.map((pack) => (
                       <button
                         key={pack}
                         className={`rounded-lg border px-4 py-4 text-left transition-all ${
@@ -287,7 +131,7 @@ export default function PurchaseNumbersPage() {
                         id="quantity-input"
                         className="h-10 w-24 rounded border border-white/15 bg-luxury-card text-center text-white font-bold outline-none focus:border-gold"
                         min={MIN_QUANTITY}
-                        max={Math.min(MAX_QUANTITY, availableNumbers.length)}
+                        max={maxSelectable}
                         type="number"
                         value={quantity}
                         onChange={(event) => handleSetQuantity(Number(event.target.value || MIN_QUANTITY))}
@@ -296,7 +140,7 @@ export default function PurchaseNumbersPage() {
                         className="h-10 w-10 rounded bg-white/5 text-white hover:bg-white/10 disabled:opacity-40"
                         type="button"
                         onClick={() => handleSetQuantity(quantity + 1)}
-                        disabled={quantity >= Math.min(MAX_QUANTITY, availableNumbers.length)}
+                        disabled={quantity >= maxSelectable}
                       >
                         +
                       </button>
@@ -348,9 +192,11 @@ export default function PurchaseNumbersPage() {
                   </div>
 
                   <div className="mt-5 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
-                    {NUMBER_POOL.map((slot) => {
+                    {numberPool.map((slot) => {
                       const isSelected = selectedNumbers.includes(slot.number)
-                      const isBlocked = slot.status !== 'disponivel' || (selectionMode === 'manual' && !isSelected && selectedCount >= quantity)
+                      const isBlocked =
+                        slot.status !== 'disponivel' ||
+                        (selectionMode === 'manual' && !isSelected && selectedCount >= quantity)
 
                       const slotStyle =
                         slot.status === 'pago'
@@ -378,8 +224,8 @@ export default function PurchaseNumbersPage() {
                   <div className="mt-4 rounded-lg border border-white/10 bg-luxury-bg p-4 text-sm text-gray-300">
                     {selectionMode === 'automatico' ? (
                       <p>
-                        Seleção automática ativa: o sistema escolheu <span className="font-bold text-gold">{selectedCount}</span>{' '}
-                        números disponíveis para você.
+                        Seleção automática ativa: o sistema escolheu{' '}
+                        <span className="font-bold text-gold">{selectedCount}</span> números disponíveis para você.
                       </p>
                     ) : (
                       <p>
@@ -436,8 +282,8 @@ export default function PurchaseNumbersPage() {
                         Aplicar
                       </button>
                     </div>
-                    <p className={`mt-2 text-xs ${couponFeedback?.includes('sucesso') ? 'text-emerald-300' : 'text-gray-400'}`}>
-                      {couponFeedback ?? 'Cupons de teste: PIX10 e COMBO20'}
+                    <p className={`mt-2 text-xs ${couponFeedback?.tone === 'success' ? 'text-emerald-300' : 'text-gray-400'}`}>
+                      {couponFeedback?.message ?? couponHint}
                     </p>
                   </div>
 
@@ -506,3 +352,4 @@ export default function PurchaseNumbersPage() {
     </div>
   )
 }
+
