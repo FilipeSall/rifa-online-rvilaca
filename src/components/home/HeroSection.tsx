@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 const COUNTDOWN_DURATION_MS = ((2 * 24 + 14) * 60 * 60 + 45 * 60 + 30) * 1000
 const TARGET_SOLD_PERCENTAGE = 67
 const PROGRESS_ANIMATION_DELAY_MS = 120
+const PROGRESS_ANIMATION_DURATION_MS = 1600
 
 type Countdown = {
   days: number
@@ -36,15 +37,40 @@ function formatUnit(value: number) {
 
 export default function HeroSection() {
   const targetTimeRef = useRef(Date.now() + COUNTDOWN_DURATION_MS)
-  const [soldPercentage, setSoldPercentage] = useState(0)
+  const [animatedSoldPercentage, setAnimatedSoldPercentage] = useState(0)
   const [countdown, setCountdown] = useState(() => getCountdown(targetTimeRef.current))
 
+  const handleOpenBuyModal = () => {
+    // TODO: conectar com modal de compra quando o fluxo estiver implementado.
+  }
+
   useEffect(() => {
+    let animationFrame = 0
+    let startTime = 0
+
     const timeout = window.setTimeout(() => {
-      setSoldPercentage(TARGET_SOLD_PERCENTAGE)
+      const animate = (timestamp: number) => {
+        if (!startTime) {
+          startTime = timestamp
+        }
+
+        const elapsed = timestamp - startTime
+        const progress = Math.min(elapsed / PROGRESS_ANIMATION_DURATION_MS, 1)
+        const value = Math.round(TARGET_SOLD_PERCENTAGE * progress)
+        setAnimatedSoldPercentage(value)
+
+        if (progress < 1) {
+          animationFrame = window.requestAnimationFrame(animate)
+        }
+      }
+
+      animationFrame = window.requestAnimationFrame(animate)
     }, PROGRESS_ANIMATION_DELAY_MS)
 
-    return () => window.clearTimeout(timeout)
+    return () => {
+      window.clearTimeout(timeout)
+      window.cancelAnimationFrame(animationFrame)
+    }
   }, [])
 
   useEffect(() => {
@@ -91,12 +117,12 @@ export default function HeroSection() {
             <div className="bg-luxury-card/50 backdrop-blur border border-white/10 p-6 rounded-xl max-w-lg mt-4">
               <div className="flex justify-between items-end mb-3">
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Cotas Vendidas</span>
-                <span className="text-2xl font-bold text-gold font-mono">{soldPercentage}%</span>
+                <span className="text-2xl font-bold text-gold font-mono">{animatedSoldPercentage}%</span>
               </div>
               <div className="h-2 w-full rounded-full bg-gray-800 overflow-hidden relative">
                 <div
-                  className="h-full bg-gold relative z-10 shadow-[0_0_10px_rgba(245,168,0,0.5)] transition-[width] duration-[1600ms] ease-out"
-                  style={{ width: `${soldPercentage}%` }}
+                  className="h-full bg-gold relative z-10 shadow-[0_0_10px_rgba(245,168,0,0.5)]"
+                  style={{ width: `${animatedSoldPercentage}%` }}
                 >
                   <div
                     className="absolute inset-0 bg-white/20 animate-shimmer"
@@ -122,12 +148,13 @@ export default function HeroSection() {
             </div>
 
             <div className="mt-4 flex flex-col sm:flex-row gap-4">
-              <a
+              <button
                 className="inline-flex h-14 items-center justify-center rounded bg-gold px-8 text-sm font-black text-black transition-all hover:bg-gold-hover hover:scale-[1.02] shadow-glow-gold uppercase tracking-widest"
-                href="#comprar"
+                type="button"
+                onClick={handleOpenBuyModal}
               >
                 Comprar Números
-              </a>
+              </button>
               <a
                 className="inline-flex h-14 items-center justify-center rounded border border-white/20 px-8 text-sm font-bold text-white transition-all hover:bg-white/5 uppercase tracking-widest"
                 href="#como-funciona"
