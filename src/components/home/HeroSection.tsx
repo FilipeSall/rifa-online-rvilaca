@@ -1,7 +1,10 @@
 import { useHeroSection } from '../../hooks/useHeroSection'
+import { CAMPAIGN_SOLD_COTAS, CAMPAIGN_TOTAL_COTAS } from '../../const/home'
 
 export default function HeroSection() {
   const { animatedSoldPercentage, countdownItems, handleOpenBuyModal } = useHeroSection()
+  const soldCotasFormatted = CAMPAIGN_SOLD_COTAS.toLocaleString('pt-BR')
+  const totalCotasFormatted = CAMPAIGN_TOTAL_COTAS.toLocaleString('pt-BR')
 
   return (
     <section className="relative pt-12 pb-20 lg:pt-24 lg:pb-32 overflow-hidden hero-bg">
@@ -22,7 +25,7 @@ export default function HeroSection() {
               <span className="text-gold">BMW R1200</span>
               <span className="block">
                 <span className="text-gold">GS</span>{' '}
-                <span className="text-white">+ Honda CG 160</span>
+                <span className="text-white">+ Honda CG Start 160</span>
               </span>
             </h1>
 
@@ -62,6 +65,9 @@ export default function HeroSection() {
               </div>
               <p className="text-[10px] text-orange-400/80 mt-2 text-center uppercase tracking-wider font-semibold">
                 ⚠ Restam poucos números da sorte!
+              </p>
+              <p className="text-[11px] text-gray-300 mt-2 text-center">
+                {soldCotasFormatted} de {totalCotasFormatted} cotas já vendidas
               </p>
             </div>
 

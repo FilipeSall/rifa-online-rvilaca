@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FAQ_ITEMS, RANKING } from '../../const/home'
+import { FAQ_ITEMS, RANKING, REGULAMENTO_ITEMS } from '../../const/home'
 import { getRankingPositionClass } from '../../utils/home'
 
 function RankingTable() {
@@ -28,11 +28,6 @@ function RankingTable() {
               <span className={`text-sm font-bold ${isGold ? 'text-gold' : 'text-white'}`}>{cotas}</span>
             </div>
           ))}
-        </div>
-        <div className="p-4 bg-luxury-card border-t border-white/5">
-          <p className="text-xs text-gray-500 text-center">
-            O maior comprador ganha <span className="text-gold font-bold">R$ 5.000</span> extras!
-          </p>
         </div>
       </div>
     </div>
@@ -95,6 +90,20 @@ export default function WinnersFaqSection() {
           <RankingTable />
           <FaqAccordion />
         </div>
+        <article className="mt-12 rounded-xl border border-white/10 bg-luxury-card p-6 md:p-8" id="regulamento">
+          <div className="flex items-center gap-3 mb-5">
+            <span className="material-symbols-outlined text-gold">gavel</span>
+            <h3 className="text-xl font-luxury font-bold text-white uppercase tracking-wider">Regulamento</h3>
+          </div>
+          <ul className="space-y-3 text-sm text-gray-300">
+            {REGULAMENTO_ITEMS.map((item) => (
+              <li key={item} className="flex items-start gap-2">
+                <span className="text-gold mt-0.5">•</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </article>
       </div>
     </section>
   )

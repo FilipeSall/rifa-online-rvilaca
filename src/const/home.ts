@@ -43,15 +43,18 @@ export type FaqItem = {
   a: string
 }
 
+export const CAMPAIGN_TOTAL_COTAS = 3_450_000
+export const CAMPAIGN_SOLD_COTAS = 2_242_500
+
 export const ANNOUNCEMENT_TEXT =
-  '🔥 ÚLTIMAS COTAS DISPONÍVEIS — Compre agora e concorra a uma BMW R 1200 GS + R$ 20.000 em prêmios! 🏆'
+  '🔥 ÚLTIMAS COTAS DISPONÍVEIS — Concorra a BMW R 1200 GS + Honda CG Start 160 + R$ 20.000 em PIX! 🏆'
 
 export const HEADER_NAV_ITEMS: NavItem[] = [
   { label: 'Início', href: '#', isActive: true },
   { label: 'Como Funciona', href: '#como-funciona', isActive: false },
   { label: 'Ganhadores', href: '#ganhadores', isActive: false },
   { label: 'FAQ', href: '#faq', isActive: false },
-  { label: 'Regulamento', href: '#', isActive: false },
+  { label: 'Regulamento', href: '#regulamento', isActive: false },
 ]
 
 export const HERO_CONFIG = {
@@ -77,8 +80,8 @@ export const PRIZES: PrizeCardData[] = [
   {
     badge: '2º Prêmio',
     badgeClassName: 'bg-white text-black',
-    title: 'Honda CG 160 Titan',
-    description: 'Economia e agilidade para o dia a dia. Tanque cheio e emplacada.',
+    title: 'Honda CG Start 160',
+    description: 'Ano 2026 / Modelo 2026. Economia e agilidade para o dia a dia.',
     imageAlt: 'Honda Motorcycle',
     imageSrc:
       'https://lh3.googleusercontent.com/aida-public/AB6AXuC9vPUnNi9GeVGuP8cEk_bTws-UD92OhX5CitQJ9GO5u3efdLU1VLwR1o2Qa8Kl4BxvKw6RcuQI3Mj2YmsnNd_soxwmzryanwI14UB0BMaFaDaYh0kZriOw8gfFK-ORFT4P2qCKIWDJxxo34SUo8cohk2QGBT3ewqAl98N7WgZYuKWhykkiyvKwPwMrM5piDUBiwiYvDssRbWKK8x24li1gZ2tbopzr0txQJYHFAqktbdEut_4XEtZuTFJgMHGUmeb-QfE4npTZUpjj',
@@ -138,6 +141,13 @@ export const FAQ_ITEMS: FaqItem[] = [
     q: 'Posso pagar com cartão de crédito?',
     a: 'Atualmente aceitamos exclusivamente PIX, pois permite a baixa automática e instantânea dos seus números, garantindo sua participação imediata no sorteio.',
   },
+]
+
+export const REGULAMENTO_ITEMS = [
+  'Os números são gerados automaticamente e não se repetem.',
+  'A cota só pertence ao participante após confirmação do pagamento PIX.',
+  'Números podem ficar reservados por tempo limitado durante o pagamento.',
+  'A apuração dos ganhadores utiliza critério transparente e auditável.',
 ]
 
 export const TRUST_BADGES: TrustBadge[] = [
