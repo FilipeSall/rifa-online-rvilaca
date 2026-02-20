@@ -18,7 +18,6 @@ export async function upsertUserProfile(user: User) {
     lastLoginAt: serverTimestamp(),
   }
 
-  // Garantir token disponível antes de tocar no Firestore evita race logo após login.
   await user.getIdToken()
 
   try {
@@ -28,7 +27,6 @@ export async function upsertUserProfile(user: User) {
       throw error
     }
 
-    // Retry único após refresh forçado de token para mitigar falhas transitórias de auth.
     await user.getIdToken(true)
     await setDoc(userRef, profilePayload, { merge: true })
   }
