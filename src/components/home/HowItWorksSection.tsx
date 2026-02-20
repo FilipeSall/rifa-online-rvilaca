@@ -2,7 +2,7 @@ import { HOW_IT_WORKS_STEPS } from '../../const/home'
 
 export default function HowItWorksSection() {
   return (
-    <section className="py-20 bg-luxury-bg relative overflow-hidden" id="como-funciona">
+    <section className="py-20 bg-luxury-bg relative overflow-hidden scroll-mt-24" id="como-funciona">
       <div className="container mx-auto px-4 lg:px-8 relative z-10">
         <div className="text-center mb-16">
           <span className="text-gold font-bold text-xs uppercase tracking-[0.2em] mb-2 block">Passo a Passo</span>

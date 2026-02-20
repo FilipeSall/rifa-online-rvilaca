@@ -1,11 +1,34 @@
+import { useEffect, useState } from 'react'
 import { FcGoogle } from 'react-icons/fc'
 import { HiOutlineArrowRight } from 'react-icons/hi2'
+import { Link, useLocation } from 'react-router-dom'
 import { HEADER_NAV_ITEMS } from '../../const/home'
 import { useHeaderAuth } from '../../hooks/useHeaderAuth'
 
 export default function Header() {
+  const location = useLocation()
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const { isLoggedIn, isAuthModalOpen, isSigningIn, authError, authMenuRef, handleAuthButtonClick, handleGoogleSignIn } =
     useHeaderAuth()
+  const isHomePage = location.pathname === '/'
+
+  useEffect(() => {
+    setIsMobileMenuOpen(false)
+  }, [location.pathname, location.hash])
+
+  const getNavTarget = (href: string) => (href === '#' ? '/' : `/${href}`)
+
+  const isNavItemActive = (href: string) => {
+    if (!isHomePage) {
+      return false
+    }
+
+    if (href === '#') {
+      return location.hash === '' || location.hash === '#'
+    }
+
+    return location.hash === href
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-luxury-bg/90 backdrop-blur-md">
@@ -21,16 +44,16 @@ export default function Header() {
           </div>
 
           <nav className="hidden lg:flex items-center gap-8">
-            {HEADER_NAV_ITEMS.map(({ label, href, isActive }) => (
-              <a
+            {HEADER_NAV_ITEMS.map(({ label, href }) => (
+              <Link
                 key={label}
                 className={`text-xs font-bold hover:text-gold transition-colors uppercase tracking-widest ${
-                  isActive ? 'text-white' : 'text-gray-400'
+                  isNavItemActive(href) ? 'text-white' : 'text-gray-400'
                 }`}
-                href={href}
+                to={getNavTarget(href)}
               >
                 {label}
-              </a>
+              </Link>
             ))}
           </nav>
 
@@ -64,11 +87,42 @@ export default function Header() {
                 {authError ? <p className="mt-2 px-1 text-[11px] text-red-300">{authError}</p> : null}
               </div>
             ) : null}
-            <button className="lg:hidden text-white" type="button" aria-label="Abrir menu">
+            <button
+              className="lg:hidden text-white"
+              type="button"
+              aria-label="Abrir menu"
+              onClick={() => setIsMobileMenuOpen((currentState) => !currentState)}
+            >
               <span className="material-symbols-outlined">menu</span>
             </button>
           </div>
         </div>
+
+        {isMobileMenuOpen ? (
+          <div className="lg:hidden border-t border-white/10 py-4 space-y-3">
+            <nav className="space-y-2">
+              {HEADER_NAV_ITEMS.map(({ label, href }) => (
+                <Link
+                  key={label}
+                  className={`block rounded px-3 py-2 text-xs font-bold uppercase tracking-widest transition-colors ${
+                    isNavItemActive(href) ? 'bg-white/5 text-white' : 'text-gray-400 hover:text-gold'
+                  }`}
+                  to={getNavTarget(href)}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  {label}
+                </Link>
+              ))}
+            </nav>
+            <button
+              className="h-10 w-full rounded bg-gold px-4 text-xs font-black uppercase tracking-widest text-black"
+              type="button"
+              onClick={handleAuthButtonClick}
+            >
+              {isLoggedIn ? 'Minha conta' : 'Entrar'}
+            </button>
+          </div>
+        ) : null}
       </div>
     </header>
   )

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { HERO_CONFIG, HERO_COUNTDOWN_LABELS } from '../const/home'
-import { createCountdownItems, getCountdown, type Countdown, type CountdownItem } from '../utils/home'
+import { createCountdownItems, getCountdown, type Countdown } from '../utils/home'
 
 export function useHeroSection() {
+  const navigate = useNavigate()
   const targetTimeRef = useRef(Date.now() + HERO_CONFIG.countdownDurationMs)
   const [animatedSoldPercentage, setAnimatedSoldPercentage] = useState(0)
   const [countdown, setCountdown] = useState<Countdown>(() => getCountdown(targetTimeRef.current))
@@ -50,8 +52,8 @@ export function useHeroSection() {
   }, [])
 
   const handleOpenBuyModal = useCallback(() => {
-    // TODO: conectar com modal de compra quando o fluxo estiver implementado.
-  }, [])
+    navigate('/comprar-numeros')
+  }, [navigate])
 
   const countdownItems = useMemo(
     () => createCountdownItems(countdown, HERO_COUNTDOWN_LABELS),

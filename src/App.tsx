@@ -2,11 +2,23 @@ import { Route, Routes } from 'react-router-dom'
 import { PLACEHOLDER_ROUTES } from './const/app'
 import HomePage from './pages/HomePage'
 import PlaceholderPage from './pages/PlaceholderPage'
+import PurchaseNumbersPage from './pages/PurchaseNumbersPage'
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
+      <Route path="/comprar-numeros" element={<PurchaseNumbersPage />} />
+      <Route path="/comprar" element={<PurchaseNumbersPage />} />
+      <Route
+        path="/minha-conta"
+        element={
+          <PlaceholderPage
+            title={PLACEHOLDER_ROUTES.minhaConta.title}
+            description={PLACEHOLDER_ROUTES.minhaConta.description}
+          />
+        }
+      />
       <Route
         path="/checkout"
         element={

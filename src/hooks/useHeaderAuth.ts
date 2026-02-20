@@ -1,5 +1,6 @@
 import { GoogleAuthProvider, signInWithPopup, type AuthError } from 'firebase/auth'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { auth } from '../lib/firebase'
 import { useAuthStore } from '../stores/authStore'
 import { getGoogleAuthErrorMessage } from '../utils/home'
@@ -8,6 +9,7 @@ const googleProvider = new GoogleAuthProvider()
 googleProvider.setCustomParameters({ prompt: 'select_account' })
 
 export function useHeaderAuth() {
+  const navigate = useNavigate()
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [isSigningIn, setIsSigningIn] = useState(false)
@@ -54,13 +56,14 @@ export function useHeaderAuth() {
 
   const handleAuthButtonClick = useCallback(() => {
     if (isLoggedIn) {
+      navigate('/minha-conta')
       return
     }
 
     setAuthError(null)
     setIsSigningIn(false)
     setIsAuthModalOpen((currentValue) => !currentValue)
-  }, [isLoggedIn])
+  }, [isLoggedIn, navigate])
 
   const handleGoogleSignIn = useCallback(async () => {
     setIsSigningIn(true)

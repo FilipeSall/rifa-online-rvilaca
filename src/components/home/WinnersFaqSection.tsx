@@ -38,7 +38,7 @@ function FaqAccordion() {
   const [openIndex, setOpenIndex] = useState<number | null>(0)
 
   return (
-    <div id="faq">
+    <div className="scroll-mt-24" id="faq">
       <div className="flex items-center gap-3 mb-8">
         <span className="material-symbols-outlined text-gold">help</span>
         <h3 className="text-xl font-luxury font-bold text-white uppercase tracking-wider">Perguntas Frequentes</h3>
@@ -84,13 +84,13 @@ function FaqAccordion() {
 
 export default function WinnersFaqSection() {
   return (
-    <section className="py-20 bg-luxury-bg" id="ganhadores">
+    <section className="py-20 bg-luxury-bg scroll-mt-24" id="ganhadores">
       <div className="container mx-auto px-4 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
           <RankingTable />
           <FaqAccordion />
         </div>
-        <article className="mt-12 rounded-xl border border-white/10 bg-luxury-card p-6 md:p-8" id="regulamento">
+        <article className="mt-12 rounded-xl border border-white/10 bg-luxury-card p-6 md:p-8 scroll-mt-24" id="regulamento">
           <div className="flex items-center gap-3 mb-5">
             <span className="material-symbols-outlined text-gold">gavel</span>
             <h3 className="text-xl font-luxury font-bold text-white uppercase tracking-wider">Regulamento</h3>

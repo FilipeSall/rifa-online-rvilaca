@@ -1,4 +1,5 @@
 import { PACK_OPTIONS } from '../../const/home'
+import { Link } from 'react-router-dom'
 
 export default function BuySection() {
   return (
@@ -38,9 +39,12 @@ export default function BuySection() {
               <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Total a pagar</p>
               <p className="text-3xl font-black text-white">R$ 49,50</p>
             </div>
-            <button className="w-full md:w-auto px-10 py-4 bg-gold hover:bg-gold-hover text-black font-black uppercase tracking-widest rounded transition-all shadow-glow-gold flex items-center justify-center gap-2" type="button">
+            <Link
+              className="w-full md:w-auto px-10 py-4 bg-gold hover:bg-gold-hover text-black font-black uppercase tracking-widest rounded transition-all shadow-glow-gold flex items-center justify-center gap-2"
+              to="/comprar-numeros"
+            >
               Participar Agora <span className="material-symbols-outlined text-lg">arrow_forward</span>
-            </button>
+            </Link>
           </div>
         </div>
       </div>
