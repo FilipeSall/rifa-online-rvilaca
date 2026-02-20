@@ -4,6 +4,7 @@ import { PLACEHOLDER_ROUTES } from './const/app'
 import HomePage from './pages/HomePage'
 import PlaceholderPage from './pages/PlaceholderPage'
 import PurchaseNumbersPage from './pages/PurchaseNumbersPage'
+import UserDashboardPage from './pages/UserDashboardPage'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -21,15 +22,7 @@ export default function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/comprar-numeros" element={<PurchaseNumbersPage />} />
       <Route path="/comprar" element={<PurchaseNumbersPage />} />
-      <Route
-        path="/minha-conta"
-        element={
-          <PlaceholderPage
-            title={PLACEHOLDER_ROUTES.minhaConta.title}
-            description={PLACEHOLDER_ROUTES.minhaConta.description}
-          />
-        }
-      />
+      <Route path="/minha-conta" element={<UserDashboardPage />} />
       <Route
         path="/checkout"
         element={
