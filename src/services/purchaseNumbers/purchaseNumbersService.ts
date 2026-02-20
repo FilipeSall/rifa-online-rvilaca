@@ -1,4 +1,4 @@
-import type { NumberSlot } from '../../utils/purchaseNumbers'
+import type { NumberSlot } from '../../types/purchaseNumbers'
 
 const COUPONS: Record<string, number> = {
   PIX10: 0.1,
@@ -56,4 +56,3 @@ export function validateCouponCode(rawCode: string): CouponValidationResult {
 export function getCouponHint() {
   return 'Cupons de teste: PIX10 e COMBO20'
 }
-

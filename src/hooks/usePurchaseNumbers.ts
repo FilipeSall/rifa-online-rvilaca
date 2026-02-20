@@ -1,25 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { MAX_QUANTITY, MIN_QUANTITY, RESERVATION_SECONDS, UNIT_PRICE } from '../const/purchaseNumbers'
 import {
   getCouponHint,
   getPurchaseNumberPool,
   validateCouponCode,
 } from '../services/purchaseNumbers/purchaseNumbersService'
-import {
-  MAX_QUANTITY,
-  MIN_QUANTITY,
-  RESERVATION_SECONDS,
-  UNIT_PRICE,
-  getSafeQuantity,
-  pickRandomNumbers,
-  type NumberSlot,
-  type SelectionMode,
-} from '../utils/purchaseNumbers'
-
-type CouponFeedback = {
-  message: string
-  tone: 'success' | 'neutral'
-}
+import type { CouponFeedback, NumberSlot, SelectionMode } from '../types/purchaseNumbers'
+import { getSafeQuantity, pickRandomNumbers } from '../utils/purchaseNumbers'
 
 export function usePurchaseNumbers() {
   const navigate = useNavigate()
