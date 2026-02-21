@@ -24,16 +24,16 @@ export default function HeroSection() {
               Sorteio{' '}
               <span className="text-gold">BMW R1200</span>
               <span className="block">
-                <span className="text-gold">GS</span>{' '}
-                <span className="text-white">+ Honda CG Start 160</span>
+                <span className="text-gold">GS</span>
               </span>
             </h1>
 
             {/* Subtitle */}
             <p className="text-base text-gray-300 font-light leading-relaxed max-w-xl">
-              Além das motos, você concorre a{' '}
-              <span className="text-gold font-semibold">R$ 20.000 em PIX</span>. A sua chance de
-              mudar de vida por um valor simbólico!
+              Além da <span className="text-gold font-semibold">BMW R1200 GS</span>, você também
+              concorre a <span className="text-gold font-semibold">uma Honda CG Start 160</span> e{' '}
+              <span className="text-gold font-semibold">20 PIX de R$ 1.000</span>. Sorteio com
+              transparência total: apuração pela Loteria Federal e validação por algoritmo auditável.
             </p>
 
             {/* Progress bar */}
