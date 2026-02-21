@@ -151,8 +151,14 @@ export function usePurchaseNumbers() {
       return
     }
 
-    navigate('/checkout')
-  }, [canProceed, navigate, reservationSeconds])
+    navigate('/checkout', {
+      state: {
+        amount: totalAmount,
+        quantity: selectedCount,
+        selectedNumbers,
+      },
+    })
+  }, [canProceed, navigate, reservationSeconds, selectedCount, selectedNumbers, totalAmount])
 
   return {
     numberPool,

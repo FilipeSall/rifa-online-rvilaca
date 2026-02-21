@@ -56,7 +56,8 @@ service cloud.firestore {
 
     // Coleções sensíveis/transacionais — somente backend via Admin SDK.
     match /orders/{orderId} {
-      allow read, write: if false;
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false;
     }
 
     match /payments/{paymentId} {
