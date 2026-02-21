@@ -1,5 +1,13 @@
 import { useHeroSection } from '../../hooks/useHeroSection'
 import { CAMPAIGN_SOLD_COTAS, CAMPAIGN_TOTAL_COTAS } from '../../const/home'
+import slideOne from '../../assets/IMG_9379.webp'
+import slideTwo from '../../assets/IMG_9400.webp'
+import slideThree from '../../assets/IMG_9390.webp'
+import { Swiper, SwiperSlide } from 'swiper/react'
+import { Autoplay } from 'swiper/modules'
+import 'swiper/css'
+
+const HERO_CAROUSEL_IMAGES = [slideOne, slideTwo, slideThree]
 
 export default function HeroSection() {
   const { animatedSoldPercentage, countdownItems, handleOpenBuyModal } = useHeroSection()
@@ -101,45 +109,59 @@ export default function HeroSection() {
           {/* Moto image */}
           <div className="lg:col-span-6 relative order-1 lg:order-2">
             <div className="absolute inset-0 bg-gold/20 blur-[100px] rounded-full opacity-20" />
-            <div className="relative z-10 aspect-square w-full">
-              {/* Main BMW image with overlay */}
-              <div className="relative w-full h-full">
-                <img
-                  alt="BMW R1200 GS Triple Black motorcycle"
-                  className="w-full h-full object-contain drop-shadow-2xl"
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuDaQF11hNB5K8OrSxcTvxNOx5hgNg1ADcoHxYzDLBIsbbeH_5iAWjd-AboztLottNaaNPlPIG8UHvAY3crWR6zGTWK4JgzYQlU1JEadKFDe4wimQeFcTl4nboPuYNSoQTsiCiz7CpWKyN_0iqn0DGk3AZdWYkzXlhPtcL7sV1mbKzzCTpG52RRuJq1dIaFlCWEsVWKWA2g1tkKXaBW_yIdfhx3OzWszMoNNcpteERd6bjDmzkNMWQKl5nsaiOmrgyfxwyWII69GMJ6g"
-                />
+            <div className="relative z-10 w-full max-w-[680px] mx-auto aspect-square hero-carousel-frame">
+              <Swiper
+                modules={[Autoplay]}
+                autoplay={{
+                  delay: 5000,
+                  disableOnInteraction: false,
+                  pauseOnMouseEnter: true,
+                }}
+                className="hero-carousel-swiper"
+                loop
+                slidesPerView={1}
+                speed={700}
+              >
+                {HERO_CAROUSEL_IMAGES.map((imageSrc, index) => (
+                  <SwiperSlide key={imageSrc} className="h-full">
+                    <img
+                      alt={`BMW R1200 GS slide ${index + 1}`}
+                      className="w-full h-full object-cover"
+                      src={imageSrc}
+                    />
+                  </SwiperSlide>
+                ))}
+              </Swiper>
 
-                {/* Stars + moto name overlay — bottom of the image */}
-                <div className="absolute bottom-0 left-0 right-0 px-6 pb-4 flex flex-col gap-2">
-                  {/* Stars */}
-                  <div className="flex items-center gap-1">
-                    {[...Array(5)].map((_, i) => (
-                      <svg
-                        key={i}
-                        className="w-7 h-7 text-yellow-400 drop-shadow-lg"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                      </svg>
-                    ))}
-                  </div>
-                  {/* Moto name */}
-                  <div>
-                    <p
-                      className="text-white font-black text-4xl lg:text-5xl leading-none drop-shadow-lg"
-                      style={{ textShadow: '0 3px 16px rgba(0,0,0,1)' }}
+              {/* Stars + moto name overlay — bottom of the image */}
+              <div className="absolute z-20 bottom-0 left-0 right-0 px-6 pb-4 flex flex-col gap-2 pointer-events-none">
+                {/* Stars */}
+                <div className="flex items-center gap-1">
+                  {[...Array(5)].map((_, i) => (
+                    <svg
+                      key={i}
+                      className="w-7 h-7 text-yellow-400 drop-shadow-lg"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
                     >
-                      BMW R1200 GS
-                    </p>
-                    <p
-                      className="text-gold text-base font-bold tracking-[0.2em] uppercase mt-1"
-                      style={{ textShadow: '0 2px 12px rgba(0,0,0,1)' }}
-                    >
-                      Triple Black
-                    </p>
-                  </div>
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  ))}
+                </div>
+                {/* Moto name */}
+                <div>
+                  <p
+                    className="text-white font-black text-4xl lg:text-5xl leading-none drop-shadow-lg"
+                    style={{ textShadow: '0 3px 16px rgba(0,0,0,1)' }}
+                  >
+                    BMW R1200 GS
+                  </p>
+                  <p
+                    className="text-gold text-base font-bold tracking-[0.2em] uppercase mt-1"
+                    style={{ textShadow: '0 2px 12px rgba(0,0,0,1)' }}
+                  >
+                    Triple Black
+                  </p>
                 </div>
               </div>
             </div>
