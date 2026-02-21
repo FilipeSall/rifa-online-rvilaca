@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { doc, onSnapshot, type DocumentData } from 'firebase/firestore'
+import { toast } from 'react-toastify'
 import { db } from '../lib/firebase'
 import { useHorsePay, type CreateDepositResponse } from '../hooks/useHorsePay'
 
@@ -64,6 +65,7 @@ export default function PixCheckout({ amount, payerName, phone }: PixCheckoutPro
   const [copyMessage, setCopyMessage] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
   const orderListenerRef = useRef<(() => void) | null>(null)
+  const paidToastOrderRef = useRef<string | null>(null)
   const copyPasteCode = order?.copyPaste || ''
 
   const errorMessage = useMemo(
@@ -125,6 +127,14 @@ export default function PixCheckout({ amount, payerName, phone }: PixCheckoutPro
         })
 
         if (orderStatus === 'paid') {
+          if (paidToastOrderRef.current !== snapshot.id) {
+            paidToastOrderRef.current = snapshot.id
+            toast.success('Pagamento identificado com sucesso.', {
+              position: 'top-right',
+              toastId: `pix-paid-${snapshot.id}`,
+            })
+          }
+
           setStatus('paid')
           stopOrderListener()
           return
@@ -170,6 +180,7 @@ export default function PixCheckout({ amount, payerName, phone }: PixCheckoutPro
     setLocalError(null)
     setCopyMessage('')
     stopOrderListener()
+    paidToastOrderRef.current = null
     setStatus('generating')
 
     if (!payerName.trim()) {
