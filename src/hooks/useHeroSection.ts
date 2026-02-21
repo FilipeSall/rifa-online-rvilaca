@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { HERO_CONFIG, HERO_COUNTDOWN_LABELS } from '../const/home'
 import { createCountdownItems, getCountdown, type Countdown } from '../utils/home'
 
 export function useHeroSection() {
+  const location = useLocation()
   const navigate = useNavigate()
   const targetTimeRef = useRef(Date.now() + HERO_CONFIG.countdownDurationMs)
   const [animatedSoldPercentage, setAnimatedSoldPercentage] = useState(0)
@@ -52,8 +53,20 @@ export function useHeroSection() {
   }, [])
 
   const handleOpenBuyModal = useCallback(() => {
-    navigate('/comprar-numeros')
-  }, [navigate])
+    const targetId = 'comprar-numeros'
+    const isHomePage = location.pathname === '/'
+    const isSameHash = location.hash === `#${targetId}`
+
+    if (isHomePage && isSameHash) {
+      const targetElement = document.getElementById(targetId)
+      if (targetElement) {
+        targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      return
+    }
+
+    navigate(`/#${targetId}`)
+  }, [location.hash, location.pathname, navigate])
 
   const countdownItems = useMemo(
     () => createCountdownItems(countdown, HERO_COUNTDOWN_LABELS),

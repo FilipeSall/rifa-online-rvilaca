@@ -1,16 +1,16 @@
 import { useScrollToHash } from '../hooks/useScrollToHash'
 import AnnouncementBar from '../components/home/AnnouncementBar'
-import BuySection from '../components/home/BuySection'
 import Footer from '../components/home/Footer'
 import Header from '../components/home/Header'
 import HeroSection from '../components/home/HeroSection'
-import HowItWorksSection from '../components/home/HowItWorksSection'
-import PrizesSection from '../components/home/PrizesSection'
 import TrustBadgesSection from '../components/home/TrustBadgesSection'
 import WinnersFaqSection from '../components/home/WinnersFaqSection'
+import { PurchaseHeroSection, PurchaseNumbersContent } from '../components/purchaseNumbers'
+import { usePurchaseNumbers } from '../hooks/usePurchaseNumbers'
 
 export default function HomePage() {
   useScrollToHash()
+  const purchaseState = usePurchaseNumbers()
 
   return (
     <div className="bg-luxury-bg font-display text-text-main overflow-x-hidden selection:bg-gold selection:text-black">
@@ -21,9 +21,10 @@ export default function HomePage() {
 
         <main className="flex-grow">
           <HeroSection />
-          <PrizesSection />
-          <HowItWorksSection />
-          <BuySection />
+          <div id="comprar-numeros">
+            <PurchaseHeroSection />
+            <PurchaseNumbersContent purchaseState={purchaseState} />
+          </div>
           <WinnersFaqSection />
           <TrustBadgesSection />
         </main>

@@ -106,7 +106,7 @@ export default function ProfileCard({
           </button>
 
           <Link
-            to="/comprar"
+            to="/#comprar-numeros"
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-gold px-5 py-2.5 text-sm font-bold text-black transition-colors hover:bg-gold-hover"
           >
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
