@@ -1,12 +1,14 @@
 import { useEditProfileModal } from '../../hooks/useEditProfileModal'
+import { formatCpfInput } from '../../utils/cpf'
 
 type EditProfileModalProps = {
   userId: string
   currentName: string
   currentEmail: string | null
   onClose: () => void
-  onSaved: (newName: string, newPhone: string) => void
+  onSaved: (newName: string, newPhone: string, newCpf: string | null) => void
   loadPhone: () => Promise<string | null>
+  loadCpf: () => Promise<string | null>
 }
 
 export default function EditProfileModal({
@@ -16,6 +18,7 @@ export default function EditProfileModal({
   onClose,
   onSaved,
   loadPhone,
+  loadCpf,
 }: EditProfileModalProps) {
   const {
     overlayRef,
@@ -23,6 +26,9 @@ export default function EditProfileModal({
     setName,
     phone,
     setPhone,
+    cpf,
+    setCpf,
+    hasCpf,
     isLoading,
     isSaving,
     error,
@@ -34,7 +40,9 @@ export default function EditProfileModal({
     onClose,
     onSaved,
     loadPhone,
+    loadCpf,
   })
+
 
   return (
     <div
@@ -91,6 +99,32 @@ export default function EditProfileModal({
                 placeholder="(11) 99999-9999"
                 autoComplete="tel"
               />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="edit-cpf" className="text-xs font-semibold uppercase tracking-widest text-text-muted">
+                CPF
+                {hasCpf && (
+                  <span className="ml-2 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] normal-case tracking-normal text-text-muted">
+                    Protegido
+                  </span>
+                )}
+              </label>
+              <input
+                id="edit-cpf"
+                type="text"
+                value={formatCpfInput(cpf)}
+                onChange={(event) => setCpf(event.target.value.replace(/\D/g, '').slice(0, 11))}
+                className="rounded-lg border border-luxury-border bg-luxury-bg px-4 py-3 text-sm text-white placeholder:text-text-muted focus:border-gold/50 focus:outline-none focus:ring-1 focus:ring-gold/30 disabled:cursor-not-allowed disabled:opacity-70"
+                placeholder="000.000.000-00"
+                inputMode="numeric"
+                disabled={hasCpf}
+              />
+              {!hasCpf && (
+                <p className="text-[11px] text-text-muted">
+                  Necessario para rastreamento e seguranca do premio.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">

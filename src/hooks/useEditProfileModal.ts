@@ -8,13 +8,23 @@ type UseEditProfileModalParams = {
   userId: string
   currentName: string
   onClose: () => void
-  onSaved: (newName: string, newPhone: string) => void
+  onSaved: (newName: string, newPhone: string, newCpf: string | null) => void
   loadPhone: () => Promise<string | null>
+  loadCpf: () => Promise<string | null>
 }
 
-export function useEditProfileModal({ userId, currentName, onClose, onSaved, loadPhone }: UseEditProfileModalParams) {
+export function useEditProfileModal({
+  userId,
+  currentName,
+  onClose,
+  onSaved,
+  loadPhone,
+  loadCpf,
+}: UseEditProfileModalParams) {
   const [name, setName] = useState(currentName)
   const [phone, setPhone] = useState('')
+  const [cpf, setCpf] = useState('')
+  const [hasCpf, setHasCpf] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -23,8 +33,10 @@ export function useEditProfileModal({ userId, currentName, onClose, onSaved, loa
   useEffect(() => {
     const load = async () => {
       try {
-        const storedPhone = await loadPhone()
+        const [storedPhone, storedCpf] = await Promise.all([loadPhone(), loadCpf()])
         setPhone(storedPhone ?? '')
+        setCpf(storedCpf ? storedCpf.replace(/\D/g, '') : '')
+        setHasCpf(Boolean(storedCpf))
       } catch {
         // Ignore loading failures to keep the modal usable.
       } finally {
@@ -33,7 +45,7 @@ export function useEditProfileModal({ userId, currentName, onClose, onSaved, loa
     }
 
     load()
-  }, [loadPhone])
+  }, [loadCpf, loadPhone])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -61,9 +73,15 @@ export function useEditProfileModal({ userId, currentName, onClose, onSaved, loa
 
       const trimmedName = name.trim()
       const trimmedPhone = phone.trim()
+      const sanitizedCpf = cpf.replace(/\D/g, '')
 
       if (!trimmedName) {
         setError('O nome nao pode estar vazio.')
+        return
+      }
+
+      if (!hasCpf && sanitizedCpf && sanitizedCpf.length !== 11) {
+        setError('Informe um CPF valido com 11 digitos.')
         return
       }
 
@@ -71,16 +89,27 @@ export function useEditProfileModal({ userId, currentName, onClose, onSaved, loa
       setError(null)
 
       try {
-        await saveUserProfile(userId, trimmedName, trimmedPhone)
+        const cpfToSave = hasCpf ? null : sanitizedCpf || null
+        await saveUserProfile(userId, trimmedName, trimmedPhone, cpfToSave)
 
         if (auth.currentUser) {
           useAuthStore.getState().setAuthUser(auth.currentUser)
         }
 
-        onSaved(trimmedName, trimmedPhone)
+        onSaved(trimmedName, trimmedPhone, cpfToSave || null)
         onClose()
       } catch (err) {
         const isPermissionDenied = err instanceof FirebaseError && err.code === 'permission-denied'
+
+        if (err instanceof Error && err.message === 'cpf-invalid') {
+          setError('Informe um CPF valido com 11 digitos.')
+          return
+        }
+
+        if (err instanceof Error && err.message === 'cpf-registry-denied') {
+          setError('CPF ja cadastrado em outra conta ou regras do cpfRegistry nao publicadas.')
+          return
+        }
 
         if (isPermissionDenied) {
           setError('Sem permissao para salvar no Firestore. Verifique as regras/publicacao do projeto Firebase.')
@@ -97,7 +126,7 @@ export function useEditProfileModal({ userId, currentName, onClose, onSaved, loa
         setIsSaving(false)
       }
     },
-    [name, onClose, onSaved, phone, userId],
+    [cpf, hasCpf, name, onClose, onSaved, phone, userId],
   )
 
   return {
@@ -111,5 +140,8 @@ export function useEditProfileModal({ userId, currentName, onClose, onSaved, loa
     error,
     handleOverlayClick,
     handleSave,
+    cpf,
+    setCpf,
+    hasCpf,
   }
 }

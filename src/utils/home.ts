@@ -61,3 +61,27 @@ export function getGoogleAuthErrorMessage(code: string): string | null {
 
   return 'Não foi possível entrar com Google agora. Tente novamente.'
 }
+
+export function getEmailAuthErrorMessage(code: string, isCreatingAccount: boolean): string {
+  if (code === 'auth/invalid-email') {
+    return 'Digite um email válido para continuar.'
+  }
+
+  if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+    return 'Email ou senha inválidos.'
+  }
+
+  if (code === 'auth/email-already-in-use') {
+    return 'Este email já está em uso. Faça login ou recupere a senha.'
+  }
+
+  if (code === 'auth/too-many-requests') {
+    return 'Muitas tentativas. Aguarde um pouco e tente novamente.'
+  }
+
+  if (code === 'auth/weak-password') {
+    return 'Sua senha precisa ter pelo menos 6 caracteres.'
+  }
+
+  return isCreatingAccount ? 'Não foi possível criar sua conta agora.' : 'Não foi possível entrar agora.'
+}

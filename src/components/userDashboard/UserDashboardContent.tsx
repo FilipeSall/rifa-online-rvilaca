@@ -28,6 +28,8 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
     setIsEditOpen,
     firestorePhone,
     setFirestorePhone,
+    firestoreCpf,
+    setFirestoreCpf,
     isUploadingPhoto,
     photoInputRef,
     ticketFilter,
@@ -46,6 +48,8 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
     handlePhotoChange,
     handleSignOut,
     loadPhoneForUser,
+    loadCpfForUser,
+    refreshProfile,
   } = dashboardState
 
   return (
@@ -56,8 +60,15 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
           currentName={displayName}
           currentEmail={user.email}
           onClose={() => setIsEditOpen(false)}
-          onSaved={(_name, newPhone) => setFirestorePhone(newPhone || null)}
+          onSaved={async (_name, newPhone, newCpf) => {
+            setFirestorePhone(newPhone || null)
+            if (newCpf) {
+              setFirestoreCpf(newCpf)
+            }
+            await refreshProfile()
+          }}
           loadPhone={loadPhoneForUser}
+          loadCpf={loadCpfForUser}
         />
       )}
 
@@ -75,6 +86,7 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
               displayName={displayName}
               initials={initials}
               firestorePhone={firestorePhone}
+              firestoreCpf={firestoreCpf}
               isUploadingPhoto={isUploadingPhoto}
               photoInputRef={photoInputRef}
               onPhotoChange={handlePhotoChange}

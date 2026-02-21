@@ -1,6 +1,6 @@
 import { FirebaseError } from 'firebase/app'
 import { updateProfile } from 'firebase/auth'
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { doc, getDoc, getDocFromServer, serverTimestamp, setDoc } from 'firebase/firestore'
 import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage'
 import { auth, db, storage } from '../../lib/firebase'
 
@@ -52,24 +52,79 @@ async function uploadAvatarWithTimeout(file: File, path: string, timeoutMs = 120
   return snapshot
 }
 
-export async function loadUserPhone(expectedUserId: string) {
+export async function loadUserProfile(expectedUserId: string) {
   const currentUser = await getCurrentUserWithValidation(expectedUserId)
-  await currentUser.getIdToken()
+  const userDocRef = doc(db, 'users', currentUser.uid)
 
-  const snapshot = await getDoc(doc(db, 'users', currentUser.uid))
+  const readProfile = async (fromServer = false) => {
+    const snapshot = fromServer ? await getDocFromServer(userDocRef) : await getDoc(userDocRef)
 
-  if (!snapshot.exists()) {
-    return null
+    if (!snapshot.exists()) {
+      return { phone: null, cpf: null }
+    }
+
+    const data = snapshot.data()
+    return {
+      phone: data.phone ?? null,
+      cpf: data.cpf ?? null,
+    }
   }
 
-  return snapshot.data().phone ?? null
+  await currentUser.getIdToken()
+
+  try {
+    return await readProfile(true)
+  } catch (error) {
+    const isPermissionDenied = error instanceof FirebaseError && error.code === 'permission-denied'
+
+    if (!isPermissionDenied) {
+      throw error
+    }
+
+    await currentUser.getIdToken(true)
+    return readProfile(true)
+  }
 }
 
-export async function saveUserProfile(expectedUserId: string, name: string, phone: string) {
+export async function loadUserPhone(expectedUserId: string) {
+  const profile = await loadUserProfile(expectedUserId)
+  return profile.phone
+}
+
+export async function loadUserCpf(expectedUserId: string) {
+  const profile = await loadUserProfile(expectedUserId)
+  return profile.cpf
+}
+
+export async function saveUserProfile(expectedUserId: string, name: string, phone: string, cpf?: string | null) {
   const currentUser = await getCurrentUserWithValidation(expectedUserId)
 
   const persist = async () => {
     await updateProfile(currentUser, { displayName: name })
+
+    const sanitizedCpf = cpf ? cpf.replace(/\D/g, '') : null
+
+    if (sanitizedCpf) {
+      if (sanitizedCpf.length !== 11) {
+        throw new Error('cpf-invalid')
+      }
+
+      try {
+        await setDoc(doc(db, 'cpfRegistry', sanitizedCpf), {
+          uid: currentUser.uid,
+          cpf: sanitizedCpf,
+          createdAt: serverTimestamp(),
+        })
+      } catch (error) {
+        const isPermissionDenied = error instanceof FirebaseError && error.code === 'permission-denied'
+
+        if (isPermissionDenied) {
+          throw new Error('cpf-registry-denied')
+        }
+
+        throw error
+      }
+    }
 
     await setDoc(
       doc(db, 'users', currentUser.uid),
@@ -78,6 +133,7 @@ export async function saveUserProfile(expectedUserId: string, name: string, phon
         name,
         phone: phone || null,
         email: currentUser.email || null,
+        ...(sanitizedCpf ? { cpf: sanitizedCpf } : {}),
         updatedAt: serverTimestamp(),
       },
       { merge: true },

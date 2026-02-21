@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "deploy:rules": "firebase deploy --only firestore:rules --project rifa-online-395d9",
-    "seed:firestore": "bun run scripts/seed-firestore.ts"
+    "seed:firestore": "bun run scripts/seed-firestore.ts",
+    "backfill:cpf-registry": "bun run scripts/backfill-cpf-registry.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",

@@ -10,7 +10,7 @@ export async function upsertUserProfile(user: User) {
     uid: user.uid,
     name: user.displayName || fallbackName,
     email: user.email || null,
-    phone: user.phoneNumber || null,
+    ...(user.phoneNumber ? { phone: user.phoneNumber } : {}),
     photoURL: user.photoURL || null,
     providerIds: user.providerData.map((provider) => provider.providerId),
     createdAtAuth: user.metadata.creationTime || null,

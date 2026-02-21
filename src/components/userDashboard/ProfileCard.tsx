@@ -1,12 +1,14 @@
 import type { User } from 'firebase/auth'
 import type { ChangeEventHandler, MutableRefObject } from 'react'
 import { Link } from 'react-router-dom'
+import { formatCpf } from '../../utils/cpf'
 
 type ProfileCardProps = {
   user: User
   displayName: string
   initials: string
   firestorePhone: string | null
+  firestoreCpf: string | null
   isUploadingPhoto: boolean
   photoInputRef: MutableRefObject<HTMLInputElement | null>
   onPhotoChange: ChangeEventHandler<HTMLInputElement>
@@ -19,6 +21,7 @@ export default function ProfileCard({
   displayName,
   initials,
   firestorePhone,
+  firestoreCpf,
   isUploadingPhoto,
   photoInputRef,
   onPhotoChange,
@@ -28,7 +31,7 @@ export default function ProfileCard({
   return (
     <div className="relative overflow-hidden rounded-2xl border border-luxury-border bg-luxury-card p-6 md:p-8">
       <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-gold/5 blur-3xl" />
-      <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+      <div className="relative flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
         <div className="flex flex-col items-center gap-5 text-center md:flex-row md:items-start md:text-left">
           <div className="relative flex-shrink-0">
             <input
@@ -89,11 +92,26 @@ export default function ProfileCard({
                   <span>{firestorePhone}</span>
                 </div>
               )}
+
+              {firestoreCpf && (
+                <div className="flex items-center justify-center gap-2 md:justify-start">
+                  <span className="material-symbols-outlined" style={{ fontSize: 15 }}>
+                    badge
+                  </span>
+                  <span>CPF: {formatCpf(firestoreCpf)}</span>
+                </div>
+              )}
             </div>
+
+            {!firestoreCpf && (
+              <div className="mt-3 max-w-[260px] rounded-lg border border-gold/20 bg-gold/10 px-3 py-2 text-[11px] text-gold/90 md:max-w-[320px]">
+                Para melhor rastreamento de premio e seguranca, informe seu CPF em editar dados.
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex flex-col gap-3 sm:flex-row md:self-start">
           <button
             type="button"
             onClick={onOpenEdit}

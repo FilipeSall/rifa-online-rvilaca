@@ -1,6 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isSignedIn() {
       return request.auth != null;
     }
@@ -9,18 +10,20 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
-    // Public campaign data used by landing page.
+    function isValidUserProfile() {
+      let allowed = ['uid', 'name', 'email', 'phone', 'cpf', 'photoURL',
+                    'providerIds', 'createdAtAuth', 'updatedAt', 'lastLoginAt'];
+      return request.resource.data.keys().hasOnly(allowed)
+        && request.resource.data.uid == request.auth.uid;
+    }
+
+    // Dados públicos de campanha usados pela landing page.
     match /campaigns/{campaignId} {
       allow read: if true;
       allow write: if false;
-
-      match /{document=**} {
-        allow read: if true;
-        allow write: if false;
-      }
     }
 
-    // Public draw/winner visibility.
+    // Sorteios e ganhadores — visibilidade pública.
     match /draws/{drawId} {
       allow read: if true;
       allow write: if false;
@@ -31,14 +34,27 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // User profile: each user can manage only their own document.
-    // Canonical owner rule from Firebase docs.
+    // Perfil do usuário: somente o próprio usuário pode ler e escrever.
+    // delete: if false explícito é seguro porque write foi separado em create/update.
     match /users/{uid} {
-      allow read, write: if isOwner(uid);
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid) && isValidUserProfile();
       allow delete: if false;
     }
 
-    // Sensitive/transactional collections are backend-only for now.
+    // Registro de CPF para prevenir contas duplicadas.
+    // Imutável após criação: update e delete são negados.
+    match /cpfRegistry/{cpfId} {
+      allow create: if isSignedIn()
+        && cpfId.matches('^[0-9]{11}$')
+        && request.resource.data.keys().hasOnly(['uid', 'cpf', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.cpf == cpfId;
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Coleções sensíveis/transacionais — somente backend via Admin SDK.
     match /orders/{orderId} {
       allow read, write: if false;
     }
@@ -51,7 +67,7 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Deny everything else by default.
+    // Negar tudo que não foi explicitamente permitido acima.
     match /{document=**} {
       allow read, write: if false;
     }

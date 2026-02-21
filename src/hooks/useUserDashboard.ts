@@ -1,10 +1,11 @@
 import { signOut } from 'firebase/auth'
+import { doc, onSnapshot } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { MOCK_ORDERS, MOCK_TICKETS } from '../const/userDashboard'
-import { auth } from '../lib/firebase'
-import { loadUserPhone, uploadUserAvatar } from '../services/userDashboard/userDashboardService'
+import { auth, db } from '../lib/firebase'
+import { loadUserCpf, loadUserPhone, loadUserProfile, uploadUserAvatar } from '../services/userDashboard/userDashboardService'
 import { useAuthStore } from '../stores/authStore'
 import type { ReceiptFilter, Section, TicketFilter } from '../types/userDashboard'
 import {
@@ -22,6 +23,7 @@ export function useUserDashboard() {
   const [activeSection, setActiveSection] = useState<Section>('numeros')
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [firestorePhone, setFirestorePhone] = useState<string | null>(null)
+  const [firestoreCpf, setFirestoreCpf] = useState<string | null>(null)
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
@@ -38,21 +40,66 @@ export function useUserDashboard() {
   }, [isAuthReady, isLoggedIn, navigate])
 
   useEffect(() => {
+    if (!isAuthReady || !user) {
+      setFirestorePhone(null)
+      setFirestoreCpf(null)
+      return
+    }
+
+    const userDocRef = doc(db, 'users', user.uid)
+    const unsubscribe = onSnapshot(
+      userDocRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          setFirestorePhone(null)
+          setFirestoreCpf(null)
+          return
+        }
+
+        const data = snapshot.data()
+        setFirestorePhone(data.phone ?? null)
+        setFirestoreCpf(data.cpf ?? null)
+      },
+      (error) => {
+        console.warn('Failed to subscribe user profile:', error)
+      },
+    )
+
+    return unsubscribe
+  }, [isAuthReady, user])
+
+  const refreshProfile = useCallback(async () => {
     if (!user) {
       return
     }
 
-    const load = async () => {
+    let lastError: unknown = null
+
+    // Auth/Firestore can race right after route transition; retry briefly.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        const phone = await loadUserPhone(user.uid)
-        setFirestorePhone(phone)
-      } catch {
-        // Ignore phone loading errors for the dashboard main view.
+        const profile = await loadUserProfile(user.uid)
+        setFirestorePhone(profile.phone)
+        setFirestoreCpf(profile.cpf)
+        return
+      } catch (error) {
+        lastError = error
+        if (attempt < 2) {
+          await new Promise((resolve) => window.setTimeout(resolve, 250 * (attempt + 1)))
+        }
       }
     }
 
-    load()
+    console.warn('Failed to load user profile from Firestore:', lastError)
   }, [user])
+
+  useEffect(() => {
+    if (!isAuthReady || !user) {
+      return
+    }
+
+    void refreshProfile()
+  }, [isAuthReady, refreshProfile, user])
 
   const handlePhotoChange = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,6 +164,14 @@ export function useUserDashboard() {
     return loadUserPhone(user.uid)
   }, [user])
 
+  const loadCpfForUser = useCallback(async () => {
+    if (!user) {
+      return null
+    }
+
+    return loadUserCpf(user.uid)
+  }, [user])
+
   return {
     user,
     isAuthReady,
@@ -126,6 +181,8 @@ export function useUserDashboard() {
     setIsEditOpen,
     firestorePhone,
     setFirestorePhone,
+    firestoreCpf,
+    setFirestoreCpf,
     isUploadingPhoto,
     photoInputRef,
     ticketFilter,
@@ -144,6 +201,8 @@ export function useUserDashboard() {
     handlePhotoChange,
     handleSignOut,
     loadPhoneForUser,
+    loadCpfForUser,
+    refreshProfile,
     isLoading: !isAuthReady || !user,
   }
 }
