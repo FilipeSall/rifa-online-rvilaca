@@ -48,21 +48,6 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
-.hero-carousel-frame::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(130deg, rgba(245, 168, 0, 0.95), rgba(255, 255, 255, 0.28), rgba(245, 168, 0, 0.7));
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-  pointer-events: none;
-  z-index: 4;
-}
-
 .hero-carousel-frame::after {
   content: '';
   position: absolute;
