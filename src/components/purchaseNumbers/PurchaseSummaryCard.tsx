@@ -86,9 +86,11 @@ export default function PurchaseSummaryCard({
             Aplicar
           </button>
         </div>
-        <p className={`mt-2 text-xs ${couponFeedback?.tone === 'success' ? 'text-emerald-300' : 'text-gray-400'}`}>
-          {couponFeedback?.message ?? couponHint}
-        </p>
+        {couponFeedback ? (
+          <p className={`mt-2 text-xs ${couponFeedback.tone === 'success' ? 'text-emerald-300' : 'text-gray-400'}`}>
+            {couponFeedback.message}
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-5 rounded-lg border border-white/10 bg-black/20 p-4">

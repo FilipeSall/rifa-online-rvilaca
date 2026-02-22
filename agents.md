@@ -111,6 +111,10 @@ Em `functions/src/index.ts`:
 - `requestWithdraw` (callable, exige secrets)
 - `getBalance` (callable, exige secrets)
 - `getDashboardSummary` (callable)
+- `getChampionsRanking` (callable, ranking geral por cotas pagas)
+- `getWeeklyTopBuyersRanking` (callable, ranking semanal domingo->sexta)
+- `publishTopBuyersDraw` (callable admin, publica vencedor semanal por Loteria Federal)
+- `getLatestTopBuyersDraw` (callable, le ultimo vencedor semanal publicado)
 - `pixWebhook` (HTTP onRequest, protegido por token)
 
 ## 8) Fluxo transacional de venda (implementado)
@@ -245,6 +249,17 @@ Fonte de negocio: `/home/sea/Downloads/📄_ESCOPO_DO_SITE_–_RIFA_ONLINE.pdf`
 - Possibilidade de selecao manual
 - Bloqueio de duplicidade
 - Registro de dono do numero
+
+### Ranking de compradores (decisao confirmada)
+- O produto deve manter **2 rankings simultaneos**:
+  - Ranking Geral (acumulado da campanha)
+  - Ranking Semanal TOP 50
+- Ranking Semanal segue regra oficial:
+  - janela semanal: domingo 00:00 ate sexta 23:59 (America/Sao_Paulo)
+  - criterio: quantidade total de cotas compradas na janela
+  - desempate: compra mais antiga dentro da semana
+- O frontend deve exibir os dois rankings lado a lado no desktop.
+- O sorteio semanal Top Compradores usa o ranking semanal congelado logicamente na janela da semana (sábado nao entra no calculo).
 
 ### Area administrativa esperada
 - Dashboard:

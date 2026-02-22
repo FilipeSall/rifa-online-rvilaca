@@ -1,3 +1,4 @@
+import logo from '../../assets/logo.webp'
 import { FOOTER_NAV_LINKS, FOOTER_SUPPORT_LINKS } from '../../const/home'
 
 export default function Footer() {
@@ -7,11 +8,9 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
           <div>
             <div className="flex items-center gap-2 mb-6">
-              <div className="flex h-8 w-8 items-center justify-center rounded bg-gold text-black">
-                <span className="material-symbols-outlined text-lg">diamond</span>
-              </div>
-              <h2 className="text-lg font-luxury font-bold text-white uppercase">
-                Premium<span className="text-gold">Rifas</span>
+              <img src={logo} alt="JonnyBarber" className="h-14 w-14 object-contain" />
+              <h2 className="text-lg font-barber text-white uppercase tracking-widest">
+                JONNYBARBER
               </h2>
             </div>
             <p className="text-sm text-gray-500 mb-6 leading-relaxed">
@@ -76,7 +75,7 @@ export default function Footer() {
 
         <div className="border-t border-white/5 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-xs text-gray-600">
-            © 2024 Premium Rifas. Todos os direitos reservados. CNPJ: 00.000.000/0001-00.
+            © 2024 JonnyBarber. Todos os direitos reservados.
           </p>
           <p className="text-xs text-gray-600 flex items-center gap-1">
             Feito com <span className="text-gold">♥</span> para vencedores.

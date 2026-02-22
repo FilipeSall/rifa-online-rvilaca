@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import logo from '../../assets/logo.webp'
 import { FcGoogle } from 'react-icons/fc'
 import { HiOutlineArrowRight } from 'react-icons/hi2'
 import { Link, useLocation } from 'react-router-dom'
@@ -78,11 +79,9 @@ export default function Header() {
       <div className="container mx-auto px-4 lg:px-8">
         <div className="flex h-20 items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded bg-gold text-black">
-              <span className="material-symbols-outlined text-2xl">diamond</span>
-            </div>
-            <h1 className="text-xl lg:text-2xl font-luxury font-bold text-white tracking-widest uppercase">
-              Premium<span className="text-gold">Rifas</span>
+            <img src={logo} alt="JonnyBarber" className="h-16 w-16 object-contain" />
+            <h1 className="text-xl lg:text-2xl font-barber text-white tracking-widest uppercase">
+              JONNYBARBER
             </h1>
           </div>
 

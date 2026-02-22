@@ -3,8 +3,11 @@ import { httpsCallable } from 'firebase/functions'
 import { functions } from '../lib/firebase'
 import type { RankingItem } from '../const/home'
 
-type GetChampionsRankingOutput = {
+type GetWeeklyTopBuyersRankingOutput = {
   updatedAtMs?: number
+  weekId?: string
+  weekStartAtMs?: number
+  weekEndAtMs?: number
   items?: RankingItem[]
 }
 
@@ -43,33 +46,47 @@ function normalizeRankingItems(value: unknown): RankingItem[] {
     .filter((item) => item.pos > 0 && item.cotas > 0)
 }
 
-export function useChampionsRanking() {
+export function useWeeklyTopBuyersRanking() {
   const [items, setItems] = useState<RankingItem[]>([])
   const [updatedAtMs, setUpdatedAtMs] = useState<number | null>(null)
+  const [weekId, setWeekId] = useState<string | null>(null)
+  const [weekStartAtMs, setWeekStartAtMs] = useState<number | null>(null)
+  const [weekEndAtMs, setWeekEndAtMs] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const getRankingCallable = useMemo(
-    () => httpsCallable<{ limit: number }, unknown>(functions, 'getChampionsRanking'),
+  const getWeeklyRankingCallable = useMemo(
+    () => httpsCallable<{ limit: number }, unknown>(functions, 'getWeeklyTopBuyersRanking'),
     [],
   )
 
   const refreshRanking = useCallback(async () => {
     try {
-      const response = await getRankingCallable({ limit: 50 })
-      const payload = unwrapCallableData(response.data as CallableEnvelope<GetChampionsRankingOutput>)
+      const response = await getWeeklyRankingCallable({ limit: 50 })
+      const payload = unwrapCallableData(response.data as CallableEnvelope<GetWeeklyTopBuyersRankingOutput>)
       setItems(normalizeRankingItems(payload.items))
       setUpdatedAtMs(
         typeof payload.updatedAtMs === 'number' && Number.isFinite(payload.updatedAtMs)
           ? payload.updatedAtMs
           : Date.now(),
       )
+      setWeekId(typeof payload.weekId === 'string' ? payload.weekId : null)
+      setWeekStartAtMs(
+        typeof payload.weekStartAtMs === 'number' && Number.isFinite(payload.weekStartAtMs)
+          ? payload.weekStartAtMs
+          : null,
+      )
+      setWeekEndAtMs(
+        typeof payload.weekEndAtMs === 'number' && Number.isFinite(payload.weekEndAtMs)
+          ? payload.weekEndAtMs
+          : null,
+      )
       setErrorMessage(null)
     } catch {
-      setErrorMessage('Nao foi possivel carregar o ranking agora.')
+      setErrorMessage('Nao foi possivel carregar o ranking semanal agora.')
     } finally {
       setIsLoading(false)
     }
-  }, [getRankingCallable])
+  }, [getWeeklyRankingCallable])
 
   useEffect(() => {
     void refreshRanking()
@@ -83,6 +100,9 @@ export function useChampionsRanking() {
   return {
     items,
     updatedAtMs,
+    weekId,
+    weekStartAtMs,
+    weekEndAtMs,
     isLoading,
     errorMessage,
   }

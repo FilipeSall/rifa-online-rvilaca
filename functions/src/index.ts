@@ -9,7 +9,14 @@ import {
   createGetPublicSalesSnapshotHandler,
   createUpsertCampaignSettingsHandler,
 } from './lib/campaignHandlers.js'
-import { createGetChampionsRankingHandler } from './lib/rankingHandlers.js'
+import {
+  createGetChampionsRankingHandler,
+  createGetWeeklyTopBuyersRankingHandler,
+} from './lib/rankingHandlers.js'
+import {
+  createGetLatestTopBuyersDrawHandler,
+  createPublishTopBuyersDrawHandler,
+} from './lib/topBuyersDrawHandlers.js'
 import {
   createGetNumberWindowHandler,
   createPickRandomAvailableNumbersHandler,
@@ -87,6 +94,9 @@ export const getDashboardSummary = onCall(callableOptions, createGetDashboardSum
 export const getPublicSalesSnapshot = onCall(callableOptions, createGetPublicSalesSnapshotHandler(db))
 
 export const getChampionsRanking = onCall(callableOptions, createGetChampionsRankingHandler(db))
+export const getWeeklyTopBuyersRanking = onCall(callableOptions, createGetWeeklyTopBuyersRankingHandler(db))
+export const publishTopBuyersDraw = onCall(callableOptions, createPublishTopBuyersDrawHandler(db))
+export const getLatestTopBuyersDraw = onCall(callableOptions, createGetLatestTopBuyersDrawHandler(db))
 
 export const pixWebhook = onRequest(
   { region: REGION, secrets: [HORSEPAY_WEBHOOK_TOKEN] },

@@ -13,6 +13,8 @@ export default function QuantitySelectionCard({
   maxSelectable,
   onSetQuantity,
 }: QuantitySelectionCardProps) {
+  const effectivePacks = [minQuantity, ...PURCHASE_PACKS.filter((p) => p > minQuantity)].slice(0, 4)
+
   return (
     <article className="rounded-2xl border border-white/10 bg-luxury-card/70 p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -23,7 +25,7 @@ export default function QuantitySelectionCard({
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        {PURCHASE_PACKS.map((pack) => (
+        {effectivePacks.map((pack) => (
           <button
             key={pack}
             className={`rounded-lg border px-4 py-4 text-left transition-all ${

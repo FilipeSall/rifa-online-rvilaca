@@ -17,6 +17,7 @@ export default {
       fontFamily: {
         display: ['Plus Jakarta Sans', 'sans-serif'],
         luxury: ['Cinzel', 'serif'],
+        barber: ['Bebas Neue', 'sans-serif'],
       },
       boxShadow: {
         'glow-gold': '0 0 20px rgba(245, 168, 0, 0.3), 0 0 40px rgba(245, 168, 0, 0.1)',
