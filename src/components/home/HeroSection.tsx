@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react'
 import { useHeroSection } from '../../hooks/useHeroSection'
+import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 import { CAMPAIGN_SOLD_COTAS, CAMPAIGN_TOTAL_COTAS } from '../../const/home'
+import { DEFAULT_BONUS_PRIZE, DEFAULT_CAMPAIGN_TITLE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../const/campaign'
 import slideOne from '../../assets/IMG_9379.webp'
 import slideTwo from '../../assets/IMG_9400.webp'
 import slideThree from '../../assets/IMG_9390.webp'
@@ -14,7 +16,16 @@ const HERO_CAROUSEL_IMAGES = [slideOne, slideTwo, slideThree]
 
 export default function HeroSection() {
   const { animatedSoldPercentage, countdownItems, handleOpenBuyModal } = useHeroSection()
+  const { campaign } = useCampaignSettings()
   const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({})
+  const campaignTitle = campaign.title || DEFAULT_CAMPAIGN_TITLE
+  const mainPrize = campaign.mainPrize || DEFAULT_MAIN_PRIZE
+  const secondPrize = campaign.secondPrize || DEFAULT_SECOND_PRIZE
+  const bonusPrize = campaign.bonusPrize || DEFAULT_BONUS_PRIZE
+  const campaignTitleParts = campaignTitle.trim().split(/\s+/).filter(Boolean)
+  const campaignTitlePrefix =
+    campaignTitleParts.length > 2 ? campaignTitleParts.slice(0, -2).join(' ') : campaignTitleParts.join(' ')
+  const campaignTitleHighlight = campaignTitleParts.length > 2 ? campaignTitleParts.slice(-2).join(' ') : ''
   const soldCotasFormatted = CAMPAIGN_SOLD_COTAS.toLocaleString('pt-BR')
   const totalCotasFormatted = CAMPAIGN_TOTAL_COTAS.toLocaleString('pt-BR')
   const handleImageLoaded = useCallback((imageSrc: string) => {
@@ -45,19 +56,21 @@ export default function HeroSection() {
 
             {/* Title */}
             <h1 className="text-5xl lg:text-6xl font-luxury font-black leading-tight text-white">
-              Sorteio{' '}
-              <span className="text-gold">BMW R1200</span>
-              <span className="block">
-                <span className="text-gold">GS</span>
-              </span>
+              {campaignTitleHighlight ? (
+                <>
+                  {campaignTitlePrefix} <span className="text-gold">{campaignTitleHighlight}</span>
+                </>
+              ) : (
+                campaignTitlePrefix
+              )}
             </h1>
 
             {/* Subtitle */}
             <p className="text-base text-gray-300 font-light leading-relaxed max-w-xl">
-              Além da <span className="text-gold font-semibold">BMW R1200 GS</span>, você também
-              concorre a <span className="text-gold font-semibold">uma Honda CG Start 160</span> e{' '}
-              <span className="text-gold font-semibold">20 PIX de R$ 1.000</span>. Sorteio com
-              transparência total: apuração pela Loteria Federal e validação por algoritmo auditável.
+              Além de <span className="text-gold font-semibold">{mainPrize}</span>, você também concorre a{' '}
+              <span className="text-gold font-semibold">{secondPrize}</span> e{' '}
+              <span className="text-gold font-semibold">{bonusPrize}</span>. Sorteio com transparência total:
+              apuração pela Loteria Federal e validação por algoritmo auditável.
             </p>
 
             {/* Progress bar */}
@@ -184,7 +197,7 @@ export default function HeroSection() {
                     className="text-white font-black text-4xl lg:text-5xl leading-none drop-shadow-lg"
                     style={{ textShadow: '0 3px 16px rgba(0,0,0,1)' }}
                   >
-                    BMW R1200 GS
+                    {mainPrize}
                   </p>
                   <p
                     className="text-gold text-base font-bold tracking-[0.2em] uppercase mt-1"

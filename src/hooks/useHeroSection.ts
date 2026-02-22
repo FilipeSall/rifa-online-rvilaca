@@ -1,14 +1,59 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { HERO_CONFIG, HERO_COUNTDOWN_LABELS } from '../const/home'
+import { useCampaignSettings } from './useCampaignSettings'
 import { createCountdownItems, getCountdown, type Countdown } from '../utils/home'
 
+function parseCampaignDate(value: string | null, useEndOfDay: boolean) {
+  if (!value) {
+    return null
+  }
+
+  const [yearRaw, monthRaw, dayRaw] = value.split('-')
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null
+  }
+
+  const date = useEndOfDay
+    ? new Date(year, month - 1, day, 23, 59, 59, 999)
+    : new Date(year, month - 1, day, 0, 0, 0, 0)
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  return date.getTime()
+}
+
 export function useHeroSection() {
+  const { campaign } = useCampaignSettings()
   const location = useLocation()
   const navigate = useNavigate()
-  const targetTimeRef = useRef(Date.now() + HERO_CONFIG.countdownDurationMs)
+  const fallbackTargetTimeRef = useRef(Date.now() + HERO_CONFIG.countdownDurationMs)
+  const targetTime = useMemo(() => {
+    const startsAtMs = parseCampaignDate(campaign.startsAt, false)
+    const endsAtMs = parseCampaignDate(campaign.endsAt, true)
+
+    if (campaign.status === 'finished' || campaign.status === 'paused') {
+      return 0
+    }
+
+    if (campaign.status === 'scheduled' && startsAtMs) {
+      return startsAtMs
+    }
+
+    if (campaign.status === 'active' && endsAtMs) {
+      return endsAtMs
+    }
+
+    return fallbackTargetTimeRef.current
+  }, [campaign.endsAt, campaign.startsAt, campaign.status])
   const [animatedSoldPercentage, setAnimatedSoldPercentage] = useState(0)
-  const [countdown, setCountdown] = useState<Countdown>(() => getCountdown(targetTimeRef.current))
+  const [countdown, setCountdown] = useState<Countdown>(() => getCountdown(targetTime))
 
   useEffect(() => {
     let animationFrame = 0
@@ -40,8 +85,12 @@ export function useHeroSection() {
   }, [])
 
   useEffect(() => {
+    setCountdown(getCountdown(targetTime))
+  }, [targetTime])
+
+  useEffect(() => {
     const interval = window.setInterval(() => {
-      const nextCountdown = getCountdown(targetTimeRef.current)
+      const nextCountdown = getCountdown(targetTime)
       setCountdown(nextCountdown)
 
       if (nextCountdown.hasFinished) {
@@ -50,7 +99,7 @@ export function useHeroSection() {
     }, 1000)
 
     return () => window.clearInterval(interval)
-  }, [])
+  }, [targetTime])
 
   const handleOpenBuyModal = useCallback(() => {
     const targetId = 'comprar-numeros'

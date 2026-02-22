@@ -13,16 +13,25 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { toast } from 'react-toastify'
 import {
   ADMIN_KPIS,
   ADMIN_TABS,
-  CAMPAIGN_DRAFT,
   CONVERSION_SERIES,
   SALES_SERIES,
   type AdminTabId,
 } from '../../const/adminDashboard'
-import { DEFAULT_CAMPAIGN_TITLE, DEFAULT_TICKET_PRICE } from '../../const/campaign'
+import {
+  CAMPAIGN_STATUS_OPTIONS,
+  DEFAULT_BONUS_PRIZE,
+  DEFAULT_CAMPAIGN_STATUS,
+  DEFAULT_CAMPAIGN_TITLE,
+  DEFAULT_MAIN_PRIZE,
+  DEFAULT_SECOND_PRIZE,
+  DEFAULT_TICKET_PRICE,
+} from '../../const/campaign'
 import { useCampaignSettings } from '../../hooks/useCampaignSettings'
+import type { CampaignStatus } from '../../types/campaign'
 
 type AdminDashboardContentProps = {
   activeTab: AdminTabId
@@ -98,6 +107,10 @@ function formatCurrency(value: number) {
 
 function formatInteger(value: number) {
   return new Intl.NumberFormat('pt-BR').format(value)
+}
+
+function getCampaignStatusLabel(status: CampaignStatus) {
+  return CAMPAIGN_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? 'Ativa'
 }
 
 function ConversionTooltip({ active, payload }: TooltipContentProps<number, string>) {
@@ -403,20 +416,38 @@ function CampaignTab() {
     exists,
     isLoading,
     isSaving,
-    errorMessage,
     ensureCampaignExists,
     saveCampaignSettings,
   } = useCampaignSettings()
   const [title, setTitle] = useState(DEFAULT_CAMPAIGN_TITLE)
   const [pricePerCotaInput, setPricePerCotaInput] = useState(DEFAULT_TICKET_PRICE.toFixed(2))
-  const [feedback, setFeedback] = useState<string | null>(null)
-  const [feedbackTone, setFeedbackTone] = useState<'success' | 'error'>('success')
+  const [mainPrize, setMainPrize] = useState(DEFAULT_MAIN_PRIZE)
+  const [secondPrize, setSecondPrize] = useState(DEFAULT_SECOND_PRIZE)
+  const [bonusPrize, setBonusPrize] = useState(DEFAULT_BONUS_PRIZE)
+  const [status, setStatus] = useState<CampaignStatus>(DEFAULT_CAMPAIGN_STATUS)
+  const [startsAt, setStartsAt] = useState('')
+  const [endsAt, setEndsAt] = useState('')
   const hasEnsuredCampaignRef = useRef(false)
 
   useEffect(() => {
     setTitle(campaign.title)
     setPricePerCotaInput(campaign.pricePerCota.toFixed(2))
-  }, [campaign.pricePerCota, campaign.title])
+    setMainPrize(campaign.mainPrize)
+    setSecondPrize(campaign.secondPrize)
+    setBonusPrize(campaign.bonusPrize)
+    setStatus(campaign.status)
+    setStartsAt(campaign.startsAt ?? '')
+    setEndsAt(campaign.endsAt ?? '')
+  }, [
+    campaign.bonusPrize,
+    campaign.mainPrize,
+    campaign.pricePerCota,
+    campaign.secondPrize,
+    campaign.status,
+    campaign.startsAt,
+    campaign.endsAt,
+    campaign.title,
+  ])
 
   useEffect(() => {
     if (isLoading || exists || hasEnsuredCampaignRef.current) {
@@ -425,19 +456,31 @@ function CampaignTab() {
 
     hasEnsuredCampaignRef.current = true
     ensureCampaignExists().catch(() => {
-      setFeedbackTone('error')
-      setFeedback('Nao foi possivel criar a campanha no banco de dados.')
+      toast.error('Nao foi possivel criar a campanha no banco de dados.', {
+        toastId: 'campaign-seed-error',
+      })
     })
   }, [ensureCampaignExists, exists, isLoading])
 
   const handleSaveCampaignSettings = async () => {
     const normalizedTitle = title.trim() || DEFAULT_CAMPAIGN_TITLE
+    const normalizedMainPrize = mainPrize.trim() || DEFAULT_MAIN_PRIZE
+    const normalizedSecondPrize = secondPrize.trim() || DEFAULT_SECOND_PRIZE
+    const normalizedBonusPrize = bonusPrize.trim() || DEFAULT_BONUS_PRIZE
     const normalizedPriceText = pricePerCotaInput.replace(',', '.').trim()
     const normalizedPrice = Number(normalizedPriceText)
 
     if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0) {
-      setFeedbackTone('error')
-      setFeedback('Informe um valor valido para a cota.')
+      toast.error('Informe um valor valido para a cota.', {
+        toastId: 'campaign-invalid-price',
+      })
+      return
+    }
+
+    if (startsAt && endsAt && startsAt > endsAt) {
+      toast.error('A data de inicio nao pode ser maior que a data de fim.', {
+        toastId: 'campaign-invalid-date-range',
+      })
       return
     }
 
@@ -445,39 +488,76 @@ function CampaignTab() {
       await saveCampaignSettings({
         title: normalizedTitle,
         pricePerCota: Number(normalizedPrice.toFixed(2)),
+        mainPrize: normalizedMainPrize,
+        secondPrize: normalizedSecondPrize,
+        bonusPrize: normalizedBonusPrize,
+        status,
+        startsAt: startsAt.trim() ? startsAt : null,
+        endsAt: endsAt.trim() ? endsAt : null,
       })
-      setFeedbackTone('success')
-      setFeedback('Campanha atualizada no banco e sincronizada com o site.')
+      toast.success('Campanha e premiacao atualizadas no banco e sincronizadas com o site.', {
+        toastId: 'campaign-settings-saved',
+      })
     } catch {
-      setFeedbackTone('error')
-      setFeedback('Falha ao salvar campanha. Verifique permissao de admin e tente novamente.')
+      toast.error('Falha ao salvar campanha. Verifique permissao de admin e tente novamente.', {
+        toastId: 'campaign-settings-save-error',
+      })
     }
   }
 
   return (
-    <section className="space-y-5">
-      <article className="rounded-2xl border border-white/10 bg-luxury-card p-5">
-        <p className="text-[10px] uppercase tracking-[0.2em] text-gold">Campanha ativa</p>
-        <h3 className="mt-2 font-luxury text-2xl font-bold text-white">{campaign.title}</h3>
-        <p className="mt-2 text-sm text-gray-400">Edicao centralizada do nome da campanha e preco da cota.</p>
+    <section className="space-y-6">
+      <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-luxury-card p-6">
+        <div className="pointer-events-none absolute -left-12 top-0 h-44 w-44 rounded-full bg-gold/15 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-12 right-0 h-44 w-44 rounded-full bg-cyan-400/10 blur-3xl" />
+        <div className="relative z-10 grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr] lg:items-end">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gold">Central da Campanha</p>
+            <h3 className="mt-2 font-luxury text-3xl font-bold text-white">Edição visual e comercial em tempo real</h3>
+            <p className="mt-3 max-w-2xl text-sm text-gray-300">
+              Atualize nome, premiação e preço por cota em um único fluxo. Tudo que você salvar já vira referência para o restante do projeto.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-gold/20 bg-black/40 px-4 py-3">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Preço atual</p>
+              <p className="mt-1 text-lg font-black text-gold">{formatCurrency(campaign.pricePerCota)}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/40 px-4 py-3">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Status</p>
+              <p className="mt-1 text-lg font-black text-emerald-300">{getCampaignStatusLabel(status)}</p>
+            </div>
+          </div>
+        </div>
       </article>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <article className="rounded-2xl border border-white/10 bg-luxury-card p-5">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-gray-500">Premios</p>
-          <div className="mt-4 space-y-3 text-sm text-white">
-            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">1o premio</p>
-              <p className="mt-1 font-semibold">{CAMPAIGN_DRAFT.mainPrize}</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">2o premio</p>
-              <p className="mt-1 font-semibold">{CAMPAIGN_DRAFT.secondPrize}</p>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-luxury-card p-5 xl:col-span-5">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(245,168,0,0.16),transparent_48%)]" />
+          <div className="relative z-10">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold">Preview ao vivo</p>
+            <h4 className="mt-3 font-luxury text-2xl font-bold text-white">{title.trim() || DEFAULT_CAMPAIGN_TITLE}</h4>
+            <p className="mt-2 text-sm text-gray-300">
+              Visual de como a comunicação principal da campanha fica após o salvamento.
+            </p>
+            <div className="mt-5 space-y-3">
+              <div className="rounded-xl border border-gold/25 bg-black/40 px-4 py-3">
+                <p className="text-[10px] uppercase tracking-[0.15em] text-gold">1º prêmio</p>
+                <p className="mt-1 text-sm font-semibold text-white">{mainPrize.trim() || DEFAULT_MAIN_PRIZE}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/35 px-4 py-3">
+                <p className="text-[10px] uppercase tracking-[0.15em] text-gray-400">2º prêmio</p>
+                <p className="mt-1 text-sm font-semibold text-white">{secondPrize.trim() || DEFAULT_SECOND_PRIZE}</p>
+              </div>
+              <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 px-4 py-3">
+                <p className="text-[10px] uppercase tracking-[0.15em] text-emerald-300">Prêmio extra</p>
+                <p className="mt-1 text-sm font-semibold text-white">{bonusPrize.trim() || DEFAULT_BONUS_PRIZE}</p>
+              </div>
             </div>
           </div>
         </article>
 
-        <article className="rounded-2xl border border-white/10 bg-luxury-card p-5">
+        <article className="rounded-3xl border border-white/10 bg-luxury-card p-5 xl:col-span-7">
           <div className="grid grid-cols-1 gap-4">
             <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
               <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-title">
@@ -485,50 +565,122 @@ function CampaignTab() {
               </label>
               <input
                 id="campaign-title"
-                className="mt-2 h-10 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none focus:border-gold/50"
+                className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
                 type="text"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
               />
             </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-main-prize">
+                  1º prêmio
+                </label>
+                <input
+                  id="campaign-main-prize"
+                  className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                  type="text"
+                  value={mainPrize}
+                  onChange={(event) => setMainPrize(event.target.value)}
+                />
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-second-prize">
+                  2º prêmio
+                </label>
+                <input
+                  id="campaign-second-prize"
+                  className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                  type="text"
+                  value={secondPrize}
+                  onChange={(event) => setSecondPrize(event.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 px-4 py-3">
+              <label className="text-[10px] uppercase tracking-[0.16em] text-emerald-300" htmlFor="campaign-bonus-prize">
+                Prêmio extra (20 PIX)
+              </label>
+              <input
+                id="campaign-bonus-prize"
+                className="mt-2 h-11 w-full rounded-md border border-emerald-300/25 bg-black/30 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-emerald-300/60"
+                type="text"
+                value={bonusPrize}
+                onChange={(event) => setBonusPrize(event.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-status">
+                  Status da campanha
+                </label>
+                <select
+                  id="campaign-status"
+                  className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                  value={status}
+                  onChange={(event) => setStatus(event.target.value as CampaignStatus)}
+                >
+                  {CAMPAIGN_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-starts-at">
+                  Inicio
+                </label>
+                <input
+                  id="campaign-starts-at"
+                  className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                  type="date"
+                  value={startsAt}
+                  onChange={(event) => setStartsAt(event.target.value)}
+                />
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-ends-at">
+                  Fim
+                </label>
+                <input
+                  id="campaign-ends-at"
+                  className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                  type="date"
+                  value={endsAt}
+                  onChange={(event) => setEndsAt(event.target.value)}
+                />
+              </div>
+            </div>
+
             <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
               <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-ticket-price">
-                Preco por cota (R$)
+                Preço por cota (R$)
               </label>
               <input
                 id="campaign-ticket-price"
-                className="mt-2 h-10 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-gold outline-none focus:border-gold/50"
+                className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-gold outline-none transition-colors focus:border-gold/60"
                 inputMode="decimal"
                 type="text"
                 value={pricePerCotaInput}
                 onChange={(event) => setPricePerCotaInput(event.target.value)}
               />
             </div>
-            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Regulamento</p>
-              <p className="mt-1 text-lg font-bold text-white">{CAMPAIGN_DRAFT.regulationVersion}</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Preco atual em todo o site</p>
-              <p className="mt-1 text-lg font-bold text-gold">{formatCurrency(campaign.pricePerCota)}</p>
-            </div>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-2">
+          <div className="mt-5 flex flex-wrap items-center gap-3">
             <button
-              className="inline-flex h-10 items-center rounded-lg bg-gold px-4 text-xs font-black uppercase tracking-[0.14em] text-black hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex h-11 items-center rounded-lg bg-gold px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition-colors hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-70"
               type="button"
               disabled={isLoading || isSaving}
               onClick={handleSaveCampaignSettings}
             >
-              {isSaving ? 'Salvando...' : 'Salvar alteracoes'}
+              {isSaving ? 'Salvando...' : 'Salvar campanha'}
             </button>
           </div>
-
-          {feedback ? (
-            <p className={`mt-3 text-sm ${feedbackTone === 'success' ? 'text-emerald-300' : 'text-rose-300'}`}>{feedback}</p>
-          ) : null}
-          {errorMessage ? <p className="mt-1 text-xs text-rose-300">{errorMessage}</p> : null}
         </article>
       </div>
     </section>

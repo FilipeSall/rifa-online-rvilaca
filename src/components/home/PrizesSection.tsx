@@ -1,4 +1,6 @@
 import { PRIZES, type PrizeCardData } from '../../const/home'
+import { DEFAULT_BONUS_PRIZE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../const/campaign'
+import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 
 function PrizeCard({ badge, badgeClassName, title, description, imageSrc, imageAlt, icon }: PrizeCardData) {
   return (
@@ -33,6 +35,23 @@ function PrizeCard({ badge, badgeClassName, title, description, imageSrc, imageA
 }
 
 export default function PrizesSection() {
+  const { campaign } = useCampaignSettings()
+  const dynamicPrizes: PrizeCardData[] = PRIZES.map((prize, index) => {
+    if (index === 0) {
+      return { ...prize, title: campaign.mainPrize || DEFAULT_MAIN_PRIZE }
+    }
+
+    if (index === 1) {
+      return { ...prize, title: campaign.secondPrize || DEFAULT_SECOND_PRIZE }
+    }
+
+    if (index === 2) {
+      return { ...prize, title: campaign.bonusPrize || DEFAULT_BONUS_PRIZE }
+    }
+
+    return prize
+  })
+
   return (
     <section className="py-16 bg-luxury-card border-y border-white/5">
       <div className="container mx-auto px-4 lg:px-8">
@@ -43,8 +62,8 @@ export default function PrizesSection() {
           <h2 className="text-3xl font-luxury font-bold text-white">Prêmios da Edição</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {PRIZES.map((prize) => (
-            <PrizeCard key={prize.title} {...prize} />
+          {dynamicPrizes.map((prize, index) => (
+            <PrizeCard key={`${prize.title}-${index}`} {...prize} />
           ))}
         </div>
       </div>

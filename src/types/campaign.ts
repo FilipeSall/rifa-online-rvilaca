@@ -1,3 +1,5 @@
+export type CampaignStatus = 'active' | 'scheduled' | 'paused' | 'finished'
+
 export type CampaignSettings = {
   id: string
   title: string
@@ -5,6 +7,9 @@ export type CampaignSettings = {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  status: CampaignStatus
+  startsAt: string | null
+  endsAt: string | null
 }
 
 export type UpsertCampaignSettingsInput = {
@@ -13,6 +18,9 @@ export type UpsertCampaignSettingsInput = {
   mainPrize?: string
   secondPrize?: string
   bonusPrize?: string
+  status?: CampaignStatus
+  startsAt?: string | null
+  endsAt?: string | null
 }
 
 export type UpsertCampaignSettingsOutput = {
@@ -22,4 +30,7 @@ export type UpsertCampaignSettingsOutput = {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  status: CampaignStatus
+  startsAt: string | null
+  endsAt: string | null
 }

@@ -141,4 +141,5 @@ export const CAMPAIGN_DRAFT = {
   regulationVersion: 'v2.3',
   mainPrize: 'BMW R1200 GS 2015/2016',
   secondPrize: 'Honda CG Start 160 2026/2026',
+  bonusPrize: '20 PIX de R$ 1.000',
 }

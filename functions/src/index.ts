@@ -36,6 +36,9 @@ const DEFAULT_PRICE_PER_COTA = 0.99
 const DEFAULT_MAIN_PRIZE = 'BMW R1200 GS 2015/2016'
 const DEFAULT_SECOND_PRIZE = 'Honda CG Start 160 2026/2026'
 const DEFAULT_BONUS_PRIZE = '20 PIX de R$ 1.000'
+const DEFAULT_CAMPAIGN_STATUS = 'active'
+const CAMPAIGN_STATUS_VALUES = ['active', 'scheduled', 'paused', 'finished'] as const
+type CampaignStatus = (typeof CAMPAIGN_STATUS_VALUES)[number]
 
 interface HorsePayAuthResponse {
   access_token?: string
@@ -77,6 +80,9 @@ interface UpsertCampaignSettingsInput {
   mainPrize?: string
   secondPrize?: string
   bonusPrize?: string
+  status?: CampaignStatus
+  startsAt?: string | null
+  endsAt?: string | null
 }
 
 interface UpsertCampaignSettingsOutput {
@@ -86,6 +92,9 @@ interface UpsertCampaignSettingsOutput {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  status: CampaignStatus
+  startsAt: string | null
+  endsAt: string | null
 }
 
 function maskUid(uid: string): string {
@@ -310,6 +319,41 @@ function sanitizeCampaignPrize(value: unknown, fieldName: string): string | null
   return normalized.slice(0, 160)
 }
 
+function sanitizeCampaignStatus(value: unknown): CampaignStatus | null {
+  if (value === undefined || value === null || value === '') {
+    return null
+  }
+
+  const normalized = sanitizeString(value).toLowerCase()
+  if (!CAMPAIGN_STATUS_VALUES.includes(normalized as CampaignStatus)) {
+    throw new HttpsError('invalid-argument', 'status de campanha invalido.')
+  }
+
+  return normalized as CampaignStatus
+}
+
+function sanitizeCampaignDate(value: unknown, fieldName: string): string | null | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (value === null || value === '') {
+    return null
+  }
+
+  const normalized = sanitizeString(value)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    throw new HttpsError('invalid-argument', `${fieldName} deve seguir o formato YYYY-MM-DD.`)
+  }
+
+  const parsedDate = new Date(`${normalized}T00:00:00.000Z`)
+  if (Number.isNaN(parsedDate.getTime())) {
+    throw new HttpsError('invalid-argument', `${fieldName} invalido.`)
+  }
+
+  return normalized
+}
+
 async function assertAdminRole(uid: string) {
   const userSnapshot = await db.collection('users').doc(uid).get()
   const role = sanitizeString(userSnapshot.get('role')).toLowerCase()
@@ -355,6 +399,28 @@ function readCampaignSecondPrize(data: DocumentData | undefined): string {
 function readCampaignBonusPrize(data: DocumentData | undefined): string {
   const value = sanitizeString(data?.bonusPrize)
   return value || DEFAULT_BONUS_PRIZE
+}
+
+function readCampaignStatus(data: DocumentData | undefined): CampaignStatus {
+  const value = sanitizeString(data?.status).toLowerCase()
+  if (CAMPAIGN_STATUS_VALUES.includes(value as CampaignStatus)) {
+    return value as CampaignStatus
+  }
+
+  return DEFAULT_CAMPAIGN_STATUS
+}
+
+function readCampaignDate(data: DocumentData | undefined, fieldName: 'startsAt' | 'endsAt'): string | null {
+  const value = sanitizeString(data?.[fieldName])
+  if (!value) {
+    return null
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null
+  }
+
+  return value
 }
 
 function sanitizeNumberStatus(raw: unknown): 'disponivel' | 'reservado' | 'pago' {
@@ -1001,8 +1067,12 @@ export const upsertCampaignSettings = onCall(
     const nextMainPrize = sanitizeCampaignPrize(payload.mainPrize, 'mainPrize')
     const nextSecondPrize = sanitizeCampaignPrize(payload.secondPrize, 'secondPrize')
     const nextBonusPrize = sanitizeCampaignPrize(payload.bonusPrize, 'bonusPrize')
+    const nextStatus = sanitizeCampaignStatus(payload.status)
+    const nextStartsAt = sanitizeCampaignDate(payload.startsAt, 'startsAt')
+    const nextEndsAt = sanitizeCampaignDate(payload.endsAt, 'endsAt')
     const campaignRef = db.collection('campaigns').doc(CAMPAIGN_DOC_ID)
     const campaignSnapshot = await campaignRef.get()
+    const currentData = campaignSnapshot.exists ? (campaignSnapshot.data() as DocumentData | undefined) : undefined
 
     const updateData: DocumentData = {
       updatedAt: FieldValue.serverTimestamp(),
@@ -1030,6 +1100,26 @@ export const upsertCampaignSettings = onCall(
       updateData.bonusPrize = nextBonusPrize
     }
 
+    if (nextStatus !== null) {
+      updateData.status = nextStatus
+    }
+
+    if (nextStartsAt !== undefined) {
+      updateData.startsAt = nextStartsAt
+    }
+
+    if (nextEndsAt !== undefined) {
+      updateData.endsAt = nextEndsAt
+    }
+
+    const effectiveStartsAt =
+      nextStartsAt !== undefined ? nextStartsAt : readCampaignDate(currentData, 'startsAt')
+    const effectiveEndsAt =
+      nextEndsAt !== undefined ? nextEndsAt : readCampaignDate(currentData, 'endsAt')
+    if (effectiveStartsAt && effectiveEndsAt && effectiveStartsAt > effectiveEndsAt) {
+      throw new HttpsError('invalid-argument', 'startsAt nao pode ser maior que endsAt.')
+    }
+
     if (!campaignSnapshot.exists) {
       if (!updateData.title) {
         updateData.title = DEFAULT_CAMPAIGN_TITLE
@@ -1052,14 +1142,19 @@ export const upsertCampaignSettings = onCall(
         updateData.bonusPrize = DEFAULT_BONUS_PRIZE
       }
 
-      updateData.status = 'active'
+      if (!updateData.status) {
+        updateData.status = DEFAULT_CAMPAIGN_STATUS
+      }
       updateData.createdAt = FieldValue.serverTimestamp()
     } else if (
       nextTitle === null &&
       nextPricePerCota === null &&
       nextMainPrize === null &&
       nextSecondPrize === null &&
-      nextBonusPrize === null
+      nextBonusPrize === null &&
+      nextStatus === null &&
+      nextStartsAt === undefined &&
+      nextEndsAt === undefined
     ) {
       throw new HttpsError('invalid-argument', 'Nenhum dado valido para atualizar campanha.')
     }
@@ -1076,6 +1171,9 @@ export const upsertCampaignSettings = onCall(
       mainPrize: readCampaignMainPrize(campaignData),
       secondPrize: readCampaignSecondPrize(campaignData),
       bonusPrize: readCampaignBonusPrize(campaignData),
+      status: readCampaignStatus(campaignData),
+      startsAt: readCampaignDate(campaignData, 'startsAt'),
+      endsAt: readCampaignDate(campaignData, 'endsAt'),
     } satisfies UpsertCampaignSettingsOutput
   },
 )
