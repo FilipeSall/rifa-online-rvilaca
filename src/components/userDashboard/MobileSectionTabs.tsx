@@ -7,8 +7,8 @@ type MobileSectionTabsProps = {
 
 export default function MobileSectionTabs({ activeSection, onSectionChange }: MobileSectionTabsProps) {
   return (
-    <div className="flex gap-1 rounded-xl border border-luxury-border bg-luxury-card p-1 lg:hidden">
-      {(['numeros', 'comprovantes'] as Section[]).map((section) => (
+    <div className="grid grid-cols-3 gap-1 rounded-xl border border-luxury-border bg-luxury-card p-1 lg:hidden">
+      {(['numeros', 'comprovantes', 'ganhadores'] as Section[]).map((section) => (
         <button
           key={section}
           type="button"
@@ -17,7 +17,7 @@ export default function MobileSectionTabs({ activeSection, onSectionChange }: Mo
             activeSection === section ? 'bg-gold text-black' : 'text-text-muted hover:text-white'
           }`}
         >
-          {section === 'numeros' ? 'Meus Numeros' : 'Comprovantes'}
+          {section === 'numeros' ? 'Meus Numeros' : section === 'comprovantes' ? 'Comprovantes' : 'Ganhadores'}
         </button>
       ))}
     </div>

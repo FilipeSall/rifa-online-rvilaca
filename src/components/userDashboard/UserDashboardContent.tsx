@@ -6,6 +6,7 @@ import MyNumbersSection from './MyNumbersSection'
 import ProfileCard from './ProfileCard'
 import ReceiptsSection from './ReceiptsSection'
 import StatsCards from './StatsCards'
+import PrizeWinnersShowcase from '../winners/PrizeWinnersShowcase'
 
 type UserDashboardContentProps = {
   dashboardState: ReturnType<typeof useUserDashboard>
@@ -129,6 +130,10 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
                 onReceiptFilterChange={setReceiptFilter}
                 onReceiptSearchChange={setReceiptSearch}
               />
+            )}
+
+            {activeSection === 'ganhadores' && (
+              <PrizeWinnersShowcase mode="dashboard" />
             )}
           </div>
         </main>

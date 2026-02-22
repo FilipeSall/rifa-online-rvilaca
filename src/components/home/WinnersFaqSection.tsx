@@ -133,7 +133,7 @@ function RankingSection() {
           {latestDrawResult ? (
             <p className="mt-3 text-xs text-amber-200">
               Ultimo ganhador semanal publicado: <span className="font-bold">{latestDrawResult.winner.name}</span>{' '}
-              (posicao {latestDrawResult.winningPosition} com resultado {latestDrawResult.lotteryNumber}).
+              (data {latestDrawResult.drawDate}, posicao {latestDrawResult.winningPosition}, codigo {latestDrawResult.winningCode}).
             </p>
           ) : null}
         </div>

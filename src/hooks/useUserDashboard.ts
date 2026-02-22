@@ -63,7 +63,7 @@ function readOrderNumbers(value: unknown): number[] {
 }
 
 function parseSectionParam(value: string | null): Section | null {
-  if (value === 'numeros' || value === 'comprovantes') {
+  if (value === 'numeros' || value === 'comprovantes' || value === 'ganhadores') {
     return value
   }
 

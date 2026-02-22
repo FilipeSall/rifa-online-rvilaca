@@ -19,13 +19,30 @@ type RawTopBuyersDrawItem = {
   firstPurchaseAtMs?: unknown
 }
 
+type RawAttempt = {
+  extractionIndex?: unknown
+  extractionNumber?: unknown
+  comparisonDigits?: unknown
+  candidateCode?: unknown
+  matchedPosition?: unknown
+}
+
 type RawTopBuyersDrawResult = {
   campaignId?: unknown
   drawId?: unknown
-  lotteryNumber?: unknown
+  drawDate?: unknown
+  drawPrize?: unknown
+  weekId?: unknown
+  weekStartAtMs?: unknown
+  weekEndAtMs?: unknown
   requestedRankingLimit?: unknown
   participantCount?: unknown
+  comparisonDigits?: unknown
+  extractionNumbers?: unknown
+  attempts?: unknown
   winningPosition?: unknown
+  winningCode?: unknown
+  resolvedBy?: unknown
   winner?: RawTopBuyersDrawWinner
   rankingSnapshot?: unknown
   publishedAtMs?: unknown
@@ -37,7 +54,8 @@ type GetLatestTopBuyersDrawOutput = {
 }
 
 type PublishTopBuyersDrawInput = {
-  lotteryNumber: number
+  drawDate: string
+  extractionNumbers: string[]
   rankingLimit?: number
 }
 
@@ -56,13 +74,30 @@ export type TopBuyersDrawItem = {
   firstPurchaseAtMs: number
 }
 
+export type TopBuyersDrawAttempt = {
+  extractionIndex: number
+  extractionNumber: string
+  comparisonDigits: number
+  candidateCode: string
+  matchedPosition: number | null
+}
+
 export type TopBuyersDrawResult = {
   campaignId: string
   drawId: string
-  lotteryNumber: number
+  drawDate: string
+  drawPrize: string
+  weekId: string
+  weekStartAtMs: number
+  weekEndAtMs: number
   requestedRankingLimit: number
   participantCount: number
+  comparisonDigits: number
+  extractionNumbers: string[]
+  attempts: TopBuyersDrawAttempt[]
   winningPosition: number
+  winningCode: string
+  resolvedBy: 'federal_extraction' | 'redundancy'
   winner: TopBuyersDrawWinner
   rankingSnapshot: TopBuyersDrawItem[]
   publishedAtMs: number
@@ -77,6 +112,10 @@ function unwrapCallableData<T>(value: CallableEnvelope<T>) {
   }
 
   return value as T
+}
+
+function isGetLatestTopBuyersDrawOutput(value: unknown): value is GetLatestTopBuyersDrawOutput {
+  return Boolean(value && typeof value === 'object' && 'hasResult' in value)
 }
 
 function sanitizeNumber(value: unknown, fallback = 0) {
@@ -121,6 +160,26 @@ function normalizeRankingSnapshot(value: unknown): TopBuyersDrawItem[] {
     .filter((item) => item.pos > 0 && item.cotas > 0 && item.userId.length > 0)
 }
 
+function normalizeAttempts(value: unknown): TopBuyersDrawAttempt[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((rawItem) => (rawItem && typeof rawItem === 'object' ? (rawItem as RawAttempt) : null))
+    .filter((item): item is RawAttempt => Boolean(item))
+    .map((item) => ({
+      extractionIndex: sanitizeInteger(item.extractionIndex),
+      extractionNumber: sanitizeString(item.extractionNumber),
+      comparisonDigits: sanitizeInteger(item.comparisonDigits),
+      candidateCode: sanitizeString(item.candidateCode),
+      matchedPosition: Number.isInteger(Number(item.matchedPosition))
+        ? Number(item.matchedPosition)
+        : null,
+    }))
+    .filter((item) => item.extractionIndex > 0 && item.extractionNumber.length > 0)
+}
+
 function normalizeResult(raw: RawTopBuyersDrawResult | null | undefined): TopBuyersDrawResult | null {
   if (!raw || typeof raw !== 'object') {
     return null
@@ -134,13 +193,28 @@ function normalizeResult(raw: RawTopBuyersDrawResult | null | undefined): TopBuy
     pos: sanitizeInteger(winnerRaw.pos),
   }
 
+  const extractionNumbers = Array.isArray(raw.extractionNumbers)
+    ? raw.extractionNumbers.map((item) => sanitizeString(item)).filter(Boolean)
+    : []
+
+  const resolvedBy = raw.resolvedBy === 'federal_extraction' ? 'federal_extraction' : 'redundancy'
+
   const result: TopBuyersDrawResult = {
     campaignId: sanitizeString(raw.campaignId),
     drawId: sanitizeString(raw.drawId),
-    lotteryNumber: sanitizeInteger(raw.lotteryNumber),
+    drawDate: sanitizeString(raw.drawDate),
+    drawPrize: sanitizeString(raw.drawPrize),
+    weekId: sanitizeString(raw.weekId),
+    weekStartAtMs: sanitizeNumber(raw.weekStartAtMs),
+    weekEndAtMs: sanitizeNumber(raw.weekEndAtMs),
     requestedRankingLimit: sanitizeInteger(raw.requestedRankingLimit),
     participantCount: sanitizeInteger(raw.participantCount),
+    comparisonDigits: sanitizeInteger(raw.comparisonDigits),
+    extractionNumbers,
+    attempts: normalizeAttempts(raw.attempts),
     winningPosition: sanitizeInteger(raw.winningPosition),
+    winningCode: sanitizeString(raw.winningCode),
+    resolvedBy,
     winner,
     rankingSnapshot: normalizeRankingSnapshot(raw.rankingSnapshot),
     publishedAtMs: sanitizeNumber(raw.publishedAtMs),
@@ -149,10 +223,14 @@ function normalizeResult(raw: RawTopBuyersDrawResult | null | undefined): TopBuy
   if (
     !result.campaignId ||
     !result.drawId ||
-    result.lotteryNumber <= 0 ||
+    !result.drawDate ||
+    !result.weekId ||
     result.requestedRankingLimit <= 0 ||
     result.participantCount <= 0 ||
+    result.comparisonDigits <= 0 ||
+    result.extractionNumbers.length === 0 ||
     result.winningPosition <= 0 ||
+    !result.winningCode ||
     !result.winner.userId ||
     !result.winner.name
   ) {
@@ -180,8 +258,11 @@ export function useTopBuyersDraw(autoRefresh = true) {
   const refreshResult = useCallback(async () => {
     try {
       const response = await getLatestTopBuyersDraw({})
-      const payload = unwrapCallableData(response.data as CallableEnvelope<GetLatestTopBuyersDrawOutput>)
-      const normalizedResult = normalizeResult(payload.result || null)
+      const rawPayload = response.data as unknown
+      const payload = isGetLatestTopBuyersDrawOutput(rawPayload)
+        ? rawPayload
+        : unwrapCallableData(rawPayload as CallableEnvelope<GetLatestTopBuyersDrawOutput>)
+      const normalizedResult = normalizeResult(payload?.result || null)
       setResult(normalizedResult)
       setErrorMessage(null)
     } catch {

@@ -1,4 +1,5 @@
 import logo from '../../assets/logo.webp'
+import { Link } from 'react-router-dom'
 import { FOOTER_NAV_LINKS, FOOTER_SUPPORT_LINKS } from '../../const/home'
 
 export default function Footer() {
@@ -37,10 +38,10 @@ export default function Footer() {
             <h3 className="text-white font-bold text-xs uppercase tracking-widest mb-6">Navegação</h3>
             <ul className="space-y-3 text-sm text-gray-500">
               {FOOTER_NAV_LINKS.map((item) => (
-                <li key={item}>
-                  <a className="hover:text-gold transition-colors" href="#">
-                    {item}
-                  </a>
+                <li key={item.label}>
+                  <Link className="hover:text-gold transition-colors" to={item.href}>
+                    {item.label}
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -50,10 +51,10 @@ export default function Footer() {
             <h3 className="text-white font-bold text-xs uppercase tracking-widest mb-6">Suporte</h3>
             <ul className="space-y-3 text-sm text-gray-500">
               {FOOTER_SUPPORT_LINKS.map((item) => (
-                <li key={item}>
-                  <a className="hover:text-gold transition-colors" href="#">
-                    {item}
-                  </a>
+                <li key={item.label}>
+                  <Link className="hover:text-gold transition-colors" to={item.href}>
+                    {item.label}
+                  </Link>
                 </li>
               ))}
             </ul>

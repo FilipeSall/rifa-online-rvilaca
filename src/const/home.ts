@@ -43,6 +43,11 @@ export type FaqItem = {
   a: string
 }
 
+export type FooterLinkItem = {
+  label: string
+  href: string
+}
+
 export const CAMPAIGN_TOTAL_COTAS = 3_450_000
 export const CAMPAIGN_SOLD_COTAS = 2_242_500
 
@@ -120,16 +125,24 @@ export const PACK_OPTIONS: PackOption[] = [
 
 export const FAQ_ITEMS: FaqItem[] = [
   {
+    q: 'Como funciona o ranking semanal do sorteio exclusivo?',
+    a: 'A cada semana, o sistema fecha e congela às 23:59 da sexta-feira (America/Sao_Paulo) o Top 50 de participantes com maior quantidade de cotas pagas no período semanal. Esse ranking é a base oficial do sorteio exclusivo da semana.',
+  },
+  {
+    q: 'Qual extração da Loteria Federal é usada?',
+    a: 'O sorteio exclusivo semanal usa a extração oficial de sábado da Loteria Federal referente àquela semana. As 5 extrações do concurso são registradas para apuração auditável.',
+  },
+  {
+    q: 'Como o número sorteado vira posição no ranking?',
+    a: 'O número da Loteria Federal é convertido matematicamente para código/posição do ranking. A plataforma aplica os critérios previstos no regulamento e identifica automaticamente o ganhador válido.',
+  },
+  {
+    q: 'Se não houver correspondência direta na primeira tentativa, o que acontece?',
+    a: 'É aplicada a regra de redundância: a apuração avança pelas extrações seguintes e, se necessário, utiliza o critério de fallback previsto no regulamento para garantir ganhador na rodada.',
+  },
+  {
     q: 'Como recebo meu prêmio?',
-    a: 'Após a apuração do resultado, nossa equipe entrará em contato via WhatsApp e telefone para alinhar a entrega do prêmio. Para prêmios físicos como a moto, cobrimos todos os custos de envio.',
-  },
-  {
-    q: 'O sorteio é confiável?',
-    a: 'Sim! Utilizamos os números da Loteria Federal para definir os ganhadores, garantindo 100% de imparcialidade e transparência. Você pode conferir o resultado diretamente no site da Caixa.',
-  },
-  {
-    q: 'Posso pagar com cartão de crédito?',
-    a: 'Atualmente aceitamos exclusivamente PIX, pois permite a baixa automática e instantânea dos seus números, garantindo sua participação imediata no sorteio.',
+    a: 'Após a publicação oficial do resultado, nossa equipe entra em contato via WhatsApp e telefone para conferência de identidade e alinhamento da entrega/pagamento do prêmio.',
   },
 ]
 
@@ -139,5 +152,15 @@ export const TRUST_BADGES: TrustBadge[] = [
   { icon: 'workspace_premium', label: 'Garantia de Entrega', iconClassName: 'text-yellow-500' },
 ]
 
-export const FOOTER_NAV_LINKS = ['Sorteios Ativos', 'Ganhadores', 'Termos de Uso', 'Política de Privacidade']
-export const FOOTER_SUPPORT_LINKS = ['Fale Conosco', 'Dúvidas Frequentes', 'Regulamento']
+export const FOOTER_NAV_LINKS: FooterLinkItem[] = [
+  { label: 'Sorteios Ativos', href: '/#comprar-numeros' },
+  { label: 'Ganhadores', href: '/resultado' },
+  { label: 'Termos de Uso', href: '/regulamento' },
+  { label: 'Política de Privacidade', href: '/regulamento' },
+]
+
+export const FOOTER_SUPPORT_LINKS: FooterLinkItem[] = [
+  { label: 'Fale Conosco', href: '/#faq' },
+  { label: 'Dúvidas Frequentes', href: '/#faq' },
+  { label: 'Regulamento', href: '/regulamento' },
+]

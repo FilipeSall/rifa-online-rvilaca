@@ -2,9 +2,12 @@ import { useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import { useTopBuyersDraw } from '../../../hooks/useTopBuyersDraw'
 
-function normalizeIntegerInput(value: string) {
-  const digitsOnly = value.replace(/\D/g, '')
-  return digitsOnly.slice(0, 12)
+function normalizeDrawDateInput(value: string) {
+  return value.replace(/[^\d-]/g, '').slice(0, 10)
+}
+
+function normalizeExtractionInput(value: string) {
+  return value.replace(/\D/g, '').slice(0, 6)
 }
 
 function formatPublishedAt(timestampMs: number) {
@@ -16,6 +19,14 @@ function formatPublishedAt(timestampMs: number) {
     dateStyle: 'short',
     timeStyle: 'medium',
   }).format(new Date(timestampMs))
+}
+
+function getTodayDateInput() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function parseErrorMessage(error: unknown) {
@@ -31,8 +42,9 @@ function parseErrorMessage(error: unknown) {
 
 export default function TopBuyersDrawTab() {
   const { result, isLoading, isPublishing, errorMessage, publishResult, refreshResult } = useTopBuyersDraw(false)
-  const [lotteryNumberInput, setLotteryNumberInput] = useState('')
+  const [drawDateInput, setDrawDateInput] = useState(getTodayDateInput())
   const [rankingLimitInput, setRankingLimitInput] = useState('50')
+  const [extractionInputs, setExtractionInputs] = useState<string[]>(['', '', '', '', ''])
 
   const rankingLimit = useMemo(() => {
     const parsed = Number(rankingLimitInput)
@@ -42,34 +54,36 @@ export default function TopBuyersDrawTab() {
     return Math.max(1, Math.min(parsed, 50))
   }, [rankingLimitInput])
 
-  const lotteryNumber = useMemo(() => {
-    const parsed = Number(lotteryNumberInput)
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      return null
-    }
-    return parsed
-  }, [lotteryNumberInput])
+  const canPublish = useMemo(
+    () =>
+      /^\d{4}-\d{2}-\d{2}$/.test(drawDateInput)
+      && extractionInputs.every((item) => item.length > 0),
+    [drawDateInput, extractionInputs],
+  )
 
-  const previewPosition = useMemo(() => {
-    if (!lotteryNumber || rankingLimit <= 0) {
-      return null
-    }
+  const previewCodes = useMemo(() => {
+    const comparisonDigits = result?.comparisonDigits || 2
+    return extractionInputs.map((item) => item.padStart(6, '0').slice(-comparisonDigits))
+  }, [extractionInputs, result?.comparisonDigits])
 
-    const modulo = lotteryNumber % rankingLimit
-    return modulo === 0 ? rankingLimit : modulo
-  }, [lotteryNumber, rankingLimit])
+  const handleExtractionChange = (index: number, value: string) => {
+    setExtractionInputs((current) => current.map((item, itemIndex) => (
+      itemIndex === index ? normalizeExtractionInput(value) : item
+    )))
+  }
 
   const handlePublish = async () => {
-    if (!lotteryNumber) {
-      toast.warning('Informe um numero inteiro da Loteria Federal.', {
-        toastId: 'top-buyers-draw-invalid-lottery',
+    if (!canPublish) {
+      toast.warning('Preencha data e as 5 extracoes da Loteria Federal.', {
+        toastId: 'top-buyers-draw-invalid-input',
       })
       return
     }
 
     try {
       const published = await publishResult({
-        lotteryNumber,
+        drawDate: drawDateInput,
+        extractionNumbers: extractionInputs.map((item) => item.padStart(6, '0')),
         rankingLimit,
       })
 
@@ -97,9 +111,9 @@ export default function TopBuyersDrawTab() {
         <div className="relative z-10 grid grid-cols-1 gap-5 lg:grid-cols-[1.2fr_1fr]">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-amber-300">Operacao de sorteio</p>
-            <h3 className="mt-2 font-luxury text-3xl font-bold text-white">Publicar ganhador TOP compradores</h3>
+            <h3 className="mt-2 font-luxury text-3xl font-bold text-white">Sorteio Federal com redundancia</h3>
             <p className="mt-3 max-w-2xl text-sm text-gray-300">
-              Informe o numero oficial da Loteria Federal e publique o ganhador calculado por algoritmo auditavel.
+              Regras ativas: 5 extracoes oficiais, comparacao por digitos dinamicos e fallback de redundancia para garantir ganhador.
             </p>
 
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -112,25 +126,31 @@ export default function TopBuyersDrawTab() {
                 <p className="mt-1 text-2xl font-black text-gold">{result?.winningPosition || '-'}</p>
               </div>
               <div className="rounded-xl border border-emerald-300/25 bg-emerald-500/10 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-emerald-200">Participantes usados</p>
-                <p className="mt-1 text-2xl font-black text-emerald-100">{result?.participantCount || '-'}</p>
+                <p className="text-[10px] uppercase tracking-[0.15em] text-emerald-200">Resolucao</p>
+                <p className="mt-1 text-sm font-black text-emerald-100">
+                  {result?.resolvedBy === 'federal_extraction' ? 'Extracao oficial' : result ? 'Redundancia' : '-'}
+                </p>
               </div>
             </div>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-black/35 p-4">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">Regra matematica</p>
-            <div className="mt-3 rounded-xl border border-cyan-300/25 bg-cyan-500/10 p-4 font-mono text-sm text-cyan-100">
-              <p>posicao = loteria % participantes</p>
-              <p>se posicao == 0, posicao = participantes</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">Regras aplicadas</p>
+            <div className="mt-3 rounded-xl border border-cyan-300/25 bg-cyan-500/10 p-4 text-xs text-cyan-100">
+              <p>1) Sorteio apenas quarta/sabado</p>
+              <p>2) 5 extracoes da Federal</p>
+              <p>3) Digitos por quantidade de participantes</p>
+              <p>4) Sem match: regra de redundancia</p>
             </div>
             <div className="mt-4 rounded-xl border border-white/10 bg-black/40 p-4">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Previa da entrada atual</p>
-              <p className="mt-2 text-xs text-gray-300">Numero loteria: {lotteryNumber || '-'}</p>
-              <p className="mt-1 text-xs text-gray-300">Limite ranking: {rankingLimit}</p>
-              <p className="mt-2 text-lg font-black text-amber-300">
-                Posicao estimada: {previewPosition || '-'}
-              </p>
+              <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Previa de codigos</p>
+              <div className="mt-2 grid grid-cols-5 gap-2">
+                {previewCodes.map((code, index) => (
+                  <div key={`preview-code-${index + 1}`} className="rounded bg-white/5 px-2 py-1 text-center text-xs font-mono text-gray-200">
+                    {code || '--'}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -143,23 +163,22 @@ export default function TopBuyersDrawTab() {
 
           <div className="mt-5 space-y-4">
             <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
-              <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="draw-lottery-number">
-                Numero da Loteria Federal
+              <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="draw-date">
+                Data do sorteio (quarta ou sabado)
               </label>
               <input
-                id="draw-lottery-number"
-                className="mt-2 h-12 w-full rounded-lg border border-amber-300/25 bg-black/40 px-3 text-lg font-black tracking-[0.08em] text-amber-100 outline-none transition-colors focus:border-amber-300/60"
-                inputMode="numeric"
-                placeholder="Ex: 73492"
+                id="draw-date"
+                className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                placeholder="YYYY-MM-DD"
                 type="text"
-                value={lotteryNumberInput}
-                onChange={(event) => setLotteryNumberInput(normalizeIntegerInput(event.target.value))}
+                value={drawDateInput}
+                onChange={(event) => setDrawDateInput(normalizeDrawDateInput(event.target.value))}
               />
             </div>
 
             <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
               <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="draw-ranking-limit">
-                Quantidade de participantes do ranking
+                Participantes do ranking (max 50)
               </label>
               <input
                 id="draw-ranking-limit"
@@ -168,9 +187,25 @@ export default function TopBuyersDrawTab() {
                 placeholder="50"
                 type="text"
                 value={rankingLimitInput}
-                onChange={(event) => setRankingLimitInput(normalizeIntegerInput(event.target.value))}
+                onChange={(event) => setRankingLimitInput(event.target.value.replace(/\D/g, ''))}
               />
-              <p className="mt-2 text-xs text-gray-400">Use 50 para o modelo oficial de Top Compradores semanal.</p>
+            </div>
+
+            <div className="rounded-xl border border-amber-300/20 bg-amber-500/5 px-4 py-3">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-amber-200">5 extracoes da Loteria Federal</p>
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-5">
+                {extractionInputs.map((value, index) => (
+                  <input
+                    key={`extraction-input-${index + 1}`}
+                    className="h-10 rounded-lg border border-amber-300/25 bg-black/40 px-2 text-center text-sm font-mono font-bold text-amber-100 outline-none transition-colors focus:border-amber-300/60"
+                    inputMode="numeric"
+                    placeholder={`${index + 1}ª`}
+                    type="text"
+                    value={value}
+                    onChange={(event) => handleExtractionChange(index, event.target.value)}
+                  />
+                ))}
+              </div>
             </div>
           </div>
 
@@ -181,7 +216,7 @@ export default function TopBuyersDrawTab() {
               type="button"
               onClick={handlePublish}
             >
-              {isPublishing ? 'Publicando...' : 'Publicar Ganhador'}
+              {isPublishing ? 'Publicando...' : 'Publicar Resultado'}
             </button>
             <button
               className="inline-flex h-11 items-center justify-center rounded-lg border border-white/15 bg-black/30 px-5 text-xs font-bold uppercase tracking-[0.14em] text-gray-200 transition-colors hover:border-white/30 hover:text-white"
@@ -209,35 +244,53 @@ export default function TopBuyersDrawTab() {
           ) : (
             <div className="mt-4 space-y-4">
               <div className="relative overflow-hidden rounded-2xl border border-gold/25 bg-gradient-to-r from-amber-500/20 via-luxury-card to-luxury-card p-5">
-                <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-amber-300/20 blur-2xl" />
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold">Ganhador atual</p>
                 <p className="mt-2 text-3xl font-black text-white">{result.winner.name}</p>
                 <p className="mt-2 text-sm text-gray-200">
                   Posicao {result.winner.pos} no ranking com <span className="font-bold text-gold">{result.winner.cotas}</span> cotas.
                 </p>
+                <p className="mt-2 text-xs font-semibold text-amber-100">
+                  Premio do sorteio vigente: {result.drawPrize || '-'}
+                </p>
                 <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
                   <div className="rounded-lg border border-white/10 bg-black/30 p-2">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Loteria</p>
-                    <p className="mt-1 font-black text-white">{result.lotteryNumber}</p>
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Data</p>
+                    <p className="mt-1 font-black text-white">{result.drawDate}</p>
                   </div>
                   <div className="rounded-lg border border-white/10 bg-black/30 p-2">
                     <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Posicao</p>
                     <p className="mt-1 font-black text-white">{result.winningPosition}</p>
                   </div>
                   <div className="rounded-lg border border-white/10 bg-black/30 p-2">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Participantes</p>
-                    <p className="mt-1 font-black text-white">{result.participantCount}</p>
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Codigo</p>
+                    <p className="mt-1 font-black text-white">{result.winningCode}</p>
                   </div>
                 </div>
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Top 3 do snapshot publicado</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Tentativas de apuracao</p>
                   <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">
                     Draw #{result.drawId.slice(0, 8)}
                   </p>
                 </div>
+                <div className="mt-3 space-y-2">
+                  {result.attempts.map((attempt) => (
+                    <div key={`${attempt.extractionIndex}-${attempt.candidateCode}`} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-xs">
+                      <span className="text-gray-300">
+                        Tentativa {attempt.extractionIndex}: {attempt.extractionNumber} ➜ codigo {attempt.candidateCode}
+                      </span>
+                      <span className="font-bold text-gold">
+                        {attempt.matchedPosition ? `Pos ${attempt.matchedPosition}` : 'Sem match'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Top 3 do snapshot publicado</p>
                 <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
                   {topThree.map((item) => (
                     <div

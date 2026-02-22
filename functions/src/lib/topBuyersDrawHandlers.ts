@@ -1,16 +1,20 @@
 import { FieldValue, type DocumentData, type Firestore } from 'firebase-admin/firestore'
 import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
-import { CAMPAIGN_DOC_ID } from './constants.js'
+import { CAMPAIGN_DOC_ID, DEFAULT_MAIN_PRIZE } from './constants.js'
 import { asRecord, readString, readTimestampMillis, sanitizeString } from './shared.js'
 
 const TOP_BUYERS_DRAW_HISTORY_COLLECTION = 'topBuyersDrawResults'
 const DEFAULT_RANKING_LIMIT = 50
 const MAX_RANKING_LIMIT = 50
 const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
+const EXTRACTION_COUNT = 5
+const EXTRACTION_DIGITS = 6
+const MAX_EXTRACTION_VALUE = 999999
 
 interface PublishTopBuyersDrawInput {
-  lotteryNumber?: number | string
+  drawDate?: string
+  extractionNumbers?: Array<number | string>
   rankingLimit?: number
 }
 
@@ -29,16 +33,30 @@ interface TopBuyersDrawWinner {
   pos: number
 }
 
+interface ExtractionAttempt {
+  extractionIndex: number
+  extractionNumber: string
+  comparisonDigits: number
+  candidateCode: string
+  matchedPosition: number | null
+}
+
 interface TopBuyersDrawResult {
   campaignId: string
   drawId: string
+  drawDate: string
+  drawPrize: string
   weekId: string
   weekStartAtMs: number
   weekEndAtMs: number
-  lotteryNumber: number
   requestedRankingLimit: number
   participantCount: number
+  comparisonDigits: number
+  extractionNumbers: string[]
+  attempts: ExtractionAttempt[]
   winningPosition: number
+  winningCode: string
+  resolvedBy: 'federal_extraction' | 'redundancy'
   winner: TopBuyersDrawWinner
   rankingSnapshot: TopBuyersRankingItem[]
   publishedAtMs: number
@@ -65,14 +83,46 @@ function sanitizeRankingLimit(value: unknown): number {
   return Math.max(1, Math.min(parsed, MAX_RANKING_LIMIT))
 }
 
-function sanitizeLotteryNumber(value: unknown): number {
-  const parsed = Number(value)
-
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new HttpsError('invalid-argument', 'Informe um numero inteiro valido da Loteria Federal.')
+function sanitizeDrawDate(value: unknown): string {
+  const normalized = sanitizeString(value)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    throw new HttpsError('invalid-argument', 'drawDate deve estar no formato YYYY-MM-DD.')
   }
 
-  return parsed
+  const [year, month, day] = normalized.split('-').map((part) => Number(part))
+  const parsed = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0))
+  if (Number.isNaN(parsed.getTime())) {
+    throw new HttpsError('invalid-argument', 'drawDate invalida.')
+  }
+
+  const dayOfWeek = parsed.getUTCDay()
+  if (dayOfWeek !== 3 && dayOfWeek !== 6) {
+    throw new HttpsError('invalid-argument', 'Sorteios da Loteria Federal aceitos apenas na quarta ou sabado.')
+  }
+
+  return normalized
+}
+
+function sanitizeExtractionNumber(value: unknown, index: number): string {
+  const raw = String(value ?? '').replace(/\D/g, '')
+  if (!raw) {
+    throw new HttpsError('invalid-argument', `Extracao ${index + 1} invalida.`)
+  }
+
+  const parsed = Number(raw)
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > MAX_EXTRACTION_VALUE) {
+    throw new HttpsError('invalid-argument', `Extracao ${index + 1} fora da faixa 000000-999999.`)
+  }
+
+  return String(parsed).padStart(EXTRACTION_DIGITS, '0')
+}
+
+function sanitizeExtractionNumbers(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length !== EXTRACTION_COUNT) {
+    throw new HttpsError('invalid-argument', 'Informe exatamente 5 extracoes da Loteria Federal.')
+  }
+
+  return value.map((item, index) => sanitizeExtractionNumber(item, index))
 }
 
 function formatPublicName(name: string, uid: string): string {
@@ -112,14 +162,6 @@ function readOrderQuantity(data: DocumentData): number {
   return 0
 }
 
-function calculateWinningPosition(lotteryNumber: number, participantCount: number): number {
-  const modulo = lotteryNumber % participantCount
-  if (modulo === 0) {
-    return participantCount
-  }
-  return modulo
-}
-
 function toBrazilLocalDate(sourceMs: number) {
   return new Date(sourceMs + BRAZIL_OFFSET_MS)
 }
@@ -156,6 +198,26 @@ function getWeeklyRankingWindow(nowMs = Date.now()): RankingWindow {
     startMs: toUtcFromBrazilLocal(localWeekStartMs),
     endMs: toUtcFromBrazilLocal(localWeekEndMs),
   }
+}
+
+function getComparisonDigits(participantCount: number) {
+  if (participantCount <= 100) {
+    return 2
+  }
+
+  if (participantCount <= 1000) {
+    return 3
+  }
+
+  if (participantCount <= 10000) {
+    return 4
+  }
+
+  if (participantCount <= 100000) {
+    return 5
+  }
+
+  return 6
 }
 
 async function assertAdminRole(db: Firestore, uid: string) {
@@ -254,6 +316,76 @@ async function buildRankingSnapshot(
   })
 }
 
+function resolveWinnerByFederalRule(
+  extractionNumbers: string[],
+  rankingSnapshot: TopBuyersRankingItem[],
+): {
+  comparisonDigits: number
+  attempts: ExtractionAttempt[]
+  winningPosition: number
+  winningCode: string
+  resolvedBy: 'federal_extraction' | 'redundancy'
+} {
+  const participantCount = rankingSnapshot.length
+  const comparisonDigits = getComparisonDigits(participantCount)
+  const positionByCode = new Map<string, number>()
+
+  for (const item of rankingSnapshot) {
+    const code = String(item.pos).padStart(comparisonDigits, '0')
+    positionByCode.set(code, item.pos)
+  }
+
+  const attempts: ExtractionAttempt[] = []
+
+  for (let index = 0; index < extractionNumbers.length; index += 1) {
+    const extractionNumber = extractionNumbers[index]
+    const candidateCode = extractionNumber.slice(-comparisonDigits).padStart(comparisonDigits, '0')
+    const matchedPosition = positionByCode.get(candidateCode) || null
+
+    attempts.push({
+      extractionIndex: index + 1,
+      extractionNumber,
+      comparisonDigits,
+      candidateCode,
+      matchedPosition,
+    })
+
+    if (matchedPosition) {
+      return {
+        comparisonDigits,
+        attempts,
+        winningPosition: matchedPosition,
+        winningCode: candidateCode,
+        resolvedBy: 'federal_extraction',
+      }
+    }
+  }
+
+  const fallbackSeed = extractionNumbers
+    .map((item) => Number(item))
+    .reduce((sum, value, index) => sum + (value * (index + 1)), 0)
+  const fallbackPosition = fallbackSeed % participantCount === 0
+    ? participantCount
+    : fallbackSeed % participantCount
+  const fallbackCode = String(fallbackPosition).padStart(comparisonDigits, '0')
+
+  attempts.push({
+    extractionIndex: EXTRACTION_COUNT + 1,
+    extractionNumber: extractionNumbers.join('-'),
+    comparisonDigits,
+    candidateCode: fallbackCode,
+    matchedPosition: fallbackPosition,
+  })
+
+  return {
+    comparisonDigits,
+    attempts,
+    winningPosition: fallbackPosition,
+    winningCode: fallbackCode,
+    resolvedBy: 'redundancy',
+  }
+}
+
 export function createPublishTopBuyersDrawHandler(db: Firestore) {
   return async (request: { auth?: { uid?: string | null } | null, data: unknown }): Promise<TopBuyersDrawResult> => {
     const uid = sanitizeString(request.auth?.uid)
@@ -264,9 +396,13 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
     await assertAdminRole(db, uid)
 
     const payload = asRecord(request.data) as PublishTopBuyersDrawInput
-    const lotteryNumber = sanitizeLotteryNumber(payload.lotteryNumber)
+    const drawDate = sanitizeDrawDate(payload.drawDate)
+    const extractionNumbers = sanitizeExtractionNumbers(payload.extractionNumbers)
     const rankingLimit = sanitizeRankingLimit(payload.rankingLimit)
     const rankingWindow = getWeeklyRankingWindow()
+    const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
+    const campaignData = campaignSnapshot.data()
+    const drawPrize = sanitizeString(campaignData?.mainPrize) || DEFAULT_MAIN_PRIZE
 
     try {
       const rankingSnapshot = await buildRankingSnapshot(db, rankingLimit, rankingWindow)
@@ -274,9 +410,8 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
         throw new HttpsError('failed-precondition', 'Ainda nao ha participantes elegiveis para sorteio.')
       }
 
-      const participantCount = rankingSnapshot.length
-      const winningPosition = calculateWinningPosition(lotteryNumber, participantCount)
-      const winner = rankingSnapshot[winningPosition - 1]
+      const winnerResolution = resolveWinnerByFederalRule(extractionNumbers, rankingSnapshot)
+      const winner = rankingSnapshot[winnerResolution.winningPosition - 1]
 
       if (!winner) {
         throw new HttpsError('internal', 'Nao foi possivel identificar o ganhador.')
@@ -288,13 +423,19 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
       const result: TopBuyersDrawResult = {
         campaignId: CAMPAIGN_DOC_ID,
         drawId: drawRef.id,
+        drawDate,
+        drawPrize,
         weekId: rankingWindow.weekId,
         weekStartAtMs: rankingWindow.startMs,
         weekEndAtMs: rankingWindow.endMs,
-        lotteryNumber,
         requestedRankingLimit: rankingLimit,
-        participantCount,
-        winningPosition,
+        participantCount: rankingSnapshot.length,
+        comparisonDigits: winnerResolution.comparisonDigits,
+        extractionNumbers,
+        attempts: winnerResolution.attempts,
+        winningPosition: winnerResolution.winningPosition,
+        winningCode: winnerResolution.winningCode,
+        resolvedBy: winnerResolution.resolvedBy,
         winner: {
           userId: winner.userId,
           name: winner.name,
@@ -351,29 +492,53 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
       const rawResult = asRecord(campaignSnapshot.get('latestTopBuyersDraw'))
 
       const drawId = sanitizeString(rawResult.drawId)
+      const drawDate = sanitizeString(rawResult.drawDate)
+      const drawPrize = sanitizeString(rawResult.drawPrize) || sanitizeString(campaignSnapshot.get('mainPrize')) || DEFAULT_MAIN_PRIZE
       const weekId = sanitizeString(rawResult.weekId)
       const weekStartAtMs = Number(rawResult.weekStartAtMs)
       const weekEndAtMs = Number(rawResult.weekEndAtMs)
-      const lotteryNumber = Number(rawResult.lotteryNumber)
       const requestedRankingLimit = Number(rawResult.requestedRankingLimit)
       const participantCount = Number(rawResult.participantCount)
+      const comparisonDigits = Number(rawResult.comparisonDigits)
+      const extractionNumbers = Array.isArray(rawResult.extractionNumbers)
+        ? rawResult.extractionNumbers.map((item) => sanitizeString(item)).filter(Boolean)
+        : []
+      const attempts = Array.isArray(rawResult.attempts)
+        ? rawResult.attempts
+          .map((item) => asRecord(item))
+          .map((item) => ({
+            extractionIndex: Number(item.extractionIndex),
+            extractionNumber: sanitizeString(item.extractionNumber),
+            comparisonDigits: Number(item.comparisonDigits),
+            candidateCode: sanitizeString(item.candidateCode),
+            matchedPosition: Number.isInteger(Number(item.matchedPosition))
+              ? Number(item.matchedPosition)
+              : null,
+          }))
+          .filter((item) => Number.isInteger(item.extractionIndex) && item.extractionIndex > 0 && item.extractionNumber)
+        : []
       const winningPosition = Number(rawResult.winningPosition)
+      const winningCode = sanitizeString(rawResult.winningCode)
+      const resolvedBy = rawResult.resolvedBy === 'federal_extraction' ? 'federal_extraction' : 'redundancy'
       const publishedAtMs = Number(rawResult.publishedAtMs)
       const winnerRecord = asRecord(rawResult.winner)
 
       if (
         !drawId ||
+        !drawDate ||
         !weekId ||
         !Number.isFinite(weekStartAtMs) ||
         !Number.isFinite(weekEndAtMs) ||
-        !Number.isInteger(lotteryNumber) ||
-        lotteryNumber <= 0 ||
         !Number.isInteger(requestedRankingLimit) ||
         requestedRankingLimit <= 0 ||
         !Number.isInteger(participantCount) ||
         participantCount <= 0 ||
+        !Number.isInteger(comparisonDigits) ||
+        comparisonDigits <= 0 ||
+        extractionNumbers.length === 0 ||
         !Number.isInteger(winningPosition) ||
         winningPosition <= 0 ||
+        !winningCode ||
         !Number.isFinite(publishedAtMs)
       ) {
         return {
@@ -407,13 +572,19 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
         result: {
           campaignId: CAMPAIGN_DOC_ID,
           drawId,
+          drawDate,
+          drawPrize,
           weekId,
           weekStartAtMs,
           weekEndAtMs,
-          lotteryNumber,
           requestedRankingLimit,
           participantCount,
+          comparisonDigits,
+          extractionNumbers,
+          attempts,
           winningPosition,
+          winningCode,
+          resolvedBy,
           winner,
           rankingSnapshot,
           publishedAtMs,
