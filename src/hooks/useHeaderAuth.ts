@@ -14,6 +14,7 @@ import { doc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore'
 import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
+import { OPEN_AUTH_MODAL_EVENT } from '../const/auth'
 import { auth, db } from '../lib/firebase'
 import { useAuthStore } from '../stores/authStore'
 import { getEmailAuthErrorMessage, getGoogleAuthErrorMessage } from '../utils/home'
@@ -51,6 +52,13 @@ export function useHeaderAuth() {
     setEmailAuthError(null)
   }, [])
 
+  const openAuthModal = useCallback(() => {
+    setGoogleAuthError(null)
+    setEmailAuthError(null)
+    setIsSigningIn(false)
+    setIsAuthModalOpen(true)
+  }, [])
+
   useEffect(() => {
     if (isLoggedIn && !isEmailSubmitting) {
       closeAuthModal()
@@ -83,6 +91,22 @@ export function useHeaderAuth() {
     }
   }, [isAuthModalOpen, closeAuthModal])
 
+  useEffect(() => {
+    const handleOpenAuthModalRequest = () => {
+      if (isLoggedIn) {
+        return
+      }
+
+      openAuthModal()
+    }
+
+    window.addEventListener(OPEN_AUTH_MODAL_EVENT, handleOpenAuthModalRequest)
+
+    return () => {
+      window.removeEventListener(OPEN_AUTH_MODAL_EVENT, handleOpenAuthModalRequest)
+    }
+  }, [isLoggedIn, openAuthModal])
+
   const handleAuthButtonClick = useCallback(() => {
     if (isLoggedIn) {
       navigate('/minha-conta')
@@ -94,11 +118,8 @@ export function useHeaderAuth() {
       return
     }
 
-    setGoogleAuthError(null)
-    setEmailAuthError(null)
-    setIsSigningIn(false)
-    setIsAuthModalOpen(true)
-  }, [closeAuthModal, isAuthModalOpen, isLoggedIn, navigate])
+    openAuthModal()
+  }, [closeAuthModal, isAuthModalOpen, isLoggedIn, navigate, openAuthModal])
 
   const handleGoogleSignIn = useCallback(async () => {
     setIsSigningIn(true)

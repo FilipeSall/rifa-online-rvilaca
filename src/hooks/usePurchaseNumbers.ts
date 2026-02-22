@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from 'react-toastify'
 import { useNavigate } from 'react-router-dom'
+import { OPEN_AUTH_MODAL_EVENT } from '../const/auth'
 import { MAX_QUANTITY, MIN_QUANTITY, RESERVATION_SECONDS, UNIT_PRICE } from '../const/purchaseNumbers'
 import {
   getCouponHint,
   getPurchaseNumberPool,
   validateCouponCode,
 } from '../services/purchaseNumbers/purchaseNumbersService'
+import { useAuthStore } from '../stores/authStore'
 import type { CouponFeedback, NumberSlot, SelectionMode } from '../types/purchaseNumbers'
 import { getSafeQuantity, pickRandomNumbers } from '../utils/purchaseNumbers'
 
 export function usePurchaseNumbers() {
   const navigate = useNavigate()
+  const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
   const [numberPool] = useState(() => getPurchaseNumberPool())
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('automatico')
   const [quantity, setQuantity] = useState(MIN_QUANTITY)
@@ -145,6 +149,16 @@ export function usePurchaseNumbers() {
       return
     }
 
+    if (!isLoggedIn) {
+      toast.warning('Voce precisa estar logado para reservar numeros.', {
+        position: 'bottom-right',
+        toastId: 'purchase-login-required',
+      })
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      window.dispatchEvent(new Event(OPEN_AUTH_MODAL_EVENT))
+      return
+    }
+
     if (reservationSeconds === null) {
       setReservationSeconds(RESERVATION_SECONDS)
       setHasExpiredReservation(false)
@@ -158,7 +172,7 @@ export function usePurchaseNumbers() {
         selectedNumbers,
       },
     })
-  }, [canProceed, navigate, reservationSeconds, selectedCount, selectedNumbers, totalAmount])
+  }, [canProceed, isLoggedIn, navigate, reservationSeconds, selectedCount, selectedNumbers, totalAmount])
 
   return {
     numberPool,

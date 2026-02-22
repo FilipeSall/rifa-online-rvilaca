@@ -28,7 +28,7 @@ export default function HeroSection() {
             </div>
 
             {/* Title */}
-            <h1 className="text-4xl lg:text-5xl font-luxury font-black leading-tight text-white">
+            <h1 className="text-5xl lg:text-6xl font-luxury font-black leading-tight text-white">
               Sorteio{' '}
               <span className="text-gold">BMW R1200</span>
               <span className="block">
