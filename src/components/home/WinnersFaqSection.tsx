@@ -1,7 +1,10 @@
 import { useState } from 'react'
-import { FAQ_ITEMS, RANKING } from '../../const/home'
+import { FAQ_ITEMS } from '../../const/home'
+import { useChampionsRanking } from '../../hooks/useChampionsRanking'
 
 function RankingSection() {
+  const { items, isLoading, errorMessage } = useChampionsRanking()
+  const hasItems = items.length > 0
   return (
     <section className="py-20 bg-luxury-bg relative overflow-hidden" id="ganhadores">
       <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gold/5 via-luxury-bg to-luxury-bg pointer-events-none"></div>
@@ -26,7 +29,21 @@ function RankingSection() {
             </div>
 
             <div className="divide-y divide-white/5">
-              {RANKING.map(({ pos, name, cotas, isGold }) => {
+              {isLoading && !hasItems && (
+                <div className="space-y-2 p-4">
+                  {[1, 2, 3, 4, 5].map((row) => (
+                    <div key={row} className="h-14 animate-pulse rounded-lg bg-white/5" />
+                  ))}
+                </div>
+              )}
+
+              {!isLoading && !hasItems && (
+                <div className="p-8 text-center">
+                  <p className="text-sm text-gray-300">Ainda nao ha compras pagas para montar o ranking.</p>
+                </div>
+              )}
+
+              {items.map(({ pos, name, cotas, isGold }) => {
                 if (pos === 1) {
                   return (
                     <div key={pos} className="grid grid-cols-12 gap-4 p-6 items-center bg-gradient-to-r from-gold/10 to-transparent hover:bg-white/5 transition-colors group">
@@ -105,9 +122,13 @@ function RankingSection() {
             </div>
 
             <div className="p-6 bg-white/5 border-t border-white/5 text-center">
-              <p className="text-sm text-gray-400">
-                Ranking atualizado em tempo real com os maiores compradores desta edição.
-              </p>
+              {errorMessage ? (
+                <p className="text-sm text-red-300">{errorMessage}</p>
+              ) : (
+                <p className="text-sm text-gray-400">
+                  Ranking com os maiores compradores desta edicao.
+                </p>
+              )}
             </div>
           </div>
         </div>

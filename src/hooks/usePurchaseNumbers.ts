@@ -204,11 +204,6 @@ export function usePurchaseNumbers() {
       const requestId = pageRequestIdRef.current + 1
       pageRequestIdRef.current = requestId
       setIsPageLoading(true)
-      logPurchaseFlow('usePurchaseNumbers', 'load_window_started', 'info', {
-        requestId,
-        requestedPageStart: nextPageStart,
-      })
-
       try {
         const payloadInput: GetNumberWindowInput = {
           pageSize: NUMBER_WINDOW_PAGE_SIZE,
@@ -240,13 +235,6 @@ export function usePurchaseNumbers() {
         setSmallestAvailableNumber(payload.smallestAvailableNumber)
         setPreviousPageStart(payload.previousPageStart)
         setNextPageStart(payload.nextPageStart)
-        logPurchaseFlow('usePurchaseNumbers', 'load_window_succeeded', 'info', {
-          requestId,
-          pageStart: payload.pageStart,
-          pageEnd: payload.pageEnd,
-          availableInPage: payload.availableInPage,
-          totalNumbers: payload.totalNumbers,
-        })
         return payload
       } catch (error) {
         if (pageRequestIdRef.current === requestId) {

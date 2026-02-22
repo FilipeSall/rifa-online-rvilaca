@@ -11,6 +11,7 @@ interface PixCheckoutProps {
   phone?: string | null
   existingOrderId?: string | null
   couponCode?: string | null
+  onPaymentConfirmed?: (orderId: string) => void
 }
 
 type CheckoutStatus = 'idle' | 'generating' | 'pending' | 'paid' | 'failed'
@@ -67,6 +68,7 @@ export default function PixCheckout({
   phone,
   existingOrderId = null,
   couponCode = null,
+  onPaymentConfirmed,
 }: PixCheckoutProps) {
   const { createDeposit, loading, error, clearError } = useHorsePay()
   const [status, setStatus] = useState<CheckoutStatus>('idle')
@@ -75,6 +77,7 @@ export default function PixCheckout({
   const [localError, setLocalError] = useState<string | null>(null)
   const orderListenerRef = useRef<(() => void) | null>(null)
   const paidToastOrderRef = useRef<string | null>(null)
+  const paidCallbackOrderRef = useRef<string | null>(null)
   const copyPasteCode = order?.copyPaste || ''
 
   const errorMessage = useMemo(
@@ -114,6 +117,7 @@ export default function PixCheckout({
     setLocalError(null)
     setCopyMessage('')
     paidToastOrderRef.current = null
+    paidCallbackOrderRef.current = null
     setOrder({
       externalId: existingOrderId,
       copyPaste: null,
@@ -190,6 +194,11 @@ export default function PixCheckout({
             })
           }
 
+          if (onPaymentConfirmed && paidCallbackOrderRef.current !== snapshot.id) {
+            paidCallbackOrderRef.current = snapshot.id
+            onPaymentConfirmed(snapshot.id)
+          }
+
           setStatus('paid')
           stopOrderListener()
           logPurchaseFlow('PixCheckout', 'payment_paid_detected', 'info', {
@@ -220,7 +229,7 @@ export default function PixCheckout({
     orderListenerRef.current = unsubscribe
 
     return () => unsubscribe()
-  }, [order?.externalId, status, stopOrderListener])
+  }, [onPaymentConfirmed, order?.externalId, status, stopOrderListener])
 
   useEffect(() => {
     if (status !== 'pending') {

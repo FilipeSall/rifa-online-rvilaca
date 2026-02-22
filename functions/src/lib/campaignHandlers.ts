@@ -14,6 +14,7 @@ import {
   MAX_PURCHASE_QUANTITY,
   type CampaignStatus,
 } from './constants.js'
+import { readCampaignNumberRange } from './numberStateStore.js'
 import { asRecord, readMetricNumber, sanitizeString } from './shared.js'
 
 type CampaignCouponDiscountType = 'percent' | 'fixed'
@@ -64,6 +65,15 @@ interface DashboardSummaryOutput {
     paidOrders: number
     soldNumbers: number
   }>
+}
+
+interface PublicSalesSnapshotOutput {
+  campaignId: string
+  totalNumbers: number
+  soldNumbers: number
+  paidOrders: number
+  soldPercentage: number
+  updatedAtMs: number
 }
 
 function sanitizeCampaignPrice(value: unknown): number | null {
@@ -532,5 +542,63 @@ export function createGetDashboardSummaryHandler(db: Firestore) {
       avgTicket,
       daily,
     } satisfies DashboardSummaryOutput
+  }
+}
+
+export function createGetPublicSalesSnapshotHandler(db: Firestore) {
+  return async (): Promise<PublicSalesSnapshotOutput> => {
+    const [campaignSnapshot, summarySnapshot] = await Promise.all([
+      db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get(),
+      db.collection('metrics').doc('sales_summary').get(),
+    ])
+
+    const numberRange = readCampaignNumberRange(
+      campaignSnapshot.exists ? (campaignSnapshot.data() as DocumentData | undefined) : undefined,
+      CAMPAIGN_DOC_ID,
+    )
+    const totalNumbers = Math.max(1, numberRange.total)
+
+    let soldNumbers = 0
+    let paidOrders = 0
+
+    if (summarySnapshot.exists) {
+      soldNumbers = Math.max(0, Math.floor(readMetricNumber(summarySnapshot.get('soldNumbers'))))
+      paidOrders = Math.max(0, Math.floor(readMetricNumber(summarySnapshot.get('paidOrders'))))
+    } else {
+      const paidOrdersSnapshot = await db.collection('orders')
+        .where('status', '==', 'paid')
+        .where('type', '==', 'deposit')
+        .where('campaignId', '==', CAMPAIGN_DOC_ID)
+        .select('reservedNumbers', 'quantity')
+        .get()
+
+      paidOrders = paidOrdersSnapshot.size
+      soldNumbers = paidOrdersSnapshot.docs.reduce((total, orderDoc) => {
+        const data = orderDoc.data()
+
+        if (Array.isArray(data.reservedNumbers)) {
+          return total + data.reservedNumbers.filter((value) => Number.isInteger(value) && Number(value) > 0).length
+        }
+
+        const quantity = Number(data.quantity)
+        if (Number.isInteger(quantity) && quantity > 0) {
+          return total + quantity
+        }
+
+        return total
+      }, 0)
+    }
+
+    const cappedSoldNumbers = Math.min(soldNumbers, totalNumbers)
+    const soldPercentage = Number(((cappedSoldNumbers / totalNumbers) * 100).toFixed(1))
+
+    return {
+      campaignId: CAMPAIGN_DOC_ID,
+      totalNumbers,
+      soldNumbers: cappedSoldNumbers,
+      paidOrders,
+      soldPercentage,
+      updatedAtMs: Date.now(),
+    }
   }
 }

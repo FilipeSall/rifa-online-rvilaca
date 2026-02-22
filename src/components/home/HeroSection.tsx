@@ -3,6 +3,7 @@ import { useHeroSection } from '../../hooks/useHeroSection'
 import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 import { CAMPAIGN_SOLD_COTAS, CAMPAIGN_TOTAL_COTAS } from '../../const/home'
 import { DEFAULT_BONUS_PRIZE, DEFAULT_CAMPAIGN_TITLE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../const/campaign'
+import { usePublicSalesSnapshot } from '../../hooks/usePublicSalesSnapshot'
 import slideOne from '../../assets/IMG_9379.webp'
 import slideTwo from '../../assets/IMG_9400.webp'
 import slideThree from '../../assets/IMG_9390.webp'
@@ -14,8 +15,54 @@ import 'react-loading-skeleton/dist/skeleton.css'
 
 const HERO_CAROUSEL_IMAGES = [slideOne, slideTwo, slideThree]
 
+function getDemandMessaging(soldPercentage: number) {
+  if (soldPercentage >= 85) {
+    return {
+      badge: 'Reta final de cotas',
+      chip: 'Fechamento próximo',
+      helper: 'Fase final da campanha: disponibilidade cada vez mais limitada.',
+    }
+  }
+
+  if (soldPercentage >= 65) {
+    return {
+      badge: 'Movimento intenso de compras',
+      chip: 'Disponibilidade reduzindo',
+      helper: 'A seleção ainda está aberta, mas com menos opções a cada atualização.',
+    }
+  }
+
+  if (soldPercentage >= 40) {
+    return {
+      badge: 'Alta procura nesta edição',
+      chip: 'Lote em destaque',
+      helper: 'A campanha entrou no trecho de maior tração de vendas.',
+    }
+  }
+
+  if (soldPercentage >= 15) {
+    return {
+      badge: 'Procura em crescimento',
+      chip: 'Ritmo consistente',
+      helper: 'As cotas seguem avançando com estabilidade ao longo do dia.',
+    }
+  }
+
+  return {
+    badge: 'Lote aberto para participação',
+    chip: 'Início de campanha',
+    helper: 'Momento favorável para escolher números com mais liberdade.',
+  }
+}
+
 export default function HeroSection() {
-  const { animatedSoldPercentage, countdownItems, handleOpenBuyModal } = useHeroSection()
+  const {
+    soldNumbers: soldNumbersRaw,
+    totalNumbers: totalNumbersRaw,
+    soldPercentage,
+    isLoading: isSalesLoading,
+  } = usePublicSalesSnapshot()
+  const { animatedSoldPercentage, countdownItems, handleOpenBuyModal } = useHeroSection(soldPercentage)
   const { campaign } = useCampaignSettings()
   const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({})
   const campaignTitle = campaign.title || DEFAULT_CAMPAIGN_TITLE
@@ -26,8 +73,11 @@ export default function HeroSection() {
   const campaignTitlePrefix =
     campaignTitleParts.length > 2 ? campaignTitleParts.slice(0, -2).join(' ') : campaignTitleParts.join(' ')
   const campaignTitleHighlight = campaignTitleParts.length > 2 ? campaignTitleParts.slice(-2).join(' ') : ''
-  const soldCotasFormatted = CAMPAIGN_SOLD_COTAS.toLocaleString('pt-BR')
-  const totalCotasFormatted = CAMPAIGN_TOTAL_COTAS.toLocaleString('pt-BR')
+  const soldNumbers = isSalesLoading ? CAMPAIGN_SOLD_COTAS : soldNumbersRaw
+  const totalNumbers = isSalesLoading ? CAMPAIGN_TOTAL_COTAS : totalNumbersRaw
+  const soldCotasFormatted = soldNumbers.toLocaleString('pt-BR')
+  const totalCotasFormatted = totalNumbers.toLocaleString('pt-BR')
+  const demandMessaging = getDemandMessaging(soldPercentage)
   const handleImageLoaded = useCallback((imageSrc: string) => {
     setLoadedImages((currentState) => {
       if (currentState[imageSrc]) {
@@ -77,12 +127,12 @@ export default function HeroSection() {
             <div className="bg-luxury-card/50 backdrop-blur border border-white/10 p-5 rounded-xl max-w-lg mt-2">
               <div className="flex justify-between items-center mb-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-orange-400">🔥 Alta demanda agora!</span>
+                  <span className="text-xs font-bold text-orange-400">🔥 {demandMessaging.badge}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-black text-red-500 font-mono">{animatedSoldPercentage}% VENDIDO</span>
                   <span className="bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
-                    Acabando!
+                    {demandMessaging.chip}
                   </span>
                 </div>
               </div>
@@ -101,7 +151,7 @@ export default function HeroSection() {
                 </div>
               </div>
               <p className="text-[10px] text-orange-400/80 mt-2 text-center uppercase tracking-wider font-semibold">
-                ⚠ Restam poucos números da sorte!
+                {demandMessaging.helper}
               </p>
               <p className="text-[11px] text-gray-300 mt-2 text-center">
                 {soldCotasFormatted} de {totalCotasFormatted} cotas já vendidas

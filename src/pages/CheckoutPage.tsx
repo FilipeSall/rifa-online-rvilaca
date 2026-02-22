@@ -165,6 +165,17 @@ export default function CheckoutPage() {
     navigate('/#comprar-numeros')
   }, [isLoggedIn, isReturningToSelection, navigate, routeOrderId, selectedCount])
 
+  const handlePaymentConfirmed = useCallback((paidOrderId: string) => {
+    logPurchaseFlow('CheckoutPage', 'payment_confirmed_redirect', 'info', {
+      paidOrderId,
+    })
+
+    navigate('/minha-conta?section=comprovantes', {
+      replace: true,
+      state: { highlightOrderId: paidOrderId },
+    })
+  }, [navigate])
+
   return (
     <div className="selection:bg-gold selection:text-black overflow-x-hidden bg-luxury-bg font-display text-text-main">
       <AnnouncementBar />
@@ -302,6 +313,7 @@ export default function CheckoutPage() {
                     phone={accountPhone}
                     existingOrderId={routeOrderId || null}
                     couponCode={selectedCouponCode}
+                    onPaymentConfirmed={handlePaymentConfirmed}
                   />
                 ) : null}
               </div>

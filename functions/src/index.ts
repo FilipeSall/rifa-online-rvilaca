@@ -6,8 +6,10 @@ import { setGlobalOptions } from 'firebase-functions/v2/options'
 import { REGION } from './lib/constants.js'
 import {
   createGetDashboardSummaryHandler,
+  createGetPublicSalesSnapshotHandler,
   createUpsertCampaignSettingsHandler,
 } from './lib/campaignHandlers.js'
+import { createGetChampionsRankingHandler } from './lib/rankingHandlers.js'
 import {
   createGetNumberWindowHandler,
   createPickRandomAvailableNumbersHandler,
@@ -82,6 +84,9 @@ export const requestWithdraw = onCall(
 export const getBalance = onCall(securedCallableOptions, createGetBalanceHandler(horsePaySecrets))
 
 export const getDashboardSummary = onCall(callableOptions, createGetDashboardSummaryHandler(db))
+export const getPublicSalesSnapshot = onCall(callableOptions, createGetPublicSalesSnapshotHandler(db))
+
+export const getChampionsRanking = onCall(callableOptions, createGetChampionsRankingHandler(db))
 
 export const pixWebhook = onRequest(
   { region: REGION, secrets: [HORSEPAY_WEBHOOK_TOKEN] },

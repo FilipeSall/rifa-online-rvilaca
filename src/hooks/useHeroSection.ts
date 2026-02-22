@@ -29,7 +29,7 @@ function parseCampaignDate(value: string | null, useEndOfDay: boolean) {
   return date.getTime()
 }
 
-export function useHeroSection() {
+export function useHeroSection(targetSoldPercentage: number = HERO_CONFIG.targetSoldPercentage) {
   const { campaign } = useCampaignSettings()
   const location = useLocation()
   const navigate = useNavigate()
@@ -54,10 +54,17 @@ export function useHeroSection() {
   }, [campaign.endsAt, campaign.startsAt, campaign.status])
   const [animatedSoldPercentage, setAnimatedSoldPercentage] = useState(0)
   const [countdown, setCountdown] = useState<Countdown>(() => getCountdown(targetTime))
+  const animatedSoldPercentageRef = useRef(0)
 
   useEffect(() => {
+    animatedSoldPercentageRef.current = animatedSoldPercentage
+  }, [animatedSoldPercentage])
+
+  useEffect(() => {
+    const safeTarget = Math.max(0, Math.min(100, Math.round(targetSoldPercentage)))
     let animationFrame = 0
     let startTime = 0
+    const startValue = animatedSoldPercentageRef.current
 
     const timeout = window.setTimeout(() => {
       const animate = (timestamp: number) => {
@@ -67,7 +74,7 @@ export function useHeroSection() {
 
         const elapsed = timestamp - startTime
         const progress = Math.min(elapsed / HERO_CONFIG.progressAnimationDurationMs, 1)
-        const value = Math.round(HERO_CONFIG.targetSoldPercentage * progress)
+        const value = Math.round(startValue + (safeTarget - startValue) * progress)
         setAnimatedSoldPercentage(value)
 
         if (progress < 1) {
@@ -82,7 +89,7 @@ export function useHeroSection() {
       window.clearTimeout(timeout)
       window.cancelAnimationFrame(animationFrame)
     }
-  }, [])
+  }, [targetSoldPercentage])
 
   useEffect(() => {
     setCountdown(getCountdown(targetTime))

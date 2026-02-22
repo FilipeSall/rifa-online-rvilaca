@@ -1,7 +1,7 @@
 import { signOut } from 'firebase/auth'
 import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { auth, db } from '../lib/firebase'
 import { loadUserCpf, loadUserPhone, loadUserProfile, uploadUserAvatar } from '../services/userDashboard/userDashboardService'
@@ -61,10 +61,19 @@ function readOrderNumbers(value: unknown): number[] {
   )).sort((a, b) => a - b)
 }
 
+function parseSectionParam(value: string | null): Section | null {
+  if (value === 'numeros' || value === 'comprovantes') {
+    return value
+  }
+
+  return null
+}
+
 export function useUserDashboard() {
   const { user, isLoggedIn, isAuthReady, userRole, isRoleReady } = useAuthStore()
   const { campaign } = useCampaignSettings()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [activeSection, setActiveSection] = useState<Section>('numeros')
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -81,6 +90,26 @@ export function useUserDashboard() {
 
   const [orders, setOrders] = useState<UserOrder[]>([])
   const [tickets, setTickets] = useState<UserTicket[]>([])
+  const appliedRouteSectionKeyRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (appliedRouteSectionKeyRef.current === location.key) {
+      return
+    }
+
+    appliedRouteSectionKeyRef.current = location.key
+    const querySection = parseSectionParam(new URLSearchParams(location.search).get('section'))
+    const stateSection = parseSectionParam(
+      typeof location.state === 'object' && location.state !== null && 'section' in location.state
+        ? String((location.state as { section?: unknown }).section ?? '')
+        : null,
+    )
+    const routeSection = querySection || stateSection
+
+    if (routeSection) {
+      setActiveSection(routeSection)
+    }
+  }, [location.key, location.search, location.state])
 
   useEffect(() => {
     if (!isAuthReady || !isRoleReady) {

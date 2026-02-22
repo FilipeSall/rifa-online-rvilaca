@@ -118,14 +118,6 @@ export const PACK_OPTIONS: PackOption[] = [
   { amount: '+250', popular: false },
 ]
 
-export const RANKING: RankingItem[] = [
-  { pos: 1, name: 'Rafael M.', cotas: 520, isGold: true },
-  { pos: 2, name: 'Ana Paula S.', cotas: 415, isGold: false },
-  { pos: 3, name: 'Carlos E.', cotas: 380, isGold: false },
-  { pos: 4, name: 'Julia R.', cotas: 250, isGold: false },
-  { pos: 5, name: 'Marcos V.', cotas: 210, isGold: false },
-]
-
 export const FAQ_ITEMS: FaqItem[] = [
   {
     q: 'Como recebo meu prêmio?',
