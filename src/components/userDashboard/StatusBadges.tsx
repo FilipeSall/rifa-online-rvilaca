@@ -17,6 +17,14 @@ export function TicketStatusBadge({ status }: { status: TicketStatus }) {
     )
   }
 
+  if (status === 'expirado') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-red-500" /> Expirado
+      </span>
+    )
+  }
+
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-400">
       <span className="h-1.5 w-1.5 rounded-full bg-red-500" /> Cancelado
@@ -41,9 +49,17 @@ export function OrderStatusBadge({ status }: { status: TicketStatus }) {
     )
   }
 
+  if (status === 'expirado') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-red-500" /> Expirado
+      </span>
+    )
+  }
+
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-400">
-      <span className="h-1.5 w-1.5 rounded-full bg-red-500" /> Expirado
+      <span className="h-1.5 w-1.5 rounded-full bg-red-500" /> Cancelado
     </span>
   )
 }

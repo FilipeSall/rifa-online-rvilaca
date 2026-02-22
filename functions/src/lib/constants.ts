@@ -8,7 +8,7 @@ export type OrderType = 'deposit' | 'withdraw'
 export const MAX_DEPOSIT_ORDER_ATTEMPTS = 3
 export const DEPOSIT_RETRY_DELAY_MS = 1200
 
-export const RESERVATION_DURATION_MS = 10 * 60 * 1000
+export const RESERVATION_DURATION_MS = 5 * 60 * 1000
 export const DEFAULT_MIN_PURCHASE_QUANTITY = 10
 export const MAX_PURCHASE_QUANTITY = 300
 export const RAFFLE_NUMBER_START = 1

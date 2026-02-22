@@ -1,14 +1,14 @@
-import { ADMIN_KPIS } from '../../../const/adminDashboard'
 import { useCountUp } from '../hooks/useCountUp'
-import type { KpiCardConfig } from '../utils/kpiCards'
+import type { DashboardKpis, KpiCardConfig } from '../utils/kpiCards'
 
 type KpiCardProps = {
   card: KpiCardConfig
+  kpis: DashboardKpis
   index: number
 }
 
-export default function KpiCard({ card, index }: KpiCardProps) {
-  const targetValue = Number(ADMIN_KPIS[card.metricKey] ?? 0)
+export default function KpiCard({ card, kpis, index }: KpiCardProps) {
+  const targetValue = Number(kpis[card.metricKey] ?? 0)
   const animatedValue = useCountUp(targetValue)
 
   return (

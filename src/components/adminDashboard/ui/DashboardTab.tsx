@@ -11,8 +11,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { CONVERSION_SERIES, SALES_SERIES } from '../../../const/adminDashboard'
 import { useDashboardCharts } from '../hooks/useDashboardCharts'
+import { useDashboardSummary } from '../hooks/useDashboardSummary'
 import { formatCurrency, formatInteger } from '../utils/formatters'
 import { KPI_CARDS } from '../utils/kpiCards'
 import ConversionTooltip from './ConversionTooltip'
@@ -36,6 +36,7 @@ const BAR_TOOLTIP_STYLE = {
 }
 
 export default function DashboardTab() {
+  const { isLoading, errorMessage, salesSeries, distributionSeries, kpis } = useDashboardSummary()
   const {
     revenueContainer,
     conversionContainer,
@@ -48,9 +49,15 @@ export default function DashboardTab() {
 
   return (
     <div className="space-y-6">
+      {errorMessage ? (
+        <section className="rounded-2xl border border-amber-400/35 bg-amber-500/10 p-4 text-sm text-amber-100">
+          Falha ao carregar dashboard em tempo real: {errorMessage}
+        </section>
+      ) : null}
+
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {KPI_CARDS.map((card, index) => (
-          <KpiCard key={card.id} card={card} index={index} />
+          <KpiCard key={card.id} card={card} kpis={kpis} index={index} />
         ))}
       </section>
 
@@ -64,7 +71,7 @@ export default function DashboardTab() {
               <AreaChart
                 width={Math.floor(revenueContainer.size.width)}
                 height={Math.floor(revenueContainer.size.height)}
-                data={SALES_SERIES}
+                data={salesSeries}
                 margin={{ top: 8, right: 10, bottom: 6, left: 6 }}
               >
                 <defs>
@@ -84,7 +91,10 @@ export default function DashboardTab() {
                 />
                 <YAxis
                   axisLine={false}
-                  domain={['dataMin - 12000', 'dataMax + 12000']}
+                  domain={[
+                    (dataMin: number) => Math.max(0, dataMin - 12000),
+                    (dataMax: number) => dataMax + 12000,
+                  ]}
                   tick={{ fill: '#a3a3a3', fontSize: 12 }}
                   tickFormatter={(value) => `R$${Number(value / 1000).toFixed(0)}k`}
                   tickLine={false}
@@ -116,7 +126,7 @@ export default function DashboardTab() {
 
         <article className="flex h-full min-w-0 flex-col rounded-2xl border border-white/10 bg-luxury-card p-5 xl:col-span-5">
           <h3 className="font-luxury text-xl font-bold text-white">Funil de conversao</h3>
-          <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gray-500">Visita ate pagamento</p>
+          <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gray-500">Distribuicao real dos volumes</p>
           <div ref={conversionContainer.ref} className="h-72 min-w-0 pt-2">
             {canRenderConversionChart ? (
               <PieChart
@@ -124,7 +134,7 @@ export default function DashboardTab() {
                 height={Math.floor(conversionContainer.size.height)}
               >
                 <Pie
-                  data={CONVERSION_SERIES}
+                  data={distributionSeries}
                   cx="50%"
                   cy="50%"
                   dataKey="value"
@@ -137,7 +147,7 @@ export default function DashboardTab() {
                   animationEasing="ease-out"
                   paddingAngle={3}
                 >
-                  {CONVERSION_SERIES.map((entry) => (
+                  {distributionSeries.map((entry) => (
                     <Cell key={entry.stage} fill={entry.fill} />
                   ))}
                 </Pie>
@@ -148,7 +158,7 @@ export default function DashboardTab() {
             )}
           </div>
           <div className="grid grid-cols-2 gap-2">
-            {CONVERSION_SERIES.map((entry) => (
+            {distributionSeries.map((entry) => (
               <div key={entry.stage} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <p className="text-[10px] uppercase tracking-[0.15em] text-gray-500">{entry.stage}</p>
                 <p className="mt-1 text-sm font-bold text-white">{entry.value}%</p>
@@ -160,13 +170,16 @@ export default function DashboardTab() {
 
       <section className="rounded-2xl border border-white/10 bg-luxury-card p-5">
         <h3 className="font-luxury text-xl font-bold text-white">Volume de pedidos por dia</h3>
-        <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gray-500">Suporte a picos de acesso</p>
+        <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gray-500">
+          Fonte: métricas reais dos últimos 14 dias
+          {salesSeries.length > 0 ? ` (${kpis.latestDayLabel} mais recente)` : ''}
+        </p>
         <div ref={volumeContainer.ref} className="mt-4 h-72 min-w-0">
           {canRenderVolumeChart ? (
             <BarChart
               width={Math.floor(volumeContainer.size.width)}
               height={Math.floor(volumeContainer.size.height)}
-              data={SALES_SERIES}
+              data={salesSeries}
             >
               <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="4 8" vertical={false} />
               <XAxis axisLine={false} dataKey="day" tick={{ fill: '#a3a3a3', fontSize: 12 }} tickLine={false} />
@@ -180,7 +193,7 @@ export default function DashboardTab() {
               <Bar
                 dataKey="orders"
                 fill="#F5A800"
-                isAnimationActive={false}
+                isAnimationActive={!isLoading}
                 radius={[6, 6, 0, 0]}
               />
             </BarChart>

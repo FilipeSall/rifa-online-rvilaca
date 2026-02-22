@@ -1,5 +1,5 @@
 export type Section = 'numeros' | 'comprovantes'
-export type TicketStatus = 'pago' | 'aguardando' | 'cancelado'
+export type TicketStatus = 'pago' | 'aguardando' | 'cancelado' | 'expirado'
 
 export type UserTicket = {
   number: string

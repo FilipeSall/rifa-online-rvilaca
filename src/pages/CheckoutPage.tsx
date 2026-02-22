@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { doc, onSnapshot } from 'firebase/firestore'
-import { httpsCallable } from 'firebase/functions'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { toast } from 'react-toastify'
 import PixCheckout from '../components/PixCheckout'
 import AnnouncementBar from '../components/home/AnnouncementBar'
 import Footer from '../components/home/Footer'
 import Header from '../components/home/Header'
-import { db, functions } from '../lib/firebase'
+import { db } from '../lib/firebase'
 import { useAuthStore } from '../stores/authStore'
 import { formatCurrency } from '../utils/purchaseNumbers'
-import { logPurchaseFlow, serializeError } from '../utils/purchaseFlowLogger'
+import { logPurchaseFlow } from '../utils/purchaseFlowLogger'
 
 type CheckoutNavigationState = {
   orderId?: string
@@ -77,10 +75,6 @@ export default function CheckoutPage() {
 
   const [payerName, setPayerName] = useState(user?.displayName?.trim() || '')
   const [amountInput, setAmountInput] = useState(routeAmount > 0 ? routeAmount.toFixed(2) : '')
-  const releaseReservation = useMemo(
-    () => httpsCallable<Record<string, never>, unknown>(functions, 'releaseReservation'),
-    [],
-  )
 
   useEffect(() => {
     if (!isAuthReady || !user?.uid) {
@@ -164,30 +158,12 @@ export default function CheckoutPage() {
       routeOrderId,
     })
 
-    if (isLoggedIn) {
-      try {
-        await releaseReservation({})
-        logPurchaseFlow('CheckoutPage', 'release_reservation_succeeded', 'info', {
-          routeOrderId,
-        })
-      } catch (error) {
-        console.warn('Failed to release reservation on checkout back:', error)
-        logPurchaseFlow('CheckoutPage', 'release_reservation_failed', 'warn', {
-          routeOrderId,
-          error: serializeError(error),
-        })
-        toast.warning('Nao foi possivel liberar sua reserva automaticamente agora.', {
-          position: 'bottom-right',
-          toastId: 'checkout-release-reservation-warning',
-        })
-      }
-    }
-
     logPurchaseFlow('CheckoutPage', 'navigate_back_to_selection', 'info', {
       routeOrderId,
+      reservationStrategy: 'keep_until_expiration',
     })
     navigate('/#comprar-numeros')
-  }, [isLoggedIn, isReturningToSelection, navigate, releaseReservation, routeOrderId, selectedCount])
+  }, [isLoggedIn, isReturningToSelection, navigate, routeOrderId, selectedCount])
 
   return (
     <div className="selection:bg-gold selection:text-black overflow-x-hidden bg-luxury-bg font-display text-text-main">

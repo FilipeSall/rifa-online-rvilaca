@@ -78,9 +78,10 @@ export default function PurchaseSummaryCard({
             onChange={(event) => onCouponCodeChange(event.target.value)}
           />
           <button
-            className="h-10 rounded bg-gold px-4 text-xs font-black uppercase tracking-widest text-black hover:bg-gold-hover"
+            className="h-10 rounded bg-gold px-4 text-xs font-black uppercase tracking-widest text-black hover:bg-gold-hover disabled:opacity-40 disabled:cursor-not-allowed"
             type="button"
             onClick={onApplyCoupon}
+            disabled={!couponCode.trim() || selectedCount === 0}
           >
             Aplicar
           </button>

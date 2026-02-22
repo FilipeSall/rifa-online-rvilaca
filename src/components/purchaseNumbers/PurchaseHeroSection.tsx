@@ -19,7 +19,7 @@ export default function PurchaseHeroSection({ unitPrice, minQuantity }: Purchase
               <span className="text-gold"> garanta sua chance</span> no sorteio.
             </h1>
             <p className="mt-4 text-sm leading-relaxed text-gray-300 lg:text-base">
-              Fluxo otimizado para finalizar em menos de 60 segundos: selecione a quantidade, reserve por 10 minutos
+              Fluxo otimizado para finalizar em menos de 60 segundos: selecione a quantidade, reserve por 5 minutos
               e pague com PIX automatico.
             </p>
           </div>

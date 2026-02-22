@@ -94,13 +94,26 @@ export function mapOrderStatusToTicketStatus(rawStatus: string) {
   return 'cancelado'
 }
 
+export function isOrderReservationExpired(status: string, reservationExpiresAtMs: number | null, nowMs = Date.now()) {
+  const normalized = status.trim().toLowerCase()
+  if (normalized !== 'pending' && normalized !== 'aguardando') {
+    return false
+  }
+
+  if (reservationExpiresAtMs === null) {
+    return false
+  }
+
+  return reservationExpiresAtMs <= nowMs
+}
+
 export function filterTickets(tickets: UserTicket[], ticketFilter: TicketFilter, ticketSearch: string) {
   return tickets.filter((ticket) => {
     const matchesFilter =
       ticketFilter === 'Todos' ||
       (ticketFilter === 'Pagos' && ticket.status === 'pago') ||
       (ticketFilter === 'Aguardando' && ticket.status === 'aguardando') ||
-      (ticketFilter === 'Cancelados' && ticket.status === 'cancelado')
+      (ticketFilter === 'Cancelados' && (ticket.status === 'cancelado' || ticket.status === 'expirado'))
 
     const matchesSearch =
       ticketSearch === '' ||
@@ -117,7 +130,7 @@ export function filterOrders(orders: UserOrder[], receiptFilter: ReceiptFilter, 
       receiptFilter === 'Todos' ||
       (receiptFilter === 'Aprovados' && order.status === 'pago') ||
       (receiptFilter === 'Pendentes' && order.status === 'aguardando') ||
-      (receiptFilter === 'Cancelados' && order.status === 'cancelado')
+      (receiptFilter === 'Cancelados' && (order.status === 'cancelado' || order.status === 'expirado'))
 
     const normalizedSearch = receiptSearch.toLowerCase()
     const matchesSearch =

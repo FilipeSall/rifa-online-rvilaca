@@ -1,13 +1,19 @@
-import { ADMIN_KPIS } from '../../../const/adminDashboard'
 import { formatCurrency, formatInteger } from './formatters'
 
-type MetricKey = keyof typeof ADMIN_KPIS
+export type DashboardKpis = {
+  totalRevenue: number
+  soldNumbers: number
+  paidOrders: number
+  avgTicket: number
+  dailyOrders: number
+  dailyRevenue: number
+}
 
 export type KpiCardConfig = {
   id: string
   label: string
   icon: string
-  metricKey: MetricKey
+  metricKey: keyof DashboardKpis
   value: (value: number) => string
   tone: string
 }
@@ -30,19 +36,19 @@ export const KPI_CARDS: KpiCardConfig[] = [
     tone: 'from-gold/30 to-gold/5',
   },
   {
-    id: 'disponiveis',
-    label: 'Numeros Disponiveis',
-    icon: 'inventory_2',
-    metricKey: 'availableNumbers',
+    id: 'pedidos-pagos',
+    label: 'Pedidos Pagos',
+    icon: 'task_alt',
+    metricKey: 'paidOrders',
     value: (value: number) => formatInteger(Math.round(value)),
     tone: 'from-sky-400/20 to-sky-500/5',
   },
   {
-    id: 'conversao',
-    label: 'Conversao',
-    icon: 'timeline',
-    metricKey: 'conversionRate',
-    value: (value: number) => `${value.toFixed(1)}%`,
+    id: 'receita-media-dia',
+    label: 'Media Receita/Dia',
+    icon: 'monitoring',
+    metricKey: 'dailyRevenue',
+    value: (value: number) => formatCurrency(value),
     tone: 'from-violet-400/20 to-violet-500/5',
   },
   {
@@ -54,8 +60,8 @@ export const KPI_CARDS: KpiCardConfig[] = [
     tone: 'from-amber-300/20 to-amber-500/5',
   },
   {
-    id: 'vendas-dia',
-    label: 'Vendas por Dia',
+    id: 'pedidos-dia',
+    label: 'Media Pedidos/Dia',
     icon: 'show_chart',
     metricKey: 'dailyOrders',
     value: (value: number) => formatInteger(Math.round(value)),

@@ -4,10 +4,18 @@ import type { UserOrder } from '../../types/userDashboard'
 import { OrderStatusBadge } from './StatusBadges'
 
 function openWhatsAppShare(order: UserOrder) {
+  const statusLabel =
+    order.status === 'pago'
+      ? 'Pago'
+      : order.status === 'aguardando'
+        ? 'Pendente'
+        : order.status === 'expirado'
+          ? 'Expirado'
+          : 'Cancelado'
   const message = [
     'Comprovante de compra - Rifa Online',
     `Pedido: ${order.id}`,
-    `Status: ${order.status === 'pago' ? 'Pago' : order.status === 'aguardando' ? 'Pendente' : 'Cancelado'}`,
+    `Status: ${statusLabel}`,
     `Data: ${order.date}`,
     `Cotas: ${order.cotas}`,
     `Valor total: ${order.totalBrl}`,
@@ -31,7 +39,7 @@ export default function ReceiptCard({ order, campaignTitle }: ReceiptCardProps) 
   return (
     <div
       className={`group relative flex flex-col overflow-hidden rounded-xl border border-white/5 bg-luxury-card shadow-lg transition-all hover:-translate-y-0.5 hover:border-white/10 hover:shadow-xl ${
-        order.status === 'cancelado' ? 'opacity-75 hover:opacity-100' : ''
+        order.status === 'cancelado' || order.status === 'expirado' ? 'opacity-75 hover:opacity-100' : ''
       }`}
     >
       <div className={`absolute bottom-0 left-0 top-0 w-1.5 ${stripe}`} />
@@ -122,6 +130,17 @@ export default function ReceiptCard({ order, campaignTitle }: ReceiptCardProps) 
                 Copiar codigo PIX
               </button>
             </>
+          )}
+
+          {order.status === 'expirado' && (
+            <button
+              type="button"
+              disabled
+              className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg border border-red-400/20 px-4 py-2.5 text-sm font-bold text-red-300 opacity-70"
+            >
+              <span className="material-symbols-outlined text-[18px]">schedule</span>
+              Reserva expirada
+            </button>
           )}
 
           {order.status === 'cancelado' && (

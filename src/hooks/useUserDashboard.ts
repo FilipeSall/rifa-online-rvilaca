@@ -16,6 +16,7 @@ import {
   getAvatarUploadErrorMessage,
   getDisplayName,
   getUserInitials,
+  isOrderReservationExpired,
   mapOrderStatusToTicketStatus,
 } from '../utils/userDashboard'
 
@@ -152,11 +153,15 @@ export function useUserDashboard() {
             readTimestampMillis(data.paidBusinessAppliedAt)
             ?? readTimestampMillis(data.createdAt)
             ?? readTimestampMillis(data.updatedAt)
+          const reservationExpiresAtMs = readTimestampMillis(data.reservationExpiresAt)
           const numbers = readOrderNumbers(data.reservedNumbers)
           const amount = typeof data.amount === 'number' && Number.isFinite(data.amount)
             ? Number(data.amount)
             : null
-          const status = mapOrderStatusToTicketStatus(String(data.status || 'pending'))
+          const rawStatus = String(data.status || 'pending')
+          const status = isOrderReservationExpired(rawStatus, reservationExpiresAtMs)
+            ? 'expirado'
+            : mapOrderStatusToTicketStatus(rawStatus)
 
           return {
             id: documentSnapshot.id,

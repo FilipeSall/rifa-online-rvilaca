@@ -54,6 +54,12 @@ export default function CampaignTab() {
 
   const activeCoupons = useMemo(() => coupons.filter((item) => item.active).length, [coupons])
 
+  const canAddCoupon = useMemo(() => {
+    const normalizedCode = couponCodeInput.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 24)
+    const parsedValue = Number(couponValueInput.replace(',', '.'))
+    return normalizedCode.length > 0 && Number.isFinite(parsedValue) && parsedValue > 0
+  }, [couponCodeInput, couponValueInput])
+
   const handleGenerateCouponCode = () => {
     setCouponCodeInput(generateCouponCode())
   }
@@ -439,9 +445,10 @@ export default function CampaignTab() {
 
               <div className="lg:col-span-12">
                 <button
-                  className="inline-flex h-11 items-center rounded-lg bg-cyan-300 px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition hover:brightness-95"
+                  className="inline-flex h-11 items-center rounded-lg bg-cyan-300 px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition hover:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed"
                   type="button"
                   onClick={handleAddCoupon}
+                  disabled={!canAddCoupon}
                 >
                   Adicionar cupom
                 </button>
