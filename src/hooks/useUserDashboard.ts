@@ -17,7 +17,7 @@ import {
 } from '../utils/userDashboard'
 
 export function useUserDashboard() {
-  const { user, isLoggedIn, isAuthReady } = useAuthStore()
+  const { user, isLoggedIn, isAuthReady, userRole, isRoleReady } = useAuthStore()
   const navigate = useNavigate()
 
   const [activeSection, setActiveSection] = useState<Section>('numeros')
@@ -34,10 +34,19 @@ export function useUserDashboard() {
   const [receiptSearch, setReceiptSearch] = useState('')
 
   useEffect(() => {
-    if (isAuthReady && !isLoggedIn) {
-      navigate('/')
+    if (!isAuthReady || !isRoleReady) {
+      return
     }
-  }, [isAuthReady, isLoggedIn, navigate])
+
+    if (!isLoggedIn) {
+      navigate('/')
+      return
+    }
+
+    if (userRole === 'admin') {
+      navigate('/dashboard')
+    }
+  }, [isAuthReady, isLoggedIn, isRoleReady, navigate, userRole])
 
   useEffect(() => {
     if (!isAuthReady || !user) {
@@ -203,6 +212,6 @@ export function useUserDashboard() {
     loadPhoneForUser,
     loadCpfForUser,
     refreshProfile,
-    isLoading: !isAuthReady || !user,
+    isLoading: !isAuthReady || !isRoleReady || !user,
   }
 }

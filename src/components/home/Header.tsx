@@ -11,6 +11,7 @@ export default function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const {
     isLoggedIn,
+    userRole,
     isAuthModalOpen,
     isSigningIn,
     isEmailFormOpen,
@@ -107,7 +108,7 @@ export default function Header() {
               aria-expanded={isAuthModalOpen}
               aria-haspopup={!isLoggedIn}
             >
-              {isLoggedIn ? 'Minha conta' : 'Entrar'}
+              {isLoggedIn ? (userRole === 'admin' ? 'Dashboard' : 'Minha conta') : 'Entrar'}
             </button>
             {!isLoggedIn && isAuthModalOpen ? (
               <div className="absolute right-4 top-[calc(100%-0.35rem)] w-[310px] overflow-hidden rounded-xl border border-gold/30 bg-luxury-card/95 p-3 shadow-2xl backdrop-blur-md md:right-8 lg:right-8">
@@ -259,7 +260,7 @@ export default function Header() {
               type="button"
               onClick={handleAuthButtonClick}
             >
-              {isLoggedIn ? 'Minha conta' : 'Entrar'}
+              {isLoggedIn ? (userRole === 'admin' ? 'Dashboard' : 'Minha conta') : 'Entrar'}
             </button>
           </div>
         ) : null}

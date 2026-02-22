@@ -106,7 +106,7 @@ function RankingSection() {
 
             <div className="p-6 bg-white/5 border-t border-white/5 text-center">
               <p className="text-sm text-gray-400">
-                O maior comprador da edição ganha <span className="text-gold font-bold">R$ 5.000</span> extras no PIX!
+                Ranking atualizado em tempo real com os maiores compradores desta edição.
               </p>
             </div>
           </div>

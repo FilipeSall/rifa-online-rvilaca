@@ -3,6 +3,7 @@ import { Route, Routes, useLocation } from 'react-router-dom'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import { PLACEHOLDER_ROUTES } from './const/app'
+import AdminDashboardPage from './pages/AdminDashboardPage'
 import CheckoutPage from './pages/CheckoutPage'
 import HomePage from './pages/HomePage'
 import PlaceholderPage from './pages/PlaceholderPage'
@@ -31,6 +32,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/minha-conta" element={<UserDashboardPage />} />
+        <Route path="/dashboard" element={<AdminDashboardPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route
           path="/resultado"

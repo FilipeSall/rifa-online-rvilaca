@@ -10,11 +10,49 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
-    function isValidUserProfile() {
-      let allowed = ['uid', 'name', 'email', 'phone', 'cpf', 'photoURL',
+    function hasRoleField(data) {
+      return data.keys().hasAny(['role']);
+    }
+
+    function isValidRoleValue(roleValue) {
+      return roleValue == 'user' || roleValue == 'admin';
+    }
+
+    function isValidUserProfileBase() {
+      let allowed = ['uid', 'name', 'email', 'phone', 'cpf', 'role', 'photoURL',
                     'providerIds', 'createdAtAuth', 'updatedAt', 'lastLoginAt'];
       return request.resource.data.keys().hasOnly(allowed)
         && request.resource.data.uid == request.auth.uid;
+    }
+
+    function isValidUserProfileCreate() {
+      return isValidUserProfileBase()
+        && (
+          !hasRoleField(request.resource.data)
+          || (
+            isValidRoleValue(request.resource.data.role)
+            && request.resource.data.role == 'user'
+          )
+        );
+    }
+
+    function isValidUserProfileUpdate() {
+      let roleKeptUnchanged =
+        (!hasRoleField(resource.data) && !hasRoleField(request.resource.data))
+        || (
+          !hasRoleField(resource.data)
+          && hasRoleField(request.resource.data)
+          && isValidRoleValue(request.resource.data.role)
+          && request.resource.data.role == 'user'
+        )
+        || (
+          hasRoleField(resource.data)
+          && hasRoleField(request.resource.data)
+          && isValidRoleValue(request.resource.data.role)
+          && request.resource.data.role == resource.data.role
+        );
+
+      return isValidUserProfileBase() && roleKeptUnchanged;
     }
 
     // Dados públicos de campanha usados pela landing page.
@@ -50,7 +88,8 @@ service cloud.firestore {
     // delete: if false explícito é seguro porque write foi separado em create/update.
     match /users/{uid} {
       allow read: if isOwner(uid);
-      allow create, update: if isOwner(uid) && isValidUserProfile();
+      allow create: if isOwner(uid) && isValidUserProfileCreate();
+      allow update: if isOwner(uid) && isValidUserProfileUpdate();
       allow delete: if false;
     }
 

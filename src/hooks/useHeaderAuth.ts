@@ -25,6 +25,7 @@ googleProvider.setCustomParameters({ prompt: 'select_account' })
 export function useHeaderAuth() {
   const navigate = useNavigate()
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
+  const userRole = useAuthStore((state) => state.userRole)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [isSigningIn, setIsSigningIn] = useState(false)
   const [isEmailFormOpen, setIsEmailFormOpen] = useState(false)
@@ -109,7 +110,7 @@ export function useHeaderAuth() {
 
   const handleAuthButtonClick = useCallback(() => {
     if (isLoggedIn) {
-      navigate('/minha-conta')
+      navigate(userRole === 'admin' ? '/dashboard' : '/minha-conta')
       return
     }
 
@@ -119,7 +120,7 @@ export function useHeaderAuth() {
     }
 
     openAuthModal()
-  }, [closeAuthModal, isAuthModalOpen, isLoggedIn, navigate, openAuthModal])
+  }, [closeAuthModal, isAuthModalOpen, isLoggedIn, navigate, openAuthModal, userRole])
 
   const handleGoogleSignIn = useCallback(async () => {
     setIsSigningIn(true)
@@ -212,6 +213,7 @@ export function useHeaderAuth() {
               email: normalizedEmail,
               cpf: sanitizedCpf,
               phone: sanitizedPhone,
+              role: 'user',
               providerIds: ['password'],
               lastLoginAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
@@ -264,6 +266,7 @@ export function useHeaderAuth() {
 
   return {
     isLoggedIn,
+    userRole,
     isAuthModalOpen,
     isSigningIn,
     isEmailFormOpen,
