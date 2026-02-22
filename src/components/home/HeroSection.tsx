@@ -13,7 +13,7 @@ import { Autoplay } from 'swiper/modules'
 import 'swiper/css'
 import 'react-loading-skeleton/dist/skeleton.css'
 
-const HERO_CAROUSEL_IMAGES = [slideOne, slideTwo, slideThree]
+const HERO_CAROUSEL_IMAGES = [slideTwo, slideOne, slideThree]
 
 function getDemandMessaging(soldPercentage: number) {
   if (soldPercentage >= 85) {
