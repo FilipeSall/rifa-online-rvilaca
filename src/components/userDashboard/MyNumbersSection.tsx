@@ -1,11 +1,15 @@
-import { MOCK_TICKETS, TICKET_FILTERS } from '../../const/userDashboard'
-import type { MockTicket, TicketFilter } from '../../types/userDashboard'
+import { TICKET_FILTERS } from '../../const/userDashboard'
+import type { TicketFilter, UserTicket } from '../../types/userDashboard'
 import { TicketStatusBadge } from './StatusBadges'
 
 type MyNumbersSectionProps = {
   ticketFilter: TicketFilter
   ticketSearch: string
-  filteredTickets: MockTicket[]
+  filteredTickets: UserTicket[]
+  totalTickets: number
+  mainPrize: string
+  secondPrize: string
+  bonusPrize: string
   onTicketFilterChange: (filter: TicketFilter) => void
   onTicketSearchChange: (value: string) => void
 }
@@ -14,6 +18,10 @@ export default function MyNumbersSection({
   ticketFilter,
   ticketSearch,
   filteredTickets,
+  totalTickets,
+  mainPrize,
+  secondPrize,
+  bonusPrize,
   onTicketFilterChange,
   onTicketSearchChange,
 }: MyNumbersSectionProps) {
@@ -69,13 +77,13 @@ export default function MyNumbersSection({
         </span>
         <div className="flex flex-wrap gap-2">
           <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 font-medium text-gold">
-            🏆 BMW R 1200 GS
+            🏆 {mainPrize}
           </span>
           <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-medium text-white">
-            🏍 Honda CG Start 160
+            🏍 {secondPrize}
           </span>
           <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-medium text-emerald-400">
-            💸 20x PIX R$ 1.000
+            💸 {bonusPrize}
           </span>
         </div>
       </div>
@@ -136,9 +144,8 @@ export default function MyNumbersSection({
         <div className="flex items-center justify-between border-t border-luxury-border bg-white/5 px-5 py-3">
           <p className="text-xs text-text-muted">
             Mostrando <span className="font-medium text-white">{filteredTickets.length}</span> de{' '}
-            <span className="font-medium text-white">{MOCK_TICKETS.length}</span> resultados
+            <span className="font-medium text-white">{totalTickets}</span> resultados
           </p>
-          <p className="text-[10px] italic text-text-muted">Dados demonstrativos</p>
         </div>
       </div>
     </div>

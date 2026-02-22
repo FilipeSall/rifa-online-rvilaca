@@ -40,8 +40,7 @@ Fluxo principal:
 - Regras Firestore: `firestore.rules`
 - Regras Storage: `storage.rules`
 - Scripts utilitarios: `scripts/`
-- Contexto antigo (legado): `agents.md`
-- Este documento: `AGENTS.MD`
+- Este documento: `agents.md`
 
 ## 4) Comandos principais
 
@@ -106,6 +105,8 @@ Em `functions/src/index.ts`:
 
 - `upsertCampaignSettings` (callable)
 - `reserveNumbers` (callable)
+- `getNumberWindow` (callable)
+- `pickRandomAvailableNumbers` (callable)
 - `createPixDeposit` (callable, exige secrets)
 - `requestWithdraw` (callable, exige secrets)
 - `getBalance` (callable, exige secrets)
@@ -125,7 +126,7 @@ Em `functions/src/index.ts`:
 - Regras atuais de quantidade e faixa:
   - minimo: 10
   - maximo: 300
-  - faixa: 540001 a 540120
+  - faixa padrao: 1 a 3.450.000 (ajustavel por `campaigns/{campaignId}`)
   - expiracao: 10 minutos
 
 ### Criacao do PIX
@@ -149,7 +150,7 @@ Em `functions/src/index.ts`:
   - `metrics/sales_summary` incrementado
   - `salesMetricsDaily/{YYYY-MM-DD}` incrementado
   - `auditLogs/payment_paid_{externalId}` atualizado/criado
-  - `raffleNumbers/{number}` -> `pago`, com `ownerUid` e `orderId`
+  - `numberStates/{campaignId_number}` -> `pago`, com `ownerUid` e `orderId`
   - `numberReservations/{uid}` removido quando corresponde ao conjunto pago
 
 ## 9) Colecoes Firestore relevantes
@@ -159,7 +160,7 @@ Colecoes usadas no runtime atual:
 - `campaigns`
 - `draws`
 - `winners`
-- `raffleNumbers`
+- `numberStates`
 - `numberReservations`
 - `orders`
 - `orders/{orderId}/events`
@@ -174,7 +175,8 @@ Colecoes usadas no runtime atual:
 ## 10) Regras de seguranca (Firestore rules)
 
 Resumo de `firestore.rules`:
-- `campaigns`, `draws`, `winners`, `raffleNumbers`: leitura publica, escrita negada ao cliente.
+- `campaigns`, `draws`, `winners`: leitura publica, escrita negada ao cliente.
+- `numberStates`: colecao server-only (cliente nao le direto; acesso via Cloud Functions).
 - `numberReservations/{uid}`: leitura somente do dono, escrita negada ao cliente.
 - `users/{uid}`:
   - leitura/escrita somente do proprio usuario.
@@ -316,17 +318,15 @@ Fonte de negocio: `/home/sea/Downloads/📄_ESCOPO_DO_SITE_–_RIFA_ONLINE.pdf`
 
 Pontos importantes para agentes:
 
-1. Escopo fala em 3.450.000 cotas, mas runtime atual opera com faixa curta (`540001..540120`) nas constantes das functions/frontend.
-2. Script de seed contempla modelo grande (inclusive subcolecao `campaigns/{id}/numbers`), mas runtime principal usa colecao top-level `raffleNumbers`.
-3. Rota `/resultado` ainda esta como placeholder.
-4. Recursos de automacao WhatsApp/email, anti-bot, marketing avancado e sorteio completo ainda nao estao totalmente implementados no frontend/backend principal.
+1. Rota `/resultado` ainda esta como placeholder.
+2. Recursos de automacao WhatsApp/email, anti-bot, marketing avancado e sorteio completo ainda nao estao totalmente implementados no frontend/backend principal.
 
-Qualquer agente deve validar com o dono do projeto se o objetivo e:
-- manter o range reduzido atual (MVP), ou
-- evoluir para o range total do escopo (3.45M).
+Faixa atual de runtime:
+- modelo principal com `numberStates` e range padrao de 3.450.000 numeros.
 
 ## 13) Convencoes e cuidados para alteracoes
 
+- Regra obrigatoria para Firebase: sempre consultar a documentacao oficial via Context7 antes de alterar qualquer item de Firebase (Cloud Functions, Firestore Rules, Auth, Storage, indexes, configuracoes e deploy).
 - Nunca confiar em valor financeiro vindo do frontend.
 - Preservar idempotencia no webhook e na contabilizacao financeira.
 - Evitar quebrar compatibilidade de payload HorsePay sem atualizar `horsepayPayload.ts`.
@@ -338,14 +338,13 @@ Qualquer agente deve validar com o dono do projeto se o objetivo e:
 
 ## 14) Ordem recomendada para agentes ao pegar tasks
 
-1. Ler este `AGENTS.MD`.
+1. Ler este `agents.md`.
 2. Ler `functions/src/index.ts` e handlers relacionados ao fluxo da tarefa.
 3. Conferir `firestore.rules` antes de mudar leitura/escrita no cliente.
 4. Se envolver checkout/pagamento, validar ponta a ponta:
    - reserva -> createPixDeposit -> webhook -> atualizacao de order/metrics/numeros.
 5. Se envolver campanha/admin, validar papel `admin` e impacto em `campaigns`.
-6. Se envolver escala de numeros, alinhar modelo unico:
-   - `raffleNumbers` (atual) vs `campaigns/{id}/numbers` (seed legado/alternativo).
+6. Se envolver escala de numeros, manter modelo unico em `numberStates`.
 
 ## 15) Arquivos-chave (atalho mental rapido)
 
@@ -371,4 +370,4 @@ Qualquer agente deve validar com o dono do projeto se o objetivo e:
 Quando houver conflito entre escopo do PDF e implementacao real no codigo, priorizar:
 1. nao quebrar o fluxo transacional e a seguranca atuais;
 2. explicitar o gap no PR/entrega;
-3. propor migracao incremental em vez de troca brusca de modelo.
+3. manter o modelo unico em `numberStates` e evitar reintroduzir legado sem necessidade.

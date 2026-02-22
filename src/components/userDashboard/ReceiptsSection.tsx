@@ -1,12 +1,14 @@
-import { MOCK_ORDERS, RECEIPT_FILTERS } from '../../const/userDashboard'
-import type { MockOrder, ReceiptFilter } from '../../types/userDashboard'
+import { RECEIPT_FILTERS } from '../../const/userDashboard'
+import type { ReceiptFilter, UserOrder } from '../../types/userDashboard'
 import { getReceiptFilterDot } from '../../utils/userDashboard'
 import ReceiptCard from './ReceiptCard'
 
 type ReceiptsSectionProps = {
   receiptFilter: ReceiptFilter
   receiptSearch: string
-  filteredOrders: MockOrder[]
+  filteredOrders: UserOrder[]
+  totalOrders: number
+  campaignTitle: string
   onReceiptFilterChange: (filter: ReceiptFilter) => void
   onReceiptSearchChange: (value: string) => void
 }
@@ -15,6 +17,8 @@ export default function ReceiptsSection({
   receiptFilter,
   receiptSearch,
   filteredOrders,
+  totalOrders,
+  campaignTitle,
   onReceiptFilterChange,
   onReceiptSearchChange,
 }: ReceiptsSectionProps) {
@@ -38,7 +42,7 @@ export default function ReceiptsSection({
             value={receiptSearch}
             onChange={(event) => onReceiptSearchChange(event.target.value)}
             className="block w-full rounded-lg border border-luxury-border bg-luxury-bg py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-text-muted focus:border-gold/50 focus:outline-none focus:ring-1 focus:ring-gold/30"
-            placeholder="Buscar pelo ID do pedido (PED-0042)..."
+            placeholder="Buscar por ID do pedido ou numero..."
             type="text"
           />
         </div>
@@ -77,7 +81,7 @@ export default function ReceiptsSection({
       ) : (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {filteredOrders.map((order) => (
-            <ReceiptCard key={order.id} order={order} />
+            <ReceiptCard key={order.id} order={order} campaignTitle={campaignTitle} />
           ))}
         </div>
       )}
@@ -85,7 +89,7 @@ export default function ReceiptsSection({
       <div className="flex items-center justify-between border-t border-luxury-border pt-4">
         <p className="text-sm text-text-muted">
           Mostrando <span className="font-bold text-white">{filteredOrders.length}</span> de{' '}
-          <span className="font-bold text-white">{MOCK_ORDERS.length}</span> resultados
+          <span className="font-bold text-white">{totalOrders}</span> resultados
         </p>
         <div className="flex gap-2">
           <button

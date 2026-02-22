@@ -10,6 +10,7 @@ import { useAuthStore } from '../stores/authStore'
 import { formatCurrency } from '../utils/purchaseNumbers'
 
 type CheckoutNavigationState = {
+  orderId?: string
   amount?: number
   quantity?: number
   selectedNumbers?: number[]
@@ -47,6 +48,15 @@ export default function CheckoutPage() {
   const navigationState = (location.state || {}) as CheckoutNavigationState
   const [accountName, setAccountName] = useState('')
   const [accountPhone, setAccountPhone] = useState<string | null>(null)
+  const routeOrderId = useMemo(() => {
+    const queryOrderId = new URLSearchParams(location.search).get('orderId')
+    const fromQuery = parseOptionalText(queryOrderId)
+    if (fromQuery) {
+      return fromQuery
+    }
+
+    return parseOptionalText(navigationState.orderId)
+  }, [location.search, navigationState.orderId])
 
   const routeAmount = useMemo(() => {
     const queryValue = new URLSearchParams(location.search).get('amount')
@@ -239,7 +249,12 @@ export default function CheckoutPage() {
                 ) : null}
 
                 {isAuthReady && isLoggedIn ? (
-                  <PixCheckout amount={amount} payerName={payerName} phone={accountPhone} />
+                  <PixCheckout
+                    amount={amount}
+                    payerName={payerName}
+                    phone={accountPhone}
+                    existingOrderId={routeOrderId || null}
+                  />
                 ) : null}
               </div>
             </div>

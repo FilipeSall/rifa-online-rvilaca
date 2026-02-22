@@ -16,7 +16,13 @@ import {
   type PixType,
 } from './constants.js'
 import { readCampaignPricePerCota } from './campaignHandlers.js'
-import { readStoredReservationNumbers, sanitizeNumberStatus } from './reservationHandlers.js'
+import {
+  buildNumberStateView,
+  buildPaidNumberStateData,
+  getNumberStateRef,
+  readCampaignNumberRange,
+} from './numberStateStore.js'
+import { readStoredReservationNumbers } from './reservationHandlers.js'
 import {
   asRecord,
   buildWebhookEventId,
@@ -60,6 +66,7 @@ interface RequestWithdrawInput {
 
 interface ProcessWebhookOrderResult {
   externalId: string
+  campaignId: string
   orderType: OrderType
   status: OrderStatus
   eventId: string
@@ -260,6 +267,7 @@ async function processWebhookOrder(
   const incomingStatus = inferOrderStatus(payload)
   let result: ProcessWebhookOrderResult = {
     externalId,
+    campaignId: CAMPAIGN_DOC_ID,
     eventId,
     orderType: 'deposit',
     status: incomingStatus,
@@ -274,6 +282,7 @@ async function processWebhookOrder(
     const eventSnapshot = await transaction.get(eventRef)
     const existingOrder = (orderSnapshot.exists ? orderSnapshot.data() : null) as DocumentData | null
     const existingOrderType = (existingOrder?.type as OrderType | undefined) || 'deposit'
+    const campaignId = readString(existingOrder?.campaignId) || CAMPAIGN_DOC_ID
     const orderType = inferOrderType(payload, existingOrderType)
     const existingStatusRaw = sanitizeString(existingOrder?.status).toLowerCase()
     const currentStatus: OrderStatus | null =
@@ -306,6 +315,7 @@ async function processWebhookOrder(
 
     const updateData: DocumentData = {
       externalId,
+      campaignId,
       type: orderType,
       status,
       webhookPayload: payload,
@@ -340,6 +350,7 @@ async function processWebhookOrder(
     transaction.set(orderRef, updateData, { merge: true })
     result = {
       externalId,
+      campaignId,
       eventId,
       orderType,
       status,
@@ -357,6 +368,7 @@ async function runPaidDepositBusinessLogic(
   db: Firestore,
   order: {
     externalId: string
+    campaignId: string
     userId: string | null
     amount: number | null
     reservedNumbers: number[]
@@ -371,14 +383,20 @@ async function runPaidDepositBusinessLogic(
   const reservationRef = order.userId ? db.collection('numberReservations').doc(order.userId) : null
   const normalizedAmount = sanitizeOptionalAmount(order.amount)
   const soldNumbers = order.reservedNumbers.length
+  const nowMs = Date.now()
 
   await db.runTransaction(async (transaction) => {
-    const numberSnapshots = await Promise.all(
-      order.reservedNumbers.map(async (number) => {
-        const numberRef = db.collection('raffleNumbers').doc(String(number))
-        const numberSnapshot = await transaction.get(numberRef)
-        return { number, numberRef, numberSnapshot }
+    const numberStateRefs = new Map(
+      order.reservedNumbers.map((number) => [number, getNumberStateRef(db, order.campaignId, number)]),
+    )
+    const numberStateSnapshots = await Promise.all(
+      order.reservedNumbers.map((number) => {
+        const ref = numberStateRefs.get(number)
+        return ref ? transaction.get(ref) : Promise.resolve(null)
       }),
+    )
+    const numberStateSnapshotByNumber = new Map(
+      order.reservedNumbers.map((number, index) => [number, numberStateSnapshots[index]]),
     )
     const reservationSnapshot = reservationRef ? await transaction.get(reservationRef) : null
     const salesLedgerSnapshot = await transaction.get(salesLedgerRef)
@@ -451,34 +469,34 @@ async function runPaidDepositBusinessLogic(
       return
     }
 
-    for (const { number, numberRef, numberSnapshot } of numberSnapshots) {
-      const data = numberSnapshot.exists ? numberSnapshot.data() : null
-      const status = sanitizeNumberStatus(data?.status)
-      const reservedBy = readString(data?.reservedBy)
+    for (const number of order.reservedNumbers) {
+      const numberStateRef = numberStateRefs.get(number)
 
-      if (status === 'pago') {
+      if (!numberStateRef) {
         continue
       }
 
-      if (reservedBy && reservedBy !== order.userId) {
+      const numberStateSnapshot = numberStateSnapshotByNumber.get(number)
+      const state = buildNumberStateView({
+        number,
+        nowMs,
+        numberStateData: numberStateSnapshot?.exists ? numberStateSnapshot.data() : null,
+      })
+
+      if (state.status === 'pago') {
         continue
       }
 
-      transaction.set(
-        numberRef,
-        {
-          number,
-          status: 'pago',
-          reservedBy: null,
-          reservedAt: null,
-          reservationExpiresAt: null,
-          ownerUid: order.userId,
-          orderId: order.externalId,
-          paidAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      )
+      if (state.reservedBy && state.reservedBy !== order.userId) {
+        continue
+      }
+
+      transaction.set(numberStateRef, buildPaidNumberStateData({
+        campaignId: order.campaignId,
+        number,
+        userId: order.userId,
+        orderId: order.externalId,
+      }), { merge: true })
     }
 
     if (!reservationRef) {
@@ -517,10 +535,15 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         throw new HttpsError('failed-precondition', 'Sua reserva nao foi encontrada. Reserve seus numeros novamente.')
       }
 
-      const reservationNumbers = readStoredReservationNumbers(reservationSnapshot.get('numbers'))
-      const reservationExpiresAtMs = readTimestampMillis(reservationSnapshot.get('expiresAt'))
       const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
       const campaignData = campaignSnapshot.exists ? campaignSnapshot.data() : undefined
+      const campaignRange = readCampaignNumberRange(campaignData, CAMPAIGN_DOC_ID)
+      const reservationNumbers = readStoredReservationNumbers(
+        reservationSnapshot.get('numbers'),
+        campaignRange.start,
+        campaignRange.end,
+      )
+      const reservationExpiresAtMs = readTimestampMillis(reservationSnapshot.get('expiresAt'))
       const unitPriceAtCheckout = readCampaignPricePerCota(campaignData)
       const expectedAmount = Number((reservationNumbers.length * unitPriceAtCheckout).toFixed(2))
 
@@ -669,6 +692,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
           await db.collection('orders').doc(externalId).set(
             {
               userId: request.auth.uid,
+              campaignId: CAMPAIGN_DOC_ID,
               externalId,
               type: 'deposit',
               amount: expectedAmount,
@@ -706,6 +730,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
 
         await db.collection('orders').doc(externalId).set({
           userId: request.auth.uid,
+          campaignId: CAMPAIGN_DOC_ID,
           externalId,
           type: 'deposit',
           amount: expectedAmount,
@@ -947,6 +972,7 @@ export function createPixWebhookHandler(db: Firestore, secrets: HorsePaySecretRe
           try {
             await runPaidDepositBusinessLogic(db, {
               externalId,
+              campaignId: processedOrder.campaignId,
               userId: processedOrder.userId,
               amount: processedOrder.amount,
               reservedNumbers: processedOrder.reservedNumbers,

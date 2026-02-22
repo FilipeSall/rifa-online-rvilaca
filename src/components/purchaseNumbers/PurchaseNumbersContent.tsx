@@ -14,7 +14,18 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     setSelectionMode,
     quantity,
     maxSelectable,
-    availableNumbersCount,
+    rangeStart,
+    rangeEnd,
+    totalNumbers,
+    pageStart,
+    pageEnd,
+    smallestAvailableNumber,
+    previousPageStart,
+    nextPageStart,
+    currentPage,
+    totalPages,
+    isPageLoading,
+    isManualAdding,
     selectedNumbers,
     selectedCount,
     couponCode,
@@ -30,9 +41,15 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     totalAmount,
     canProceed,
     isReserving,
+    isAutoSelecting,
     handleSetQuantity,
+    handleClearSelectedNumbers,
     handleToggleNumber,
+    handleGoToPage,
+    handleAddManualNumber,
     handleApplyCoupon,
+    handleLoadPreviousPage,
+    handleLoadNextPage,
     handleProceed,
   } = purchaseState
 
@@ -43,7 +60,6 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
           <QuantitySelectionCard
             quantity={quantity}
             maxSelectable={maxSelectable}
-            availableNumbersCount={availableNumbersCount}
             onSetQuantity={handleSetQuantity}
           />
 
@@ -53,8 +69,25 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
             quantity={quantity}
             selectedNumbers={selectedNumbers}
             selectedCount={selectedCount}
+            rangeStart={rangeStart}
+            rangeEnd={rangeEnd}
+            totalNumbers={totalNumbers}
+            pageStart={pageStart}
+            pageEnd={pageEnd}
+            smallestAvailableNumber={smallestAvailableNumber}
+            hasPreviousPage={previousPageStart !== null}
+            hasNextPage={nextPageStart !== null}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            isPageLoading={isPageLoading}
+            isManualAdding={isManualAdding}
             onSelectionModeChange={setSelectionMode}
             onToggleNumber={handleToggleNumber}
+            onLoadPreviousPage={handleLoadPreviousPage}
+            onLoadNextPage={handleLoadNextPage}
+            onClearSelectedNumbers={handleClearSelectedNumbers}
+            onGoToPage={handleGoToPage}
+            onAddManualNumber={handleAddManualNumber}
           />
         </div>
 
@@ -73,6 +106,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
             hasExpiredReservation={hasExpiredReservation}
             canProceed={canProceed}
             isReserving={isReserving}
+            isAutoSelecting={isAutoSelecting}
             selectedNumbers={selectedNumbers}
             onCouponCodeChange={setCouponCode}
             onApplyCoupon={handleApplyCoupon}

@@ -8,6 +8,7 @@ interface PixCheckoutProps {
   amount: number
   payerName: string
   phone?: string | null
+  existingOrderId?: string | null
 }
 
 type CheckoutStatus = 'idle' | 'generating' | 'pending' | 'paid' | 'failed'
@@ -58,7 +59,7 @@ function readOrderPixField(value: unknown): string | null {
   return normalized ? normalized : null
 }
 
-export default function PixCheckout({ amount, payerName, phone }: PixCheckoutProps) {
+export default function PixCheckout({ amount, payerName, phone, existingOrderId = null }: PixCheckoutProps) {
   const { createDeposit, loading, error, clearError } = useHorsePay()
   const [status, setStatus] = useState<CheckoutStatus>('idle')
   const [order, setOrder] = useState<CreateDepositResponse | null>(null)
@@ -83,6 +84,25 @@ export default function PixCheckout({ amount, payerName, phone }: PixCheckoutPro
   }, [])
 
   useEffect(() => () => stopOrderListener(), [stopOrderListener])
+
+  useEffect(() => {
+    if (!existingOrderId) {
+      return
+    }
+
+    stopOrderListener()
+    clearError()
+    setLocalError(null)
+    setCopyMessage('')
+    paidToastOrderRef.current = null
+    setOrder({
+      externalId: existingOrderId,
+      copyPaste: null,
+      qrCode: null,
+      status: 'pending',
+    })
+    setStatus('pending')
+  }, [clearError, existingOrderId, stopOrderListener])
 
   useEffect(() => {
     if (!order?.externalId) {

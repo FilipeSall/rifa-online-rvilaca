@@ -11,8 +11,10 @@ export const DEPOSIT_RETRY_DELAY_MS = 1200
 export const RESERVATION_DURATION_MS = 10 * 60 * 1000
 export const MIN_PURCHASE_QUANTITY = 10
 export const MAX_PURCHASE_QUANTITY = 300
-export const RAFFLE_NUMBER_START = 540001
-export const RAFFLE_NUMBER_END = 540120
+export const RAFFLE_NUMBER_START = 1
+export const RAFFLE_NUMBER_END = 3_450_000
+export const DEFAULT_NUMBER_WINDOW_PAGE_SIZE = 100
+export const MAX_NUMBER_WINDOW_PAGE_SIZE = 240
 
 export const CAMPAIGN_DOC_ID = 'campanha-bmw-r1200-gs-2026'
 export const DEFAULT_CAMPAIGN_TITLE = 'Sorteio BMW R1200 GS'

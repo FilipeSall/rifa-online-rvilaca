@@ -2,13 +2,20 @@ import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore'
 import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
 import {
+  CAMPAIGN_DOC_ID,
   MAX_PURCHASE_QUANTITY,
   MIN_PURCHASE_QUANTITY,
   RAFFLE_NUMBER_END,
   RAFFLE_NUMBER_START,
   RESERVATION_DURATION_MS,
 } from './constants.js'
-import { asRecord, maskUid, readString, readTimestampMillis, sanitizeString } from './shared.js'
+import {
+  buildNumberStateView,
+  buildReservedNumberStateData,
+  getNumberStateRef,
+  readCampaignNumberRange,
+} from './numberStateStore.js'
+import { asRecord, maskUid } from './shared.js'
 
 interface ReserveNumbersInput {
   numbers: number[]
@@ -20,21 +27,7 @@ interface ReserveNumbersOutput {
   reservationSeconds: number
 }
 
-export function sanitizeNumberStatus(raw: unknown): 'disponivel' | 'reservado' | 'pago' {
-  const value = sanitizeString(raw).toLowerCase()
-
-  if (value === 'paid' || value === 'pago') {
-    return 'pago'
-  }
-
-  if (value === 'reserved' || value === 'reservado') {
-    return 'reservado'
-  }
-
-  return 'disponivel'
-}
-
-function sanitizeReservationNumbers(value: unknown): number[] {
+function sanitizeReservationNumbers(value: unknown, rangeStart: number, rangeEnd: number): number[] {
   if (!Array.isArray(value)) {
     throw new HttpsError('invalid-argument', 'numbers deve ser uma lista')
   }
@@ -47,7 +40,7 @@ function sanitizeReservationNumbers(value: unknown): number[] {
           throw new HttpsError('invalid-argument', 'Todos os numeros devem ser inteiros')
         }
 
-        if (number < RAFFLE_NUMBER_START || number > RAFFLE_NUMBER_END) {
+        if (number < rangeStart || number > rangeEnd) {
           throw new HttpsError('invalid-argument', `Numero fora da faixa permitida: ${number}`)
         }
 
@@ -67,7 +60,11 @@ function sanitizeReservationNumbers(value: unknown): number[] {
   return parsed
 }
 
-export function readStoredReservationNumbers(value: unknown): number[] {
+export function readStoredReservationNumbers(
+  value: unknown,
+  rangeStart: number = RAFFLE_NUMBER_START,
+  rangeEnd: number = RAFFLE_NUMBER_END,
+): number[] {
   if (!Array.isArray(value)) {
     return []
   }
@@ -76,10 +73,7 @@ export function readStoredReservationNumbers(value: unknown): number[] {
     new Set(
       value
         .map((item) => Number(item))
-        .filter(
-          (number) =>
-            Number.isInteger(number) && number >= RAFFLE_NUMBER_START && number <= RAFFLE_NUMBER_END,
-        ),
+        .filter((number) => Number.isInteger(number) && number >= rangeStart && number <= rangeEnd),
     ),
   ).sort((a, b) => a - b)
 }
@@ -91,7 +85,11 @@ export function createReserveNumbersHandler(db: Firestore) {
     }
 
     const payload = asRecord(request.data) as Partial<ReserveNumbersInput>
-    const requestedNumbers = sanitizeReservationNumbers(payload.numbers)
+    const campaignRef = db.collection('campaigns').doc(CAMPAIGN_DOC_ID)
+    const campaignSnapshot = await campaignRef.get()
+    const campaignData = campaignSnapshot.exists ? campaignSnapshot.data() : undefined
+    const campaignRange = readCampaignNumberRange(campaignData, CAMPAIGN_DOC_ID)
+    const requestedNumbers = sanitizeReservationNumbers(payload.numbers, campaignRange.start, campaignRange.end)
     const uid = request.auth.uid
     const nowMs = Date.now()
     const expiresAtMs = nowMs + RESERVATION_DURATION_MS
@@ -101,38 +99,44 @@ export function createReserveNumbersHandler(db: Firestore) {
     await db.runTransaction(async (transaction) => {
       const reservationSnapshot = await transaction.get(reservationRef)
       const previousNumbers = reservationSnapshot.exists
-        ? readStoredReservationNumbers(reservationSnapshot.get('numbers'))
+        ? readStoredReservationNumbers(
+            reservationSnapshot.get('numbers'),
+            campaignRange.start,
+            campaignRange.end,
+          )
         : []
       const requestedSet = new Set(requestedNumbers)
       const numbersToRelease = previousNumbers.filter((number) => !requestedSet.has(number))
       const allNumbers = Array.from(new Set([...requestedNumbers, ...numbersToRelease]))
-      const numberRefs = new Map(allNumbers.map((number) => [number, db.collection('raffleNumbers').doc(String(number))]))
-      const snapshots = await Promise.all(
-        allNumbers.map(async (number) => {
-          const ref = numberRefs.get(number)
-          if (!ref) {
-            return [number, null] as const
-          }
-
-          const snapshot = await transaction.get(ref)
-          return [number, snapshot] as const
+      const numberStateRefs = new Map(
+        allNumbers.map((number) => [number, getNumberStateRef(db, CAMPAIGN_DOC_ID, number)]),
+      )
+      const numberStateSnapshots = await Promise.all(
+        allNumbers.map((number) => {
+          const ref = numberStateRefs.get(number)
+          return ref ? transaction.get(ref) : Promise.resolve(null)
         }),
       )
-      const snapshotByNumber = new Map(snapshots)
+      const numberStateSnapshotByNumber = new Map(
+        allNumbers.map((number, index) => [number, numberStateSnapshots[index]]),
+      )
 
       for (const number of requestedNumbers) {
-        const snapshot = snapshotByNumber.get(number)
-        const data = snapshot?.exists ? snapshot.data() : null
-        const status = sanitizeNumberStatus(data?.status)
-        const reservedBy = readString(data?.reservedBy)
-        const reservationExpiresAt = readTimestampMillis(data?.reservationExpiresAt || data?.expiresAt)
-        const isExpired = reservationExpiresAt !== null && reservationExpiresAt <= nowMs
+        const numberStateSnapshot = numberStateSnapshotByNumber.get(number)
+        const state = buildNumberStateView({
+          number,
+          nowMs,
+          numberStateData: numberStateSnapshot?.exists ? numberStateSnapshot.data() : null,
+        })
+        const hasActiveReservation =
+          state.status === 'reservado'
+          && (state.reservationExpiresAtMs === null || state.reservationExpiresAtMs > nowMs)
 
-        if (status === 'pago') {
+        if (state.status === 'pago') {
           throw new HttpsError('failed-precondition', `Numero ${number} ja foi pago`)
         }
 
-        if (status === 'reservado' && !isExpired && reservedBy && reservedBy !== uid) {
+        if (hasActiveReservation && state.reservedBy !== uid) {
           throw new HttpsError(
             'failed-precondition',
             `Numero ${number} nao esta mais disponivel. Atualize a selecao e tente novamente.`,
@@ -141,60 +145,48 @@ export function createReserveNumbersHandler(db: Firestore) {
       }
 
       for (const number of numbersToRelease) {
-        const ref = numberRefs.get(number)
-        if (!ref) {
+        const numberStateRef = numberStateRefs.get(number)
+
+        if (!numberStateRef) {
           continue
         }
 
-        const snapshot = snapshotByNumber.get(number)
-        const data = snapshot?.exists ? snapshot.data() : null
-        const status = sanitizeNumberStatus(data?.status)
-        const reservedBy = readString(data?.reservedBy)
+        const numberStateSnapshot = numberStateSnapshotByNumber.get(number)
+        const state = buildNumberStateView({
+          number,
+          nowMs,
+          numberStateData: numberStateSnapshot?.exists ? numberStateSnapshot.data() : null,
+        })
 
-        if (status === 'pago') {
+        if (state.status === 'pago') {
           continue
         }
 
-        if (status === 'reservado' && reservedBy === uid) {
-          transaction.set(
-            ref,
-            {
-              number,
-              status: 'disponivel',
-              reservedBy: null,
-              reservedAt: null,
-              reservationExpiresAt: null,
-              updatedAt: FieldValue.serverTimestamp(),
-            },
-            { merge: true },
-          )
+        if (state.status === 'reservado' && state.reservedBy === uid) {
+          transaction.delete(numberStateRef)
         }
       }
 
       for (const number of requestedNumbers) {
-        const ref = numberRefs.get(number)
-        if (!ref) {
+        const numberStateRef = numberStateRefs.get(number)
+
+        if (!numberStateRef) {
           continue
         }
 
-        transaction.set(
-          ref,
-          {
-            number,
-            status: 'reservado',
-            reservedBy: uid,
-            reservedAt: FieldValue.serverTimestamp(),
-            reservationExpiresAt: expiresAt,
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        )
+        transaction.set(numberStateRef, buildReservedNumberStateData({
+          campaignId: CAMPAIGN_DOC_ID,
+          number,
+          uid,
+          expiresAt,
+        }), { merge: true })
       }
 
       transaction.set(
         reservationRef,
         {
           uid,
+          campaignId: CAMPAIGN_DOC_ID,
           numbers: requestedNumbers,
           status: 'active',
           expiresAt,

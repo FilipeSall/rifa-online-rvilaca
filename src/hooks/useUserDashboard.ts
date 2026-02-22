@@ -1,23 +1,68 @@
 import { signOut } from 'firebase/auth'
-import { doc, onSnapshot } from 'firebase/firestore'
+import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
-import { MOCK_ORDERS, MOCK_TICKETS } from '../const/userDashboard'
 import { auth, db } from '../lib/firebase'
 import { loadUserCpf, loadUserPhone, loadUserProfile, uploadUserAvatar } from '../services/userDashboard/userDashboardService'
 import { useAuthStore } from '../stores/authStore'
-import type { ReceiptFilter, Section, TicketFilter } from '../types/userDashboard'
+import { useCampaignSettings } from './useCampaignSettings'
+import type { ReceiptFilter, Section, TicketFilter, UserOrder, UserTicket } from '../types/userDashboard'
 import {
   filterOrders,
   filterTickets,
+  formatCurrencyBrl,
+  formatDashboardDate,
   getAvatarUploadErrorMessage,
   getDisplayName,
   getUserInitials,
+  mapOrderStatusToTicketStatus,
 } from '../utils/userDashboard'
+
+function readTimestampMillis(value: unknown): number | null {
+  if (!value) {
+    return null
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (value instanceof Date) {
+    return value.getTime()
+  }
+
+  if (
+    typeof value === 'object'
+    && value !== null
+    && 'toMillis' in value
+    && typeof (value as { toMillis?: unknown }).toMillis === 'function'
+  ) {
+    try {
+      return Number((value as { toMillis: () => number }).toMillis())
+    } catch {
+      return null
+    }
+  }
+
+  return null
+}
+
+function readOrderNumbers(value: unknown): number[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return Array.from(new Set(
+    value
+      .map((item) => Number(item))
+      .filter((number) => Number.isInteger(number) && number > 0),
+  )).sort((a, b) => a - b)
+}
 
 export function useUserDashboard() {
   const { user, isLoggedIn, isAuthReady, userRole, isRoleReady } = useAuthStore()
+  const { campaign } = useCampaignSettings()
   const navigate = useNavigate()
 
   const [activeSection, setActiveSection] = useState<Section>('numeros')
@@ -32,6 +77,9 @@ export function useUserDashboard() {
 
   const [receiptFilter, setReceiptFilter] = useState<ReceiptFilter>('Todos')
   const [receiptSearch, setReceiptSearch] = useState('')
+
+  const [orders, setOrders] = useState<UserOrder[]>([])
+  const [tickets, setTickets] = useState<UserTicket[]>([])
 
   useEffect(() => {
     if (!isAuthReady || !isRoleReady) {
@@ -71,6 +119,87 @@ export function useUserDashboard() {
       },
       (error) => {
         console.warn('Failed to subscribe user profile:', error)
+      },
+    )
+
+    return unsubscribe
+  }, [isAuthReady, user])
+
+  useEffect(() => {
+    if (!isAuthReady || !user) {
+      setOrders([])
+      setTickets([])
+      return
+    }
+
+    const ordersQuery = query(
+      collection(db, 'orders'),
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'desc'),
+    )
+
+    const unsubscribe = onSnapshot(
+      ordersQuery,
+      (snapshot) => {
+        const nextOrders: UserOrder[] = snapshot.docs
+          .filter((documentSnapshot) => {
+            const rawType = String(documentSnapshot.data().type || 'deposit').toLowerCase()
+            return rawType === 'deposit'
+          })
+          .map((documentSnapshot) => {
+          const data = documentSnapshot.data()
+          const createdAtMs =
+            readTimestampMillis(data.paidBusinessAppliedAt)
+            ?? readTimestampMillis(data.createdAt)
+            ?? readTimestampMillis(data.updatedAt)
+          const numbers = readOrderNumbers(data.reservedNumbers)
+          const amount = typeof data.amount === 'number' && Number.isFinite(data.amount)
+            ? Number(data.amount)
+            : null
+          const status = mapOrderStatusToTicketStatus(String(data.status || 'pending'))
+
+          return {
+            id: documentSnapshot.id,
+            cotas: numbers.length,
+            numbers,
+            amount,
+            totalBrl: formatCurrencyBrl(amount),
+            date: formatDashboardDate(createdAtMs),
+            status,
+            copyPaste: typeof data.pixCopyPaste === 'string' ? data.pixCopyPaste : null,
+            createdAtMs,
+            campaignId: typeof data.campaignId === 'string' ? data.campaignId : null,
+          }
+        })
+
+        const nextTickets: UserTicket[] = nextOrders
+          .flatMap((order) => order.numbers.map((number) => ({
+            number: String(number),
+            numericNumber: number,
+            orderId: order.id,
+            date: order.date,
+            status: order.status,
+            createdAtMs: order.createdAtMs,
+          })))
+          .sort((left, right) => {
+            const leftTs = left.createdAtMs ?? 0
+            const rightTs = right.createdAtMs ?? 0
+            if (rightTs !== leftTs) {
+              return rightTs - leftTs
+            }
+
+            return left.numericNumber - right.numericNumber
+          })
+
+        setOrders(nextOrders)
+        setTickets(nextTickets)
+      },
+      (error) => {
+        console.error('Failed to subscribe orders:', error)
+        toast.error('Nao foi possivel carregar seus pedidos. Verifique os indices e as regras do Firestore.', {
+          position: 'bottom-right',
+          toastId: 'dashboard-orders-subscribe-error',
+        })
       },
     )
 
@@ -148,22 +277,34 @@ export function useUserDashboard() {
   }, [navigate])
 
   const filteredTickets = useMemo(
-    () => filterTickets(MOCK_TICKETS, ticketFilter, ticketSearch),
-    [ticketFilter, ticketSearch],
+    () => filterTickets(tickets, ticketFilter, ticketSearch),
+    [ticketFilter, ticketSearch, tickets],
   )
 
   const filteredOrders = useMemo(
-    () => filterOrders(MOCK_ORDERS, receiptFilter, receiptSearch),
-    [receiptFilter, receiptSearch],
+    () => filterOrders(orders, receiptFilter, receiptSearch),
+    [orders, receiptFilter, receiptSearch],
   )
 
   const paidCount = useMemo(
-    () => MOCK_TICKETS.filter((ticket) => ticket.status === 'pago').length,
-    [],
+    () => tickets.filter((ticket) => ticket.status === 'pago').length,
+    [tickets],
   )
 
   const displayName = user ? getDisplayName(user) : ''
   const initials = useMemo(() => getUserInitials(displayName), [displayName])
+  const nextDrawDateLabel = useMemo(() => {
+    if (!campaign.endsAt) {
+      return 'Nao definido'
+    }
+
+    const date = new Date(`${campaign.endsAt}T12:00:00`)
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }).format(date)
+  }, [campaign.endsAt])
 
   const loadPhoneForUser = useCallback(async () => {
     if (!user) {
@@ -205,6 +346,13 @@ export function useUserDashboard() {
     filteredTickets,
     filteredOrders,
     paidCount,
+    totalOrders: orders.length,
+    totalTickets: tickets.length,
+    campaignTitle: campaign.title,
+    mainPrize: campaign.mainPrize,
+    secondPrize: campaign.secondPrize,
+    bonusPrize: campaign.bonusPrize,
+    nextDrawDateLabel,
     displayName,
     initials,
     handlePhotoChange,

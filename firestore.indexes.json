@@ -1,0 +1,33 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "numberStates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "campaignId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "number",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

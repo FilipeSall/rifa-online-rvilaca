@@ -3,14 +3,12 @@ import { MIN_QUANTITY, PURCHASE_PACKS } from '../../const/purchaseNumbers'
 type QuantitySelectionCardProps = {
   quantity: number
   maxSelectable: number
-  availableNumbersCount: number
   onSetQuantity: (value: number) => void
 }
 
 export default function QuantitySelectionCard({
   quantity,
   maxSelectable,
-  availableNumbersCount,
   onSetQuantity,
 }: QuantitySelectionCardProps) {
   return (
@@ -20,7 +18,6 @@ export default function QuantitySelectionCard({
           <p className="text-[10px] uppercase tracking-[0.22em] text-gray-500">1. Quantidade de cotas</p>
           <h2 className="mt-2 text-xl font-bold text-white">Defina quantos numeros deseja comprar</h2>
         </div>
-        <p className="text-xs text-gray-400">Total disponivel no lote exibido: {availableNumbersCount}</p>
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">

@@ -72,10 +72,10 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Grade de números da rifa: leitura pública, escrita apenas via backend (Admin SDK).
-    match /raffleNumbers/{numberId} {
-      allow read: if true;
-      allow write: if false;
+    // Estado dos números da rifa: coleção server-only.
+    // A app cliente consulta via Cloud Functions (Admin SDK), não direto no Firestore.
+    match /numberStates/{numberStateId} {
+      allow read, write: if false;
     }
 
     // Reserva ativa por usuário: leitura somente do dono, escrita apenas via backend.

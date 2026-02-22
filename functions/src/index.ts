@@ -9,6 +9,10 @@ import {
   createUpsertCampaignSettingsHandler,
 } from './lib/campaignHandlers.js'
 import {
+  createGetNumberWindowHandler,
+  createPickRandomAvailableNumbersHandler,
+} from './lib/numberHandlers.js'
+import {
   createGetBalanceHandler,
   createPixDepositHandler,
   createPixWebhookHandler,
@@ -52,6 +56,13 @@ const horsePaySecrets = {
 export const upsertCampaignSettings = onCall(callableOptions, createUpsertCampaignSettingsHandler(db))
 
 export const reserveNumbers = onCall(callableOptions, createReserveNumbersHandler(db))
+
+export const getNumberWindow = onCall(callableOptions, createGetNumberWindowHandler(db))
+
+export const pickRandomAvailableNumbers = onCall(
+  callableOptions,
+  createPickRandomAvailableNumbersHandler(db),
+)
 
 export const createPixDeposit = onCall(
   securedCallableOptions,

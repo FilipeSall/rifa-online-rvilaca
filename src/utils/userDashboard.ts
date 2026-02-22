@@ -1,6 +1,6 @@
 import { FirebaseError } from 'firebase/app'
 import type { User } from 'firebase/auth'
-import type { MockOrder, MockTicket, ReceiptFilter, TicketFilter } from '../types/userDashboard'
+import type { ReceiptFilter, TicketFilter, UserOrder, UserTicket } from '../types/userDashboard'
 
 export function getAvatarUploadErrorMessage(error: unknown) {
   if (error instanceof Error && error.message === 'avatar-upload-timeout') {
@@ -56,7 +56,45 @@ export function getUserInitials(displayName: string) {
     .toUpperCase()
 }
 
-export function filterTickets(tickets: MockTicket[], ticketFilter: TicketFilter, ticketSearch: string) {
+export function formatCurrencyBrl(value: number | null) {
+  if (value === null || !Number.isFinite(value)) {
+    return 'R$ --'
+  }
+
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value)
+}
+
+export function formatDashboardDate(timestampMs: number | null) {
+  if (timestampMs === null || !Number.isFinite(timestampMs)) {
+    return '-'
+  }
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(timestampMs))
+}
+
+export function mapOrderStatusToTicketStatus(rawStatus: string) {
+  const status = rawStatus.trim().toLowerCase()
+  if (status === 'paid' || status === 'pago') {
+    return 'pago'
+  }
+
+  if (status === 'pending' || status === 'aguardando') {
+    return 'aguardando'
+  }
+
+  return 'cancelado'
+}
+
+export function filterTickets(tickets: UserTicket[], ticketFilter: TicketFilter, ticketSearch: string) {
   return tickets.filter((ticket) => {
     const matchesFilter =
       ticketFilter === 'Todos' ||
@@ -73,7 +111,7 @@ export function filterTickets(tickets: MockTicket[], ticketFilter: TicketFilter,
   })
 }
 
-export function filterOrders(orders: MockOrder[], receiptFilter: ReceiptFilter, receiptSearch: string) {
+export function filterOrders(orders: UserOrder[], receiptFilter: ReceiptFilter, receiptSearch: string) {
   return orders.filter((order) => {
     const matchesFilter =
       receiptFilter === 'Todos' ||
@@ -81,7 +119,11 @@ export function filterOrders(orders: MockOrder[], receiptFilter: ReceiptFilter, 
       (receiptFilter === 'Pendentes' && order.status === 'aguardando') ||
       (receiptFilter === 'Cancelados' && order.status === 'cancelado')
 
-    const matchesSearch = receiptSearch === '' || order.id.toLowerCase().includes(receiptSearch.toLowerCase())
+    const normalizedSearch = receiptSearch.toLowerCase()
+    const matchesSearch =
+      receiptSearch === ''
+      || order.id.toLowerCase().includes(normalizedSearch)
+      || order.numbers.some((number) => String(number).includes(normalizedSearch))
 
     return matchesFilter && matchesSearch
   })

@@ -1,7 +1,30 @@
-import type { MockOrder } from '../../types/userDashboard'
+import { useNavigate } from 'react-router-dom'
+import { exportOrderReceiptPdf } from '../../utils/receiptPdf'
+import type { UserOrder } from '../../types/userDashboard'
 import { OrderStatusBadge } from './StatusBadges'
 
-export default function ReceiptCard({ order }: { order: MockOrder }) {
+function openWhatsAppShare(order: UserOrder) {
+  const message = [
+    'Comprovante de compra - Rifa Online',
+    `Pedido: ${order.id}`,
+    `Status: ${order.status === 'pago' ? 'Pago' : order.status === 'aguardando' ? 'Pendente' : 'Cancelado'}`,
+    `Data: ${order.date}`,
+    `Cotas: ${order.cotas}`,
+    `Valor total: ${order.totalBrl}`,
+    `Numeros: ${order.numbers.join(', ') || '-'}`,
+  ].join('\n')
+
+  const url = `https://wa.me/?text=${encodeURIComponent(message)}`
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+type ReceiptCardProps = {
+  order: UserOrder
+  campaignTitle: string
+}
+
+export default function ReceiptCard({ order, campaignTitle }: ReceiptCardProps) {
+  const navigate = useNavigate()
   const stripe =
     order.status === 'pago' ? 'bg-emerald-500' : order.status === 'aguardando' ? 'bg-amber-500' : 'bg-red-500'
 
@@ -17,9 +40,9 @@ export default function ReceiptCard({ order }: { order: MockOrder }) {
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-text-muted">{order.id}</p>
             <h3 className="font-bold leading-snug text-white transition-colors group-hover:text-gold">
-              Sorteio de Motos + PIX
+              {campaignTitle}
             </h3>
-            <p className="mt-0.5 text-xs text-text-muted">Campanha Principal 2026</p>
+            <p className="mt-0.5 text-xs text-text-muted">Pedido #{order.id.slice(0, 8).toUpperCase()}</p>
           </div>
           <OrderStatusBadge status={order.status} />
         </div>
@@ -47,6 +70,7 @@ export default function ReceiptCard({ order }: { order: MockOrder }) {
               <button
                 type="button"
                 className="group/btn flex w-full items-center justify-center gap-2 rounded-lg border border-gold/30 px-4 py-2.5 text-sm font-bold text-gold transition-all hover:bg-gold hover:text-black"
+                onClick={() => exportOrderReceiptPdf(order)}
               >
                 <span className="material-symbols-outlined text-[18px] transition-transform group-hover/btn:animate-bounce">
                   download
@@ -56,6 +80,7 @@ export default function ReceiptCard({ order }: { order: MockOrder }) {
               <button
                 type="button"
                 className="flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-500/30 px-4 py-2.5 text-sm font-bold text-emerald-400 transition-all hover:bg-emerald-500 hover:text-white"
+                onClick={() => openWhatsAppShare(order)}
               >
                 <span className="material-symbols-outlined text-[18px]">share</span>
                 Enviar no WhatsApp
@@ -68,6 +93,15 @@ export default function ReceiptCard({ order }: { order: MockOrder }) {
               <button
                 type="button"
                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-gold px-4 py-2.5 text-sm font-bold text-black shadow-lg shadow-gold/20 transition-all hover:bg-gold-hover"
+                onClick={() =>
+                  navigate('/checkout', {
+                    state: {
+                      orderId: order.id,
+                      amount: order.amount ?? undefined,
+                      quantity: order.cotas,
+                      selectedNumbers: order.numbers,
+                    },
+                  })}
               >
                 <span className="material-symbols-outlined text-[18px]">pix</span>
                 Pagar Agora
@@ -75,6 +109,14 @@ export default function ReceiptCard({ order }: { order: MockOrder }) {
               <button
                 type="button"
                 className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 px-4 py-2.5 text-sm font-bold text-text-muted transition-all hover:border-white/20 hover:text-white"
+                onClick={async () => {
+                  if (!order.copyPaste) {
+                    return
+                  }
+
+                  await navigator.clipboard.writeText(order.copyPaste)
+                }}
+                disabled={!order.copyPaste}
               >
                 <span className="material-symbols-outlined text-[18px]">content_copy</span>
                 Copiar codigo PIX

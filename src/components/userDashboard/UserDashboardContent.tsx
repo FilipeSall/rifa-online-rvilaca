@@ -43,6 +43,13 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
     filteredTickets,
     filteredOrders,
     paidCount,
+    totalOrders,
+    totalTickets,
+    campaignTitle,
+    mainPrize,
+    secondPrize,
+    bonusPrize,
+    nextDrawDateLabel,
     displayName,
     initials,
     handlePhotoChange,
@@ -94,7 +101,7 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
               onSignOut={handleSignOut}
             />
 
-            <StatsCards paidCount={paidCount} />
+            <StatsCards paidCount={paidCount} nextDrawDateLabel={nextDrawDateLabel} />
 
             <MobileSectionTabs activeSection={activeSection} onSectionChange={setActiveSection} />
 
@@ -103,6 +110,10 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
                 ticketFilter={ticketFilter}
                 ticketSearch={ticketSearch}
                 filteredTickets={filteredTickets}
+                totalTickets={totalTickets}
+                mainPrize={mainPrize}
+                secondPrize={secondPrize}
+                bonusPrize={bonusPrize}
                 onTicketFilterChange={setTicketFilter}
                 onTicketSearchChange={setTicketSearch}
               />
@@ -113,6 +124,8 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
                 receiptFilter={receiptFilter}
                 receiptSearch={receiptSearch}
                 filteredOrders={filteredOrders}
+                totalOrders={totalOrders}
+                campaignTitle={campaignTitle}
                 onReceiptFilterChange={setReceiptFilter}
                 onReceiptSearchChange={setReceiptSearch}
               />

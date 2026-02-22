@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { MIN_QUANTITY } from '../../const/purchaseNumbers'
 import type { CouponFeedback } from '../../types/purchaseNumbers'
 import { formatCurrency, formatTimer } from '../../utils/purchaseNumbers'
@@ -17,6 +16,7 @@ type PurchaseSummaryCardProps = {
   hasExpiredReservation: boolean
   canProceed: boolean
   isReserving: boolean
+  isAutoSelecting: boolean
   selectedNumbers: number[]
   onCouponCodeChange: (value: string) => void
   onApplyCoupon: () => void
@@ -37,6 +37,7 @@ export default function PurchaseSummaryCard({
   hasExpiredReservation,
   canProceed,
   isReserving,
+  isAutoSelecting,
   selectedNumbers,
   onCouponCodeChange,
   onApplyCoupon,
@@ -121,10 +122,16 @@ export default function PurchaseSummaryCard({
       <button
         className="mt-5 h-12 w-full rounded-xl bg-green-500 px-4 text-sm font-black uppercase tracking-widest text-white transition-all hover:bg-green-400 disabled:cursor-not-allowed disabled:opacity-40"
         type="button"
-        disabled={!canProceed || isReserving}
+        disabled={!canProceed || isReserving || isAutoSelecting}
         onClick={onProceed}
       >
-        {isReserving ? 'Reservando...' : reservationSeconds === null ? 'Reservar por 10 min' : 'Ir para pagamento PIX'}
+        {isReserving
+          ? 'Reservando...'
+          : isAutoSelecting
+            ? 'Selecionando numeros...'
+            : reservationSeconds === null
+              ? 'Reservar por 10 min'
+              : 'Ir para pagamento PIX'}
       </button>
 
       <p className="mt-3 text-[11px] text-gray-500">
@@ -139,13 +146,6 @@ export default function PurchaseSummaryCard({
         </p>
       </div>
 
-      <Link
-        className="mt-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gold hover:text-gold-light"
-        to="/"
-      >
-        <span className="material-symbols-outlined text-sm">arrow_back</span>
-        Voltar para home
-      </Link>
     </div>
   )
 }

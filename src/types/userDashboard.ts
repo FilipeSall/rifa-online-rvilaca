@@ -1,19 +1,26 @@
 export type Section = 'numeros' | 'comprovantes'
 export type TicketStatus = 'pago' | 'aguardando' | 'cancelado'
 
-export type MockTicket = {
+export type UserTicket = {
   number: string
+  numericNumber: number
   orderId: string
   date: string
   status: TicketStatus
+  createdAtMs: number | null
 }
 
-export type MockOrder = {
+export type UserOrder = {
   id: string
   cotas: number
+  numbers: number[]
+  amount: number | null
   totalBrl: string
   date: string
   status: TicketStatus
+  copyPaste: string | null
+  createdAtMs: number | null
+  campaignId: string | null
 }
 
 export type TicketFilter = 'Todos' | 'Pagos' | 'Aguardando' | 'Cancelados'

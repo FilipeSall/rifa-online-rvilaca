@@ -1,8 +1,9 @@
 type StatsCardsProps = {
   paidCount: number
+  nextDrawDateLabel: string
 }
 
-export default function StatsCards({ paidCount }: StatsCardsProps) {
+export default function StatsCards({ paidCount, nextDrawDateLabel }: StatsCardsProps) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <div className="flex items-center gap-4 rounded-xl border border-luxury-border bg-luxury-card p-4">
@@ -31,7 +32,7 @@ export default function StatsCards({ paidCount }: StatsCardsProps) {
         </div>
         <div>
           <p className="text-xs text-text-muted">Proximo Sorteio</p>
-          <p className="text-lg font-bold text-white">A definir</p>
+          <p className="text-lg font-bold text-white">{nextDrawDateLabel}</p>
         </div>
       </div>
     </div>
