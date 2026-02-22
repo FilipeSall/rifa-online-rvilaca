@@ -5,7 +5,6 @@ import { functions } from '../lib/firebase'
 export type PixType = 'CPF' | 'CNPJ' | 'EMAIL' | 'PHONE' | 'RANDOM'
 
 export interface CreateDepositInput {
-  amount: number
   payerName: string
   phone?: string | null
 }
@@ -89,10 +88,9 @@ export function useHorsePay() {
   )
 
   const createDeposit = useCallback(
-    async ({ amount, payerName, phone }: CreateDepositInput) =>
+    async ({ payerName, phone }: CreateDepositInput) =>
       runCallable(() => {
         const payload: CreateDepositInput = {
-          amount,
           payerName,
         }
 

@@ -189,15 +189,8 @@ export default function PixCheckout({ amount, payerName, phone }: PixCheckoutPro
       return
     }
 
-    if (amount <= 0) {
-      setLocalError('Informe um valor valido para gerar o PIX.')
-      setStatus('failed')
-      return
-    }
-
     try {
       const response = await createDeposit({
-        amount,
         payerName: payerName.trim(),
         phone: typeof phone === 'string' && phone.trim() ? phone.trim() : undefined,
       })
@@ -212,7 +205,7 @@ export default function PixCheckout({ amount, payerName, phone }: PixCheckoutPro
     } catch {
       setStatus('failed')
     }
-  }, [amount, clearError, createDeposit, payerName, phone, stopOrderListener])
+  }, [clearError, createDeposit, payerName, phone, stopOrderListener])
 
   const handleCopy = useCallback(async () => {
     if (!copyPasteCode) {
