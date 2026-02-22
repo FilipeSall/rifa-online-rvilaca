@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Area,
   AreaChart,
@@ -10,6 +10,7 @@ import {
   PieChart,
   ResponsiveContainer,
   Tooltip,
+  type TooltipContentProps,
   XAxis,
   YAxis,
 } from 'recharts'
@@ -29,22 +30,6 @@ type AdminDashboardContentProps = {
   activeTab: AdminTabId
   onTabChange: (tab: AdminTabId) => void
   onSignOut: () => void
-}
-
-const ADMIN_DEBUG = import.meta.env.DEV
-
-function adminDebug(message: string, payload?: unknown) {
-  if (!ADMIN_DEBUG) {
-    return
-  }
-
-  const timestamp = new Date().toISOString()
-  if (payload === undefined) {
-    console.log(`[admin-debug][AdminDashboardContent][${timestamp}] ${message}`)
-    return
-  }
-
-  console.log(`[admin-debug][AdminDashboardContent][${timestamp}] ${message}`, payload)
 }
 
 type MetricKey = keyof typeof ADMIN_KPIS
@@ -124,6 +109,23 @@ function getOrderStatusClass(status: OrderStatus) {
   return 'border-rose-400/30 bg-rose-500/15 text-rose-200'
 }
 
+function ConversionTooltip({ active, payload }: TooltipContentProps<number, string>) {
+  if (!active || !payload || payload.length === 0) {
+    return null
+  }
+
+  const entry = payload[0]
+  const stage = String(entry.payload?.stage ?? entry.name ?? 'Etapa')
+  const value = Number(entry.value ?? 0)
+
+  return (
+    <div className="rounded-xl border border-gold/35 bg-[rgba(20,20,20,0.96)] px-3 py-2">
+      <p className="text-[10px] uppercase tracking-[0.14em] text-gold">{stage}</p>
+      <p className="mt-1 text-lg font-bold text-white">{value}%</p>
+    </div>
+  )
+}
+
 function useCountUp(targetValue: number, durationMs = 1600) {
   const [animatedValue, setAnimatedValue] = useState(0)
 
@@ -183,25 +185,14 @@ function KpiCard({ card, index }: KpiCardProps) {
 function DashboardTab() {
   const [areChartsReady, setAreChartsReady] = useState(false)
   const [isRevenueAnimationActive, setIsRevenueAnimationActive] = useState(false)
-  const renderCountRef = useRef(0)
-
-  renderCountRef.current += 1
-  adminDebug('DashboardTab render', {
-    renderCount: renderCountRef.current,
-    areChartsReady,
-    isRevenueAnimationActive,
-  })
 
   useEffect(() => {
-    adminDebug('DashboardTab mounted')
     const frame = window.requestAnimationFrame(() => {
       setAreChartsReady(true)
-      adminDebug('charts ready for first render')
     })
 
     return () => {
       window.cancelAnimationFrame(frame)
-      adminDebug('DashboardTab unmounted')
     }
   }, [])
 
@@ -211,11 +202,9 @@ function DashboardTab() {
     }
 
     setIsRevenueAnimationActive(true)
-    adminDebug('revenue chart animation toggled to true')
 
     const timer = window.setTimeout(() => {
       setIsRevenueAnimationActive(false)
-      adminDebug('revenue chart animation toggled to false')
     }, 1200)
 
     return () => {
@@ -284,8 +273,6 @@ function DashboardTab() {
                     isAnimationActive={isRevenueAnimationActive}
                     animationDuration={1000}
                     animationEasing="ease-out"
-                    onAnimationStart={() => adminDebug('revenue area animation start')}
-                    onAnimationEnd={() => adminDebug('revenue area animation end')}
                     stroke="#F5A800"
                     strokeWidth={3}
                     type="monotone"
@@ -310,6 +297,7 @@ function DashboardTab() {
                     cx="50%"
                     cy="50%"
                     dataKey="value"
+                    nameKey="stage"
                     innerRadius={55}
                     outerRadius={98}
                     isAnimationActive
@@ -323,15 +311,9 @@ function DashboardTab() {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'rgba(20, 20, 20, 0.96)',
-                      border: '1px solid rgba(245, 168, 0, 0.2)',
-                      borderRadius: '12px',
-                      color: '#fff',
-                    }}
-                    itemStyle={{ color: '#f8fafc', fontWeight: 700 }}
-                    formatter={(value) => `${Number(value ?? 0)}%`}
-                    labelStyle={{ color: '#f5a800', fontWeight: 700 }}
+                    content={ConversionTooltip}
+                    cursor={false}
+                    isAnimationActive={false}
                   />
                 </PieChart>
               </ResponsiveContainer>

@@ -11,22 +11,6 @@ type AuthProviderProps = {
   children: ReactNode
 }
 
-const ADMIN_DEBUG = import.meta.env.DEV
-
-function adminDebug(message: string, payload?: unknown) {
-  if (!ADMIN_DEBUG) {
-    return
-  }
-
-  const timestamp = new Date().toISOString()
-  if (payload === undefined) {
-    console.log(`[admin-debug][AuthProvider][${timestamp}] ${message}`)
-    return
-  }
-
-  console.log(`[admin-debug][AuthProvider][${timestamp}] ${message}`, payload)
-}
-
 export default function AuthProvider({ children }: AuthProviderProps) {
   const setAuthUser = useAuthStore((state) => state.setAuthUser)
   const setAuthReady = useAuthStore((state) => state.setAuthReady)
@@ -39,22 +23,13 @@ export default function AuthProvider({ children }: AuthProviderProps) {
   const roleListenerUidRef = useRef<string | null>(null)
 
   useEffect(() => {
-    adminDebug('effect mounted')
-
     const unsubscribe = onIdTokenChanged(auth, (user) => {
       const currentState = useAuthStore.getState()
       const currentUid = currentState.user?.uid ?? null
       const nextUid = user?.uid ?? null
 
-      adminDebug('onIdTokenChanged', {
-        hasUser: Boolean(user),
-        uid: nextUid,
-      })
-
       if (currentUid !== nextUid) {
         setAuthUser(user)
-      } else {
-        adminDebug('auth user unchanged, skipped store update', { uid: nextUid })
       }
 
       if (!currentState.isAuthReady) {
@@ -66,14 +41,12 @@ export default function AuthProvider({ children }: AuthProviderProps) {
           roleListenerRef.current()
           roleListenerRef.current = null
           roleListenerUidRef.current = null
-          adminDebug('cleared role listener due to sign out')
         }
 
         syncingUserIdsRef.current.clear()
         syncedUserIdsRef.current.clear()
         setUserRole(null)
         setRoleReady(true)
-        adminDebug('no user, role ready set to true')
         return
       }
 
@@ -85,7 +58,6 @@ export default function AuthProvider({ children }: AuthProviderProps) {
           roleListenerRef.current()
           roleListenerRef.current = null
           roleListenerUidRef.current = null
-          adminDebug('cleared previous role listener for uid swap')
         }
 
         setUserRole(null)
@@ -104,7 +76,6 @@ export default function AuthProvider({ children }: AuthProviderProps) {
 
               setUserRole('user')
               setRoleReady(true)
-              adminDebug('user snapshot missing, fallback role user')
               return
             }
 
@@ -117,26 +88,13 @@ export default function AuthProvider({ children }: AuthProviderProps) {
 
             setUserRole(normalizedRole)
             setRoleReady(true)
-            adminDebug('role snapshot updated', {
-              uid: user.uid,
-              roleValue,
-              normalizedRole,
-            })
           },
           (error) => {
             setUserRole('user')
             setRoleReady(true)
-            adminDebug('role snapshot error, fallback role user', {
-              uid: user.uid,
-              error: String(error),
-            })
           },
         )
         roleListenerUidRef.current = user.uid
-      } else {
-        adminDebug('token refresh for same uid, reusing role listener', {
-          uid: user.uid,
-        })
       }
 
       if (
@@ -144,12 +102,10 @@ export default function AuthProvider({ children }: AuthProviderProps) {
         deniedUserIdsRef.current.has(user.uid) ||
         syncedUserIdsRef.current.has(user.uid)
       ) {
-        adminDebug('upsertUserProfile skipped (syncing/denied/synced)', { uid: user.uid })
         return
       }
 
       syncingUserIdsRef.current.add(user.uid)
-      adminDebug('upsertUserProfile start', { uid: user.uid })
 
       upsertUserProfile(user)
         .then(() => {
@@ -158,17 +114,11 @@ export default function AuthProvider({ children }: AuthProviderProps) {
         .catch((error) => {
           if (error instanceof FirebaseError && error.code === 'permission-denied') {
             deniedUserIdsRef.current.add(user.uid)
-            console.warn(
-              'Firestore profile sync desativado para este usuário: permission-denied. Publique as regras no projeto correto para reativar.',
-            )
             return
           }
-
-          console.error('Failed to upsert Firestore user profile:', error)
         })
         .finally(() => {
           syncingUserIdsRef.current.delete(user.uid)
-          adminDebug('upsertUserProfile finished', { uid: user.uid })
         })
     })
 
@@ -177,11 +127,9 @@ export default function AuthProvider({ children }: AuthProviderProps) {
         roleListenerRef.current()
         roleListenerRef.current = null
         roleListenerUidRef.current = null
-        adminDebug('cleanup role snapshot listener')
       }
 
       unsubscribe()
-      adminDebug('effect unmounted')
     }
   }, [setAuthReady, setAuthUser, setRoleReady, setUserRole])
 
