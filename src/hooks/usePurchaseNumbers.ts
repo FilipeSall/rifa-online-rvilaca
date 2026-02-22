@@ -126,6 +126,16 @@ function getCallableErrorMessage(error: unknown, fallback: string) {
   return fallback
 }
 
+function extractConflictedNumber(message: string) {
+  const matched = /Numero\s+(\d+)/i.exec(message)
+  if (!matched) {
+    return null
+  }
+
+  const parsed = Number(matched[1])
+  return Number.isInteger(parsed) ? parsed : null
+}
+
 export function usePurchaseNumbers() {
   const navigate = useNavigate()
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
@@ -176,7 +186,7 @@ export function usePurchaseNumbers() {
   const subtotal = selectedCount * unitPrice
   const discountAmount = subtotal * discountRate
   const totalAmount = Math.max(subtotal - discountAmount, 0)
-  const canProceed = selectedCount >= MIN_QUANTITY && !isReserving && !isAutoSelecting
+  const canProceed = selectedCount >= MIN_QUANTITY && !isReserving && !isAutoSelecting && !isPageLoading
 
   const loadNumberWindow = useCallback(
     async (nextPageStart: number | null = null) => {
@@ -588,7 +598,7 @@ export function usePurchaseNumbers() {
     }
 
     if (!isLoggedIn) {
-      toast.warning('Voce precisa estar logado para reservar numeros.', {
+      toast.warning('Voce precisa estar logado para comprar numeros.', {
         position: 'bottom-right',
         toastId: 'purchase-login-required',
       })
@@ -596,51 +606,65 @@ export function usePurchaseNumbers() {
       window.dispatchEvent(new Event(OPEN_AUTH_MODAL_EVENT))
       return
     }
+    setIsReserving(true)
 
-    if (reservationSeconds === null) {
-      setIsReserving(true)
+    try {
+      const callableResult = await callables.reserveNumbers({ numbers: selectedNumbers })
+      const payload = unwrapCallableData(callableResult.data as CallableEnvelope<ReserveNumbersResponse>)
+      const secondsFromNow = Math.max(Math.floor((payload.expiresAtMs - Date.now()) / 1000), 0)
 
-      try {
-        const callableResult = await callables.reserveNumbers({ numbers: selectedNumbers })
-        const payload = unwrapCallableData(callableResult.data as CallableEnvelope<ReserveNumbersResponse>)
-        const secondsFromNow = Math.max(Math.floor((payload.expiresAtMs - Date.now()) / 1000), 0)
-
-        if (secondsFromNow <= 0) {
-          setReservationSeconds(null)
-          setHasExpiredReservation(true)
-          toast.warning('Sua reserva expirou. Tente reservar novamente.', {
-            position: 'bottom-right',
-            toastId: 'reservation-expired',
-          })
-          return
-        }
-
-        setReservationSeconds(secondsFromNow)
-        setHasExpiredReservation(false)
-      } catch (error) {
-        toast.error(getReserveErrorMessage(error), {
+      if (secondsFromNow <= 0) {
+        setReservationSeconds(null)
+        setHasExpiredReservation(true)
+        toast.warning('Sua reserva expirou durante o processamento. Tente novamente.', {
           position: 'bottom-right',
+          toastId: 'reservation-expired',
         })
-      } finally {
-        setIsReserving(false)
+        return
       }
 
-      return
-    }
+      setReservationSeconds(secondsFromNow)
+      setHasExpiredReservation(false)
 
-    navigate('/checkout', {
-      state: {
-        amount: totalAmount,
-        quantity: selectedCount,
-        selectedNumbers,
-      },
-    })
+      navigate('/checkout', {
+        state: {
+          amount: totalAmount,
+          quantity: payload.numbers.length,
+          selectedNumbers: payload.numbers,
+        },
+      })
+    } catch (error) {
+      const errorMessage = getReserveErrorMessage(error)
+      const conflictedNumber = extractConflictedNumber(errorMessage)
+      const normalized = errorMessage.toLowerCase()
+
+      if (
+        conflictedNumber !== null
+        && (normalized.includes('nao esta mais disponivel') || normalized.includes('ja foi pago'))
+      ) {
+        setSelectedNumbers((currentSelection) =>
+          currentSelection.filter((number) => number !== conflictedNumber))
+        toast.warning(
+          `O numero ${conflictedNumber.toLocaleString('pt-BR')} foi reservado por outro usuario durante o processo. Selecione outro numero e tente novamente.`,
+          { position: 'bottom-right' },
+        )
+
+        void loadNumberWindow(pageStart)
+      } else {
+        toast.error(errorMessage, {
+          position: 'bottom-right',
+        })
+      }
+    } finally {
+      setIsReserving(false)
+    }
   }, [
     callables.reserveNumbers,
     canProceed,
     isLoggedIn,
+    loadNumberWindow,
     navigate,
-    reservationSeconds,
+    pageStart,
     selectedCount,
     selectedNumbers,
     totalAmount,

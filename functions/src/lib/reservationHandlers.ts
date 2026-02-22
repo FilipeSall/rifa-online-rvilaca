@@ -27,6 +27,10 @@ interface ReserveNumbersOutput {
   reservationSeconds: number
 }
 
+interface ReleaseReservationOutput {
+  releasedNumbers: number
+}
+
 function sanitizeReservationNumbers(value: unknown, rangeStart: number, rangeEnd: number): number[] {
   if (!Array.isArray(value)) {
     throw new HttpsError('invalid-argument', 'numbers deve ser uma lista')
@@ -212,5 +216,82 @@ export function createReserveNumbersHandler(db: Firestore) {
       expiresAtMs,
       reservationSeconds: Math.floor(RESERVATION_DURATION_MS / 1000),
     } satisfies ReserveNumbersOutput
+  }
+}
+
+export function createReleaseReservationHandler(db: Firestore) {
+  return async (request: { auth?: { uid?: string } | null }) => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Usuario precisa estar autenticado')
+    }
+
+    const uid = request.auth.uid
+    const campaignRef = db.collection('campaigns').doc(CAMPAIGN_DOC_ID)
+    const campaignSnapshot = await campaignRef.get()
+    const campaignData = campaignSnapshot.exists ? campaignSnapshot.data() : undefined
+    const campaignRange = readCampaignNumberRange(campaignData, CAMPAIGN_DOC_ID)
+    const reservationRef = db.collection('numberReservations').doc(uid)
+    const nowMs = Date.now()
+    let releasedNumbers = 0
+
+    await db.runTransaction(async (transaction) => {
+      const reservationSnapshot = await transaction.get(reservationRef)
+      if (!reservationSnapshot.exists) {
+        return
+      }
+
+      const reservedNumbers = readStoredReservationNumbers(
+        reservationSnapshot.get('numbers'),
+        campaignRange.start,
+        campaignRange.end,
+      )
+
+      if (reservedNumbers.length === 0) {
+        transaction.delete(reservationRef)
+        return
+      }
+
+      const numberStateRefs = new Map(
+        reservedNumbers.map((number) => [number, getNumberStateRef(db, CAMPAIGN_DOC_ID, number)]),
+      )
+      const numberStateSnapshots = await Promise.all(
+        reservedNumbers.map((number) => {
+          const ref = numberStateRefs.get(number)
+          return ref ? transaction.get(ref) : Promise.resolve(null)
+        }),
+      )
+
+      for (let index = 0; index < reservedNumbers.length; index += 1) {
+        const number = reservedNumbers[index]
+        const numberStateRef = numberStateRefs.get(number)
+        const numberStateSnapshot = numberStateSnapshots[index]
+
+        if (!numberStateRef) {
+          continue
+        }
+
+        const state = buildNumberStateView({
+          number,
+          nowMs,
+          numberStateData: numberStateSnapshot?.exists ? numberStateSnapshot.data() : null,
+        })
+
+        if (state.status === 'reservado' && state.reservedBy === uid) {
+          transaction.delete(numberStateRef)
+          releasedNumbers += 1
+        }
+      }
+
+      transaction.delete(reservationRef)
+    })
+
+    logger.info('releaseReservation succeeded', {
+      uid: maskUid(uid),
+      releasedNumbers,
+    })
+
+    return {
+      releasedNumbers,
+    } satisfies ReleaseReservationOutput
   }
 }

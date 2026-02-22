@@ -18,7 +18,10 @@ import {
   createPixWebhookHandler,
   createRequestWithdrawHandler,
 } from './lib/paymentHandlers.js'
-import { createReserveNumbersHandler } from './lib/reservationHandlers.js'
+import {
+  createReleaseReservationHandler,
+  createReserveNumbersHandler,
+} from './lib/reservationHandlers.js'
 
 initializeApp()
 
@@ -56,6 +59,8 @@ const horsePaySecrets = {
 export const upsertCampaignSettings = onCall(callableOptions, createUpsertCampaignSettingsHandler(db))
 
 export const reserveNumbers = onCall(callableOptions, createReserveNumbersHandler(db))
+
+export const releaseReservation = onCall(callableOptions, createReleaseReservationHandler(db))
 
 export const getNumberWindow = onCall(callableOptions, createGetNumberWindowHandler(db))
 

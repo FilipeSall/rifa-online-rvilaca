@@ -34,8 +34,6 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     couponFeedback,
     couponHint,
     unitPrice,
-    reservationSeconds,
-    hasExpiredReservation,
     subtotal,
     discountAmount,
     totalAmount,
@@ -102,8 +100,6 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
             couponCode={couponCode}
             couponFeedback={couponFeedback}
             couponHint={couponHint}
-            reservationSeconds={reservationSeconds}
-            hasExpiredReservation={hasExpiredReservation}
             canProceed={canProceed}
             isReserving={isReserving}
             isAutoSelecting={isAutoSelecting}

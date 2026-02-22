@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { doc, onSnapshot } from 'firebase/firestore'
-import { Link, useLocation } from 'react-router-dom'
+import { httpsCallable } from 'firebase/functions'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import PixCheckout from '../components/PixCheckout'
 import AnnouncementBar from '../components/home/AnnouncementBar'
 import Footer from '../components/home/Footer'
 import Header from '../components/home/Header'
-import { db } from '../lib/firebase'
+import { db, functions } from '../lib/firebase'
 import { useAuthStore } from '../stores/authStore'
 import { formatCurrency } from '../utils/purchaseNumbers'
 
@@ -44,10 +46,12 @@ function parseOptionalPhone(value: unknown) {
 
 export default function CheckoutPage() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { user, isLoggedIn, isAuthReady } = useAuthStore()
   const navigationState = (location.state || {}) as CheckoutNavigationState
   const [accountName, setAccountName] = useState('')
   const [accountPhone, setAccountPhone] = useState<string | null>(null)
+  const [isReturningToSelection, setIsReturningToSelection] = useState(false)
   const routeOrderId = useMemo(() => {
     const queryOrderId = new URLSearchParams(location.search).get('orderId')
     const fromQuery = parseOptionalText(queryOrderId)
@@ -71,6 +75,10 @@ export default function CheckoutPage() {
 
   const [payerName, setPayerName] = useState(user?.displayName?.trim() || '')
   const [amountInput, setAmountInput] = useState(routeAmount > 0 ? routeAmount.toFixed(2) : '')
+  const releaseReservation = useMemo(
+    () => httpsCallable<Record<string, never>, unknown>(functions, 'releaseReservation'),
+    [],
+  )
 
   useEffect(() => {
     if (!isAuthReady || !user?.uid) {
@@ -129,6 +137,27 @@ export default function CheckoutPage() {
 
   const selectedNumbers = navigationState.selectedNumbers || []
   const selectedCount = navigationState.quantity || selectedNumbers.length || 0
+  const handleBackToSelection = useCallback(async () => {
+    if (isReturningToSelection) {
+      return
+    }
+
+    setIsReturningToSelection(true)
+
+    if (isLoggedIn) {
+      try {
+        await releaseReservation({})
+      } catch (error) {
+        console.warn('Failed to release reservation on checkout back:', error)
+        toast.warning('Nao foi possivel liberar sua reserva automaticamente agora.', {
+          position: 'bottom-right',
+          toastId: 'checkout-release-reservation-warning',
+        })
+      }
+    }
+
+    navigate('/#comprar-numeros')
+  }, [isLoggedIn, isReturningToSelection, navigate, releaseReservation])
 
   return (
     <div className="selection:bg-gold selection:text-black overflow-x-hidden bg-luxury-bg font-display text-text-main">
@@ -220,13 +249,19 @@ export default function CheckoutPage() {
                     </div>
                   ) : null}
 
-                  <Link
-                    className="mt-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gold hover:text-gold-light"
-                    to="/#comprar-numeros"
+                  <button
+                    className="mt-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gold hover:text-gold-light disabled:cursor-not-allowed disabled:opacity-70"
+                    type="button"
+                    onClick={handleBackToSelection}
+                    disabled={isReturningToSelection}
                   >
-                    <span className="material-symbols-outlined text-sm">arrow_back</span>
+                    {isReturningToSelection ? (
+                      <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-gold border-t-transparent" />
+                    ) : (
+                      <span className="material-symbols-outlined text-sm">arrow_back</span>
+                    )}
                     Voltar para selecao
-                  </Link>
+                  </button>
                 </div>
               </aside>
 

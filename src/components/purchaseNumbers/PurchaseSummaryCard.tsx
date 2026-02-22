@@ -1,6 +1,6 @@
 import { MIN_QUANTITY } from '../../const/purchaseNumbers'
 import type { CouponFeedback } from '../../types/purchaseNumbers'
-import { formatCurrency, formatTimer } from '../../utils/purchaseNumbers'
+import { formatCurrency } from '../../utils/purchaseNumbers'
 
 type PurchaseSummaryCardProps = {
   selectedCount: number
@@ -12,8 +12,6 @@ type PurchaseSummaryCardProps = {
   couponCode: string
   couponFeedback: CouponFeedback | null
   couponHint: string
-  reservationSeconds: number | null
-  hasExpiredReservation: boolean
   canProceed: boolean
   isReserving: boolean
   isAutoSelecting: boolean
@@ -33,8 +31,6 @@ export default function PurchaseSummaryCard({
   couponCode,
   couponFeedback,
   couponHint,
-  reservationSeconds,
-  hasExpiredReservation,
   canProceed,
   isReserving,
   isAutoSelecting,
@@ -103,22 +99,6 @@ export default function PurchaseSummaryCard({
         </p>
       </div>
 
-      {reservationSeconds !== null ? (
-        <div className="mt-4 rounded-lg border border-amber-300/30 bg-amber-500/10 p-4">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-amber-200">Reserva ativa</p>
-          <p className="mt-2 text-xl font-black text-white">{formatTimer(reservationSeconds)}</p>
-          <p className="mt-1 text-xs text-amber-100/80">
-            Seus numeros ficam bloqueados por tempo limitado ate finalizar o PIX.
-          </p>
-        </div>
-      ) : null}
-
-      {hasExpiredReservation ? (
-        <div className="mt-4 rounded-lg border border-red-300/30 bg-red-500/10 p-3 text-xs text-red-100">
-          Sua reserva expirou. Reserve novamente para garantir os numeros.
-        </div>
-      ) : null}
-
       <button
         className="mt-5 h-12 w-full rounded-xl bg-green-500 px-4 text-sm font-black uppercase tracking-widest text-white transition-all hover:bg-green-400 disabled:cursor-not-allowed disabled:opacity-40"
         type="button"
@@ -126,12 +106,10 @@ export default function PurchaseSummaryCard({
         onClick={onProceed}
       >
         {isReserving
-          ? 'Reservando...'
+          ? 'Processando compra...'
           : isAutoSelecting
             ? 'Selecionando numeros...'
-            : reservationSeconds === null
-              ? 'Reservar por 10 min'
-              : 'Ir para pagamento PIX'}
+            : 'Comprar agora'}
       </button>
 
       <p className="mt-3 text-[11px] text-gray-500">
