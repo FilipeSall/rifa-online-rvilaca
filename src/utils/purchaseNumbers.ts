@@ -25,7 +25,7 @@ export function pickRandomNumbers(pool: number[], quantity: number) {
   return numbers.slice(0, quantity).sort((a, b) => a - b)
 }
 
-export function getSafeQuantity(value: number, maxAvailable: number) {
-  const nextValue = Number.isFinite(value) ? value : MIN_QUANTITY
-  return Math.max(MIN_QUANTITY, Math.min(nextValue, MAX_QUANTITY, maxAvailable))
+export function getSafeQuantity(value: number, maxAvailable: number, minQuantity = MIN_QUANTITY) {
+  const nextValue = Number.isFinite(value) ? value : minQuantity
+  return Math.max(minQuantity, Math.min(nextValue, MAX_QUANTITY, maxAvailable))
 }

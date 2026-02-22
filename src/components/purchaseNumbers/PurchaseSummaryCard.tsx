@@ -1,9 +1,9 @@
-import { MIN_QUANTITY } from '../../const/purchaseNumbers'
 import type { CouponFeedback } from '../../types/purchaseNumbers'
 import { formatCurrency } from '../../utils/purchaseNumbers'
 
 type PurchaseSummaryCardProps = {
   selectedCount: number
+  minQuantity: number
   unitPrice: number
   subtotal: number
   discountAmount: number
@@ -23,6 +23,7 @@ type PurchaseSummaryCardProps = {
 
 export default function PurchaseSummaryCard({
   selectedCount,
+  minQuantity,
   unitPrice,
   subtotal,
   discountAmount,
@@ -95,7 +96,7 @@ export default function PurchaseSummaryCard({
           <span className="text-2xl font-black text-gold">{formatCurrency(totalAmount)}</span>
         </div>
         <p className="mt-2 text-xs text-gray-400">
-          Compra minima de {MIN_QUANTITY} cotas. Numeros confirmados apos pagamento aprovado.
+          Compra minima de {minQuantity} cotas. Numeros confirmados apos pagamento aprovado.
         </p>
       </div>
 

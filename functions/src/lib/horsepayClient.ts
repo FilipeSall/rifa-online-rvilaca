@@ -50,6 +50,12 @@ export function toHttpsError(error: unknown, fallbackMessage: string): HttpsErro
     if (status === 429) {
       return new HttpsError('resource-exhausted', message)
     }
+
+    if (status >= 500) {
+      return new HttpsError('internal', `[HorsePay ${status}] ${message}`)
+    }
+
+    return new HttpsError('internal', message)
   }
 
   return new HttpsError('internal', fallbackMessage)

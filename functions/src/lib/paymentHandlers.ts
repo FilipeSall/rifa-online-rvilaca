@@ -9,13 +9,12 @@ import {
   DEPOSIT_RETRY_DELAY_MS,
   HORSEPAY_BASE_URL,
   MAX_DEPOSIT_ORDER_ATTEMPTS,
-  MIN_PURCHASE_QUANTITY,
   REGION,
   type OrderStatus,
   type OrderType,
   type PixType,
 } from './constants.js'
-import { readCampaignPricePerCota } from './campaignHandlers.js'
+import { readCampaignCoupons, readCampaignMinPurchaseQuantity, readCampaignPricePerCota } from './campaignHandlers.js'
 import {
   buildNumberStateView,
   buildPaidNumberStateData,
@@ -49,6 +48,7 @@ interface CreatePixDepositInput {
   amount?: number
   payerName: string
   phone?: string
+  couponCode?: string
 }
 
 interface CreatePixDepositOutput {
@@ -56,6 +56,13 @@ interface CreatePixDepositOutput {
   copyPaste: string | null
   qrCode: string | null
   status: 'pending' | 'failed'
+}
+
+type CouponResolution = {
+  code: string
+  discountType: 'percent' | 'fixed'
+  discountValue: number
+  discountAmount: number
 }
 
 interface RequestWithdrawInput {
@@ -251,6 +258,57 @@ function inferOrderType(payload: unknown, fallback: OrderType = 'deposit'): Orde
   return fallback
 }
 
+function computeDiscountAmount(
+  subtotal: number,
+  discountType: 'percent' | 'fixed',
+  discountValue: number,
+) {
+  if (discountType === 'percent') {
+    return Number(Math.min(subtotal, subtotal * (discountValue / 100)).toFixed(2))
+  }
+
+  return Number(Math.min(subtotal, discountValue).toFixed(2))
+}
+
+function resolveCoupon(params: {
+  rawCouponCode: unknown
+  campaignCoupons: ReturnType<typeof readCampaignCoupons>
+  subtotal: number
+}): CouponResolution | null {
+  const couponCode = sanitizeString(params.rawCouponCode)
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, '')
+    .slice(0, 24)
+  if (!couponCode) {
+    return null
+  }
+
+  const matchedCoupon = params.campaignCoupons.find(
+    (coupon) => coupon.code === couponCode && coupon.active,
+  )
+
+  if (!matchedCoupon) {
+    throw new HttpsError('invalid-argument', 'Cupom invalido ou inativo para esta campanha.')
+  }
+
+  const discountAmount = computeDiscountAmount(
+    params.subtotal,
+    matchedCoupon.discountType,
+    matchedCoupon.discountValue,
+  )
+
+  if (discountAmount <= 0) {
+    throw new HttpsError('invalid-argument', 'Cupom sem efeito para o valor atual da compra.')
+  }
+
+  return {
+    code: matchedCoupon.code,
+    discountType: matchedCoupon.discountType,
+    discountValue: matchedCoupon.discountValue,
+    discountAmount,
+  }
+}
+
 async function processWebhookOrder(
   db: Firestore,
   params: {
@@ -261,6 +319,12 @@ async function processWebhookOrder(
   },
 ): Promise<ProcessWebhookOrderResult> {
   const { externalId, payload, copyPaste, qrCode } = params
+  logger.info('processWebhookOrder started', {
+    externalId,
+    hasCopyPaste: Boolean(copyPaste),
+    hasQrCode: Boolean(qrCode),
+    topLevelKeys: getTopLevelKeys(payload),
+  })
   const orderRef = db.collection('orders').doc(externalId)
   const eventId = buildWebhookEventId(externalId, payload)
   const eventRef = orderRef.collection('events').doc(eventId)
@@ -361,6 +425,15 @@ async function processWebhookOrder(
     }
   })
 
+  logger.info('processWebhookOrder succeeded', {
+    externalId: result.externalId,
+    eventId: result.eventId,
+    status: result.status,
+    orderType: result.orderType,
+    shouldApplyPaidDeposit: result.shouldApplyPaidDeposit,
+    reservedNumbersCount: result.reservedNumbers.length,
+  })
+
   return result
 }
 
@@ -374,6 +447,13 @@ async function runPaidDepositBusinessLogic(
     reservedNumbers: number[]
   },
 ) {
+  logger.info('runPaidDepositBusinessLogic started', {
+    externalId: order.externalId,
+    campaignId: order.campaignId,
+    userId: order.userId ? maskUid(order.userId) : null,
+    reservedNumbersCount: order.reservedNumbers.length,
+    amount: sanitizeOptionalAmount(order.amount),
+  })
   const paymentRef = db.collection('payments').doc(order.externalId)
   const salesLedgerRef = db.collection('salesLedger').doc(order.externalId)
   const metricsSummaryRef = db.collection('metrics').doc('sales_summary')
@@ -511,6 +591,12 @@ async function runPaidDepositBusinessLogic(
       transaction.delete(reservationRef)
     }
   })
+
+  logger.info('runPaidDepositBusinessLogic succeeded', {
+    externalId: order.externalId,
+    reservedNumbersCount: order.reservedNumbers.length,
+    amount: normalizedAmount,
+  })
 }
 
 export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretReaders) {
@@ -538,6 +624,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
       const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
       const campaignData = campaignSnapshot.exists ? campaignSnapshot.data() : undefined
       const campaignRange = readCampaignNumberRange(campaignData, CAMPAIGN_DOC_ID)
+      const minPurchaseQuantity = readCampaignMinPurchaseQuantity(campaignData)
       const reservationNumbers = readStoredReservationNumbers(
         reservationSnapshot.get('numbers'),
         campaignRange.start,
@@ -545,12 +632,27 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
       )
       const reservationExpiresAtMs = readTimestampMillis(reservationSnapshot.get('expiresAt'))
       const unitPriceAtCheckout = readCampaignPricePerCota(campaignData)
-      const expectedAmount = Number((reservationNumbers.length * unitPriceAtCheckout).toFixed(2))
+      const subtotalAmount = Number((reservationNumbers.length * unitPriceAtCheckout).toFixed(2))
+      const campaignCoupons = readCampaignCoupons(campaignData)
+      const coupon = resolveCoupon({
+        rawCouponCode: payload.couponCode,
+        campaignCoupons,
+        subtotal: subtotalAmount,
+      })
+      const discountAmount = coupon ? coupon.discountAmount : 0
+      const expectedAmount = Number(Math.max(subtotalAmount - discountAmount, 0).toFixed(2))
 
-      if (reservationNumbers.length < MIN_PURCHASE_QUANTITY) {
+      if (expectedAmount <= 0) {
+        throw new HttpsError(
+          'invalid-argument',
+          'Valor final do pedido invalido. Ajuste o cupom ou a quantidade para gerar o PIX.',
+        )
+      }
+
+      if (reservationNumbers.length < minPurchaseQuantity) {
         throw new HttpsError(
           'failed-precondition',
-          'Sua reserva nao possui numeros suficientes para finalizar o pagamento.',
+          `Sua reserva nao possui numeros suficientes. Minimo da campanha: ${minPurchaseQuantity}.`,
         )
       }
 
@@ -585,6 +687,10 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         uid: maskUid(request.auth.uid),
         requestedAmount,
         expectedAmount,
+        subtotalAmount,
+        discountAmount,
+        couponCode: coupon?.code || null,
+        couponDiscountType: coupon?.discountType || null,
         payerNameMasked: maskName(payerName),
         phoneMasked: maskPhoneNumber(phone),
         hasPhone: Boolean(phone),
@@ -592,6 +698,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         hasCallbackUrl: Boolean(callbackUrl),
         maxAttempts: MAX_DEPOSIT_ORDER_ATTEMPTS,
         reservationQuantity: reservationNumbers.length,
+        minPurchaseQuantity,
         unitPriceAtCheckout,
         hasAmountMismatch,
       })
@@ -697,10 +804,16 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
               type: 'deposit',
               amount: expectedAmount,
               expectedAmount,
+              subtotalAmount,
+              discountAmount,
               requestedAmount,
               unitPriceAtCheckout,
+              minPurchaseQuantity,
               quantity: reservationNumbers.length,
               reservedNumbers: reservationNumbers,
+              appliedCouponCode: coupon?.code || null,
+              appliedCouponDiscountType: coupon?.discountType || null,
+              appliedCouponDiscountValue: coupon?.discountValue || null,
               reservationExpiresAt: Timestamp.fromMillis(reservationExpiresAtMs),
               status: 'failed',
               failureReason: 'missing_pix_payload',
@@ -734,11 +847,17 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
           externalId,
           type: 'deposit',
           amount: expectedAmount,
+          subtotalAmount,
+          discountAmount,
           expectedAmount,
           requestedAmount,
           unitPriceAtCheckout,
+          minPurchaseQuantity,
           quantity: reservationNumbers.length,
           reservedNumbers: reservationNumbers,
+          appliedCouponCode: coupon?.code || null,
+          appliedCouponDiscountType: coupon?.discountType || null,
+          appliedCouponDiscountValue: coupon?.discountValue || null,
           reservationExpiresAt: Timestamp.fromMillis(reservationExpiresAtMs),
           status: persistedStatus,
           pixCopyPaste: copyPaste,
@@ -756,7 +875,18 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
           status: persistedStatus,
           hasCopyPaste: Boolean(copyPaste),
           hasQrCode: Boolean(qrCode),
+          expectedAmount,
+          subtotalAmount,
+          discountAmount,
+          appliedCouponCode: coupon?.code || null,
           clientReferenceId,
+        })
+
+        logger.info('createPixDeposit response ready', {
+          externalId,
+          status: persistedStatus,
+          hasCopyPaste: Boolean(copyPaste),
+          hasQrCode: Boolean(qrCode),
         })
 
         return {
@@ -771,6 +901,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
     } catch (error) {
       logger.error('createPixDeposit failed', {
         uid: request.auth?.uid ? maskUid(request.auth.uid) : null,
+        rawCouponCode: sanitizeString((request.data as Record<string, unknown> | null)?.couponCode),
         error: String(error),
       })
       throw toHttpsError(error, 'Falha ao criar deposito PIX')
@@ -903,6 +1034,7 @@ export function createGetBalanceHandler(secrets: HorsePaySecretReaders) {
 export function createPixWebhookHandler(db: Firestore, secrets: HorsePaySecretReaders) {
   return async (request: WebhookRequest, response: WebhookResponse) => {
     if (request.method !== 'POST') {
+      logger.info('pixWebhook ignored non-post request', { method: request.method })
       response.status(200).json({ ok: true })
       return
     }
@@ -1016,6 +1148,10 @@ export function createPixWebhookHandler(db: Firestore, secrets: HorsePaySecretRe
       })
     }
 
+    logger.info('pixWebhook response sent', {
+      ok: true,
+      externalId: webhookExternalId || null,
+    })
     response.status(200).json({ ok: true })
   }
 }

@@ -1,7 +1,22 @@
+import { useMemo, useState } from 'react'
 import { CAMPAIGN_STATUS_OPTIONS, DEFAULT_BONUS_PRIZE, DEFAULT_CAMPAIGN_TITLE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../../const/campaign'
-import type { CampaignStatus } from '../../../types/campaign'
+import type { CampaignCoupon, CampaignCouponDiscountType, CampaignStatus } from '../../../types/campaign'
 import { useCampaignForm } from '../hooks/useCampaignForm'
 import { formatCurrency, getCampaignStatusLabel } from '../utils/formatters'
+
+function generateCouponCode() {
+  const seed = Math.random().toString(36).slice(2, 8).toUpperCase()
+  const suffix = String(Date.now()).slice(-4)
+  return `CUPOM-${seed}-${suffix}`
+}
+
+function formatCouponValue(coupon: CampaignCoupon) {
+  if (coupon.discountType === 'percent') {
+    return `${coupon.discountValue.toFixed(2).replace(/\.00$/, '')}%`
+  }
+
+  return formatCurrency(coupon.discountValue)
+}
 
 export default function CampaignTab() {
   const {
@@ -10,14 +25,17 @@ export default function CampaignTab() {
     isSaving,
     title,
     pricePerCotaInput,
+    minPurchaseQuantityInput,
     mainPrize,
     secondPrize,
     bonusPrize,
     status,
     startsAt,
     endsAt,
+    coupons,
     setTitle,
     setPricePerCotaInput,
+    setMinPurchaseQuantityInput,
     setMainPrize,
     setSecondPrize,
     setBonusPrize,
@@ -25,7 +43,78 @@ export default function CampaignTab() {
     setStartsAt,
     setEndsAt,
     handleSaveCampaignSettings,
+    persistCoupons,
   } = useCampaignForm()
+
+  const [isCouponCreatorOpen, setIsCouponCreatorOpen] = useState(false)
+  const [couponCodeMode, setCouponCodeMode] = useState<'manual' | 'auto'>('auto')
+  const [couponCodeInput, setCouponCodeInput] = useState(generateCouponCode())
+  const [couponDiscountType, setCouponDiscountType] = useState<CampaignCouponDiscountType>('percent')
+  const [couponValueInput, setCouponValueInput] = useState('10')
+
+  const activeCoupons = useMemo(() => coupons.filter((item) => item.active).length, [coupons])
+
+  const handleGenerateCouponCode = () => {
+    setCouponCodeInput(generateCouponCode())
+  }
+
+  const handleAddCoupon = async () => {
+    const normalizedCode = couponCodeInput.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 24)
+    const parsedValue = Number(couponValueInput.replace(',', '.'))
+
+    if (!normalizedCode) {
+      return
+    }
+
+    if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+      return
+    }
+
+    const normalizedValue = couponDiscountType === 'percent'
+      ? Number(Math.min(parsedValue, 100).toFixed(2))
+      : Number(parsedValue.toFixed(2))
+
+    if (normalizedValue <= 0) {
+      return
+    }
+
+    const nextCoupon: CampaignCoupon = {
+      code: normalizedCode,
+      discountType: couponDiscountType,
+      discountValue: normalizedValue,
+      active: true,
+      createdAt: new Date().toISOString(),
+    }
+
+    const deduped = coupons.filter((item) => item.code !== nextCoupon.code)
+    const nextCoupons = [nextCoupon, ...deduped].slice(0, 100)
+    const saved = await persistCoupons(nextCoupons)
+    if (!saved) {
+      return
+    }
+
+    setCouponValueInput(couponDiscountType === 'percent' ? '10' : '5')
+    if (couponCodeMode === 'auto') {
+      handleGenerateCouponCode()
+    }
+  }
+
+  const handleToggleCoupon = async (code: string) => {
+    const nextCoupons = coupons.map((item) => (
+      item.code === code
+        ? {
+            ...item,
+            active: !item.active,
+          }
+        : item
+    ))
+    await persistCoupons(nextCoupons)
+  }
+
+  const handleRemoveCoupon = async (code: string) => {
+    const nextCoupons = coupons.filter((item) => item.code !== code)
+    await persistCoupons(nextCoupons)
+  }
 
   return (
     <section className="space-y-6">
@@ -35,9 +124,9 @@ export default function CampaignTab() {
         <div className="relative z-10 grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr] lg:items-end">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gold">Central da Campanha</p>
-            <h3 className="mt-2 font-luxury text-3xl font-bold text-white">Edição visual e comercial em tempo real</h3>
+            <h3 className="mt-2 font-luxury text-3xl font-bold text-white">Operacao comercial com controle total</h3>
             <p className="mt-3 max-w-2xl text-sm text-gray-300">
-              Atualize nome, premiação e preço por cota em um único fluxo. Tudo que você salvar já vira referência para o restante do projeto.
+              Configure preço, compra mínima e cupons da campanha em tempo real.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -48,6 +137,14 @@ export default function CampaignTab() {
             <div className="rounded-xl border border-white/10 bg-black/40 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Status</p>
               <p className="mt-1 text-lg font-black text-emerald-300">{getCampaignStatusLabel(status)}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/40 px-4 py-3">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Compra mínima</p>
+              <p className="mt-1 text-lg font-black text-white">{campaign.minPurchaseQuantity}</p>
+            </div>
+            <div className="rounded-xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-3">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200">Cupons ativos</p>
+              <p className="mt-1 text-lg font-black text-cyan-100">{activeCoupons}</p>
             </div>
           </div>
         </div>
@@ -178,18 +275,34 @@ export default function CampaignTab() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-              <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-ticket-price">
-                Preço por cota (R$)
-              </label>
-              <input
-                id="campaign-ticket-price"
-                className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-gold outline-none transition-colors focus:border-gold/60"
-                inputMode="decimal"
-                type="text"
-                value={pricePerCotaInput}
-                onChange={(event) => setPricePerCotaInput(event.target.value)}
-              />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-ticket-price">
+                  Preço por cota (R$)
+                </label>
+                <input
+                  id="campaign-ticket-price"
+                  className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-gold outline-none transition-colors focus:border-gold/60"
+                  inputMode="decimal"
+                  type="text"
+                  value={pricePerCotaInput}
+                  onChange={(event) => setPricePerCotaInput(event.target.value)}
+                />
+              </div>
+
+              <div className="rounded-xl border border-cyan-300/25 bg-cyan-500/10 px-4 py-3">
+                <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-min-purchase">
+                  Compra mínima (cotas)
+                </label>
+                <input
+                  id="campaign-min-purchase"
+                  className="mt-2 h-11 w-full rounded-md border border-cyan-200/30 bg-black/25 px-3 text-sm font-semibold text-cyan-50 outline-none transition-colors focus:border-cyan-200/80"
+                  inputMode="numeric"
+                  type="text"
+                  value={minPurchaseQuantityInput}
+                  onChange={(event) => setMinPurchaseQuantityInput(event.target.value.replace(/[^0-9]/g, ''))}
+                />
+              </div>
             </div>
           </div>
 
@@ -205,6 +318,179 @@ export default function CampaignTab() {
           </div>
         </article>
       </div>
+
+      <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-luxury-card p-5">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(34,211,238,0.18),transparent_38%)]" />
+        <div className="relative z-10">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200">Cupons da campanha</p>
+              <h4 className="mt-1 text-xl font-bold text-white">Descontos com controle fino</h4>
+            </div>
+            <button
+              className="inline-flex h-10 items-center rounded-lg border border-cyan-200/35 bg-cyan-500/15 px-4 text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-100 transition hover:bg-cyan-500/25"
+              type="button"
+              onClick={() => setIsCouponCreatorOpen((current) => !current)}
+            >
+              {isCouponCreatorOpen ? 'Fechar criador' : 'Novo cupom'}
+            </button>
+          </div>
+
+          {isCouponCreatorOpen ? (
+            <div className="mt-4 grid grid-cols-1 gap-4 rounded-2xl border border-cyan-200/25 bg-black/25 p-4 lg:grid-cols-12">
+              <div className="space-y-2 lg:col-span-3">
+                <p className="text-[10px] uppercase tracking-[0.15em] text-gray-400">Tipo de desconto</p>
+                <div className="inline-flex rounded-lg border border-white/10 bg-black/35 p-1">
+                  <button
+                    type="button"
+                    className={`rounded-md px-3 py-2 text-xs font-bold ${couponDiscountType === 'percent' ? 'bg-cyan-300 text-black' : 'text-gray-300'}`}
+                    onClick={() => setCouponDiscountType('percent')}
+                  >
+                    Percentual
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-md px-3 py-2 text-xs font-bold ${couponDiscountType === 'fixed' ? 'bg-cyan-300 text-black' : 'text-gray-300'}`}
+                    onClick={() => setCouponDiscountType('fixed')}
+                  >
+                    Valor fixo
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2 lg:col-span-3">
+                <p className="text-[10px] uppercase tracking-[0.15em] text-gray-400">Codigo</p>
+                <div className="inline-flex rounded-lg border border-white/10 bg-black/35 p-1">
+                  <button
+                    type="button"
+                    className={`rounded-md px-3 py-2 text-xs font-bold ${couponCodeMode === 'auto' ? 'bg-gold text-black' : 'text-gray-300'}`}
+                    onClick={() => {
+                      setCouponCodeMode('auto')
+                      if (!couponCodeInput.trim()) {
+                        setCouponCodeInput(generateCouponCode())
+                      }
+                    }}
+                  >
+                    Automatico
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-md px-3 py-2 text-xs font-bold ${couponCodeMode === 'manual' ? 'bg-gold text-black' : 'text-gray-300'}`}
+                    onClick={() => setCouponCodeMode('manual')}
+                  >
+                    Manual
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2 lg:col-span-3">
+                <label className="text-[10px] uppercase tracking-[0.15em] text-gray-400" htmlFor="coupon-discount-value">
+                  Valor do desconto
+                </label>
+                <div className="relative">
+                  {couponDiscountType === 'fixed' ? (
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-cyan-100/90">
+                      R$
+                    </span>
+                  ) : null}
+                  <input
+                    id="coupon-discount-value"
+                    className={`h-11 w-full rounded-md border border-white/10 bg-black/40 text-sm font-semibold text-white outline-none focus:border-cyan-200/60 ${
+                      couponDiscountType === 'fixed' ? 'pl-11 pr-3' : 'pl-3 pr-10'
+                    }`}
+                    inputMode="decimal"
+                    type="text"
+                    value={couponValueInput}
+                    onChange={(event) => setCouponValueInput(event.target.value)}
+                    placeholder={couponDiscountType === 'percent' ? 'Ex: 10' : 'Ex: 5,00'}
+                  />
+                  {couponDiscountType === 'percent' ? (
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-cyan-100/90">
+                      %
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="space-y-2 lg:col-span-3">
+                <label className="text-[10px] uppercase tracking-[0.15em] text-gray-400" htmlFor="coupon-code-input">
+                  Codigo do cupom
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="coupon-code-input"
+                    className="h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold uppercase tracking-widest text-white outline-none focus:border-gold/60"
+                    type="text"
+                    value={couponCodeInput}
+                    onChange={(event) => setCouponCodeInput(event.target.value)}
+                    readOnly={couponCodeMode === 'auto'}
+                  />
+                  {couponCodeMode === 'auto' ? (
+                    <button
+                      type="button"
+                      className="h-11 rounded-md border border-gold/30 bg-gold/10 px-3 text-xs font-bold uppercase tracking-wide text-gold"
+                      onClick={handleGenerateCouponCode}
+                    >
+                      Gerar
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="lg:col-span-12">
+                <button
+                  className="inline-flex h-11 items-center rounded-lg bg-cyan-300 px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition hover:brightness-95"
+                  type="button"
+                  onClick={handleAddCoupon}
+                >
+                  Adicionar cupom
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {coupons.length === 0 ? (
+              <p className="rounded-xl border border-white/10 bg-black/30 px-4 py-5 text-sm text-gray-400 lg:col-span-2">
+                Nenhum cupom cadastrado para esta campanha.
+              </p>
+            ) : null}
+
+            {coupons.map((coupon) => (
+              <div key={coupon.code} className="rounded-xl border border-white/10 bg-black/30 px-4 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Codigo</p>
+                    <p className="mt-1 font-mono text-sm font-bold tracking-wider text-white">{coupon.code}</p>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${coupon.active ? 'border border-emerald-400/30 bg-emerald-500/15 text-emerald-200' : 'border border-gray-500/40 bg-gray-600/15 text-gray-300'}`}>
+                    {coupon.active ? 'Ativo' : 'Inativo'}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm text-gray-300">
+                  Desconto: <span className="font-black text-cyan-100">{formatCouponValue(coupon)}</span>
+                </p>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="h-9 rounded-md border border-emerald-400/35 bg-emerald-500/10 px-3 text-[11px] font-bold uppercase tracking-wider text-emerald-200"
+                    onClick={() => handleToggleCoupon(coupon.code)}
+                  >
+                    {coupon.active ? 'Desativar' : 'Ativar'}
+                  </button>
+                  <button
+                    type="button"
+                    className="h-9 rounded-md border border-red-400/35 bg-red-500/10 px-3 text-[11px] font-bold uppercase tracking-wider text-red-200"
+                    onClick={() => handleRemoveCoupon(coupon.code)}
+                  >
+                    Remover
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </article>
     </section>
   )
 }

@@ -5,6 +5,7 @@ import {
   CAMPAIGN_STATUS_OPTIONS,
   CAMPAIGN_DOC_ID,
   DEFAULT_BONUS_PRIZE,
+  DEFAULT_MIN_PURCHASE_QUANTITY,
   DEFAULT_CAMPAIGN_STATUS,
   DEFAULT_CAMPAIGN_TITLE,
   DEFAULT_MAIN_PRIZE,
@@ -12,7 +13,14 @@ import {
   DEFAULT_TICKET_PRICE,
 } from '../const/campaign'
 import { db, functions } from '../lib/firebase'
-import type { CampaignSettings, CampaignStatus, UpsertCampaignSettingsInput, UpsertCampaignSettingsOutput } from '../types/campaign'
+import type {
+  CampaignCoupon,
+  CampaignCouponDiscountType,
+  CampaignSettings,
+  CampaignStatus,
+  UpsertCampaignSettingsInput,
+  UpsertCampaignSettingsOutput,
+} from '../types/campaign'
 
 type CallableEnvelope<T> = T | { result?: T }
 
@@ -54,6 +62,15 @@ function sanitizePricePerCota(value: unknown) {
   return Number(numeric.toFixed(2))
 }
 
+function sanitizeMinPurchaseQuantity(value: unknown) {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return DEFAULT_MIN_PURCHASE_QUANTITY
+  }
+
+  return Math.max(1, Math.min(parsed, 300))
+}
+
 function sanitizeCampaignStatus(value: unknown): CampaignStatus {
   if (typeof value !== 'string') {
     return DEFAULT_CAMPAIGN_STATUS
@@ -85,6 +102,77 @@ function sanitizeCampaignDate(value: unknown) {
   return normalized
 }
 
+function sanitizeCouponDiscountType(value: unknown): CampaignCouponDiscountType {
+  return value === 'fixed' ? 'fixed' : 'percent'
+}
+
+function sanitizeCouponCode(value: unknown) {
+  const normalized = typeof value === 'string' ? value.trim().toUpperCase() : ''
+  if (!normalized) {
+    return ''
+  }
+
+  return normalized.replace(/[^A-Z0-9_-]/g, '').slice(0, 24)
+}
+
+function sanitizeCouponValue(value: unknown, discountType: CampaignCouponDiscountType) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0
+  }
+
+  if (discountType === 'percent') {
+    return Number(Math.min(parsed, 100).toFixed(2))
+  }
+
+  return Number(parsed.toFixed(2))
+}
+
+function sanitizeCouponCreatedAt(value: unknown) {
+  if (typeof value === 'string' && value.trim()) {
+    return value
+  }
+
+  return new Date().toISOString()
+}
+
+function sanitizeCoupons(value: unknown): CampaignCoupon[] {
+  const items = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? Object.values(value as Record<string, unknown>)
+      : []
+
+  if (items.length === 0) {
+    return []
+  }
+
+  const deduplicated = new Map<string, CampaignCoupon>()
+
+  for (const rawItem of items) {
+    const item = rawItem && typeof rawItem === 'object' ? (rawItem as Record<string, unknown>) : {}
+    const discountType = sanitizeCouponDiscountType(item.discountType)
+    const code = sanitizeCouponCode(item.code)
+    const discountValue = sanitizeCouponValue(item.discountValue, discountType)
+    const active = item.active !== false
+    const createdAt = sanitizeCouponCreatedAt(item.createdAt)
+
+    if (!code || discountValue <= 0) {
+      continue
+    }
+
+    deduplicated.set(code, {
+      code,
+      discountType,
+      discountValue,
+      active,
+      createdAt,
+    })
+  }
+
+  return Array.from(deduplicated.values()).slice(0, 100)
+}
+
 function mapSnapshotToSettings(raw: unknown): CampaignSettings {
   const payload = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
 
@@ -92,12 +180,14 @@ function mapSnapshotToSettings(raw: unknown): CampaignSettings {
     id: CAMPAIGN_DOC_ID,
     title: sanitizeCampaignTitle(payload.title ?? payload.name),
     pricePerCota: sanitizePricePerCota(payload.pricePerCota),
+    minPurchaseQuantity: sanitizeMinPurchaseQuantity(payload.minPurchaseQuantity),
     mainPrize: sanitizePrizeText(payload.mainPrize, DEFAULT_MAIN_PRIZE),
     secondPrize: sanitizePrizeText(payload.secondPrize, DEFAULT_SECOND_PRIZE),
     bonusPrize: sanitizePrizeText(payload.bonusPrize, DEFAULT_BONUS_PRIZE),
     status: sanitizeCampaignStatus(payload.status),
     startsAt: sanitizeCampaignDate(payload.startsAt),
     endsAt: sanitizeCampaignDate(payload.endsAt),
+    coupons: sanitizeCoupons(payload.coupons),
   }
 }
 
@@ -106,12 +196,14 @@ export function useCampaignSettings() {
     id: CAMPAIGN_DOC_ID,
     title: DEFAULT_CAMPAIGN_TITLE,
     pricePerCota: DEFAULT_TICKET_PRICE,
+    minPurchaseQuantity: DEFAULT_MIN_PURCHASE_QUANTITY,
     mainPrize: DEFAULT_MAIN_PRIZE,
     secondPrize: DEFAULT_SECOND_PRIZE,
     bonusPrize: DEFAULT_BONUS_PRIZE,
     status: DEFAULT_CAMPAIGN_STATUS,
     startsAt: null,
     endsAt: null,
+    coupons: [],
   })
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -136,12 +228,14 @@ export function useCampaignSettings() {
             id: CAMPAIGN_DOC_ID,
             title: DEFAULT_CAMPAIGN_TITLE,
             pricePerCota: DEFAULT_TICKET_PRICE,
+            minPurchaseQuantity: DEFAULT_MIN_PURCHASE_QUANTITY,
             mainPrize: DEFAULT_MAIN_PRIZE,
             secondPrize: DEFAULT_SECOND_PRIZE,
             bonusPrize: DEFAULT_BONUS_PRIZE,
             status: DEFAULT_CAMPAIGN_STATUS,
             startsAt: null,
             endsAt: null,
+            coupons: [],
           })
         }
 
@@ -168,12 +262,14 @@ export function useCampaignSettings() {
           id: payload.campaignId,
           title: sanitizeCampaignTitle(payload.title),
           pricePerCota: sanitizePricePerCota(payload.pricePerCota),
+          minPurchaseQuantity: sanitizeMinPurchaseQuantity(payload.minPurchaseQuantity),
           mainPrize: sanitizePrizeText(payload.mainPrize, DEFAULT_MAIN_PRIZE),
           secondPrize: sanitizePrizeText(payload.secondPrize, DEFAULT_SECOND_PRIZE),
           bonusPrize: sanitizePrizeText(payload.bonusPrize, DEFAULT_BONUS_PRIZE),
           status: sanitizeCampaignStatus(payload.status),
           startsAt: sanitizeCampaignDate(payload.startsAt),
           endsAt: sanitizeCampaignDate(payload.endsAt),
+          coupons: sanitizeCoupons(payload.coupons),
         })
         setExists(true)
 
@@ -194,12 +290,14 @@ export function useCampaignSettings() {
       saveCampaignSettings({
         title: DEFAULT_CAMPAIGN_TITLE,
         pricePerCota: DEFAULT_TICKET_PRICE,
+        minPurchaseQuantity: DEFAULT_MIN_PURCHASE_QUANTITY,
         mainPrize: DEFAULT_MAIN_PRIZE,
         secondPrize: DEFAULT_SECOND_PRIZE,
         bonusPrize: DEFAULT_BONUS_PRIZE,
         status: DEFAULT_CAMPAIGN_STATUS,
         startsAt: null,
         endsAt: null,
+        coupons: [],
       }),
     [saveCampaignSettings],
   )

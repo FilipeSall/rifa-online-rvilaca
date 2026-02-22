@@ -1,20 +1,23 @@
 import {
   DEFAULT_BONUS_PRIZE,
+  DEFAULT_MIN_PURCHASE_QUANTITY,
   DEFAULT_CAMPAIGN_TITLE,
   DEFAULT_MAIN_PRIZE,
   DEFAULT_SECOND_PRIZE,
 } from '../../../const/campaign'
-import type { CampaignStatus, UpsertCampaignSettingsInput } from '../../../types/campaign'
+import type { CampaignCoupon, CampaignStatus, UpsertCampaignSettingsInput } from '../../../types/campaign'
 
 export type CampaignFormState = {
   title: string
   pricePerCotaInput: string
+  minPurchaseQuantityInput: string
   mainPrize: string
   secondPrize: string
   bonusPrize: string
   status: CampaignStatus
   startsAt: string
   endsAt: string
+  coupons: CampaignCoupon[]
 }
 
 type CampaignValidationResult = {
@@ -30,11 +33,20 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
   const normalizedBonusPrize = formState.bonusPrize.trim() || DEFAULT_BONUS_PRIZE
   const normalizedPriceText = formState.pricePerCotaInput.replace(',', '.').trim()
   const normalizedPrice = Number(normalizedPriceText)
+  const minPurchaseQuantity = Number(formState.minPurchaseQuantityInput)
 
   if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0) {
     return {
       errorToastId: 'campaign-invalid-price',
       errorMessage: 'Informe um valor valido para a cota.',
+      payload: null,
+    }
+  }
+
+  if (!Number.isInteger(minPurchaseQuantity) || minPurchaseQuantity <= 0 || minPurchaseQuantity > 300) {
+    return {
+      errorToastId: 'campaign-invalid-min-purchase',
+      errorMessage: 'Informe uma compra minima valida (1 a 300).',
       payload: null,
     }
   }
@@ -53,12 +65,14 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
     payload: {
       title: normalizedTitle,
       pricePerCota: Number(normalizedPrice.toFixed(2)),
+      minPurchaseQuantity: Math.max(1, Math.min(minPurchaseQuantity || DEFAULT_MIN_PURCHASE_QUANTITY, 300)),
       mainPrize: normalizedMainPrize,
       secondPrize: normalizedSecondPrize,
       bonusPrize: normalizedBonusPrize,
       status: formState.status,
       startsAt: formState.startsAt.trim() ? formState.startsAt : null,
       endsAt: formState.endsAt.trim() ? formState.endsAt : null,
+      coupons: formState.coupons,
     },
   }
 }

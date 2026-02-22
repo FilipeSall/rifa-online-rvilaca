@@ -13,6 +13,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     selectionMode,
     setSelectionMode,
     quantity,
+    minPurchaseQuantity,
     maxSelectable,
     rangeStart,
     rangeEnd,
@@ -57,6 +58,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
         <div className="space-y-6 xl:col-span-8">
           <QuantitySelectionCard
             quantity={quantity}
+            minQuantity={minPurchaseQuantity}
             maxSelectable={maxSelectable}
             onSetQuantity={handleSetQuantity}
           />
@@ -92,6 +94,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
         <aside className="xl:col-span-4">
           <PurchaseSummaryCard
             selectedCount={selectedCount}
+            minQuantity={minPurchaseQuantity}
             unitPrice={unitPrice}
             subtotal={subtotal}
             discountAmount={discountAmount}

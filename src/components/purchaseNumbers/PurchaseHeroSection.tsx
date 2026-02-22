@@ -1,11 +1,11 @@
-import { MIN_QUANTITY } from '../../const/purchaseNumbers'
 import { formatCurrency } from '../../utils/purchaseNumbers'
 
 type PurchaseHeroSectionProps = {
   unitPrice: number
+  minQuantity: number
 }
 
-export default function PurchaseHeroSection({ unitPrice }: PurchaseHeroSectionProps) {
+export default function PurchaseHeroSection({ unitPrice, minQuantity }: PurchaseHeroSectionProps) {
   return (
     <section className="hero-bg border-b border-white/5">
       <div className="container mx-auto px-4 py-14 lg:px-8 lg:py-20">
@@ -31,7 +31,7 @@ export default function PurchaseHeroSection({ unitPrice }: PurchaseHeroSectionPr
             </div>
             <div className="rounded-xl border border-white/10 bg-luxury-card p-4">
               <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Compra minima</p>
-              <p className="mt-2 text-2xl font-black text-white">{MIN_QUANTITY}</p>
+              <p className="mt-2 text-2xl font-black text-white">{minQuantity}</p>
             </div>
             <div className="col-span-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4">
               <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-300">Status do pagamento</p>

@@ -10,12 +10,14 @@ import Header from '../components/home/Header'
 import { db, functions } from '../lib/firebase'
 import { useAuthStore } from '../stores/authStore'
 import { formatCurrency } from '../utils/purchaseNumbers'
+import { logPurchaseFlow, serializeError } from '../utils/purchaseFlowLogger'
 
 type CheckoutNavigationState = {
   orderId?: string
   amount?: number
   quantity?: number
   selectedNumbers?: number[]
+  couponCode?: string
 }
 
 function parsePositiveAmount(value: unknown) {
@@ -137,18 +139,43 @@ export default function CheckoutPage() {
 
   const selectedNumbers = navigationState.selectedNumbers || []
   const selectedCount = navigationState.quantity || selectedNumbers.length || 0
+  const selectedCouponCode = parseOptionalText(navigationState.couponCode) || null
+
+  useEffect(() => {
+    logPurchaseFlow('CheckoutPage', 'page_loaded', 'info', {
+      isLoggedIn,
+      isAuthReady,
+      routeOrderId,
+      routeAmount,
+      selectedCount,
+      selectedNumbersPreview: selectedNumbers.slice(0, 10),
+    })
+  }, [isAuthReady, isLoggedIn, routeAmount, routeOrderId, selectedCount, selectedNumbers])
+
   const handleBackToSelection = useCallback(async () => {
     if (isReturningToSelection) {
       return
     }
 
     setIsReturningToSelection(true)
+    logPurchaseFlow('CheckoutPage', 'back_to_selection_started', 'info', {
+      isLoggedIn,
+      selectedCount,
+      routeOrderId,
+    })
 
     if (isLoggedIn) {
       try {
         await releaseReservation({})
+        logPurchaseFlow('CheckoutPage', 'release_reservation_succeeded', 'info', {
+          routeOrderId,
+        })
       } catch (error) {
         console.warn('Failed to release reservation on checkout back:', error)
+        logPurchaseFlow('CheckoutPage', 'release_reservation_failed', 'warn', {
+          routeOrderId,
+          error: serializeError(error),
+        })
         toast.warning('Nao foi possivel liberar sua reserva automaticamente agora.', {
           position: 'bottom-right',
           toastId: 'checkout-release-reservation-warning',
@@ -156,8 +183,11 @@ export default function CheckoutPage() {
       }
     }
 
+    logPurchaseFlow('CheckoutPage', 'navigate_back_to_selection', 'info', {
+      routeOrderId,
+    })
     navigate('/#comprar-numeros')
-  }, [isLoggedIn, isReturningToSelection, navigate, releaseReservation])
+  }, [isLoggedIn, isReturningToSelection, navigate, releaseReservation, routeOrderId, selectedCount])
 
   return (
     <div className="selection:bg-gold selection:text-black overflow-x-hidden bg-luxury-bg font-display text-text-main">
@@ -200,6 +230,12 @@ export default function CheckoutPage() {
                         {amount > 0 ? formatCurrency(amount) : 'Informar valor'}
                       </span>
                     </div>
+                    {selectedCouponCode ? (
+                      <div className="flex items-center justify-between text-gray-300">
+                        <span>Cupom aplicado</span>
+                        <span className="font-black text-cyan-200">{selectedCouponCode}</span>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="mt-5 space-y-3">
@@ -289,6 +325,7 @@ export default function CheckoutPage() {
                     payerName={payerName}
                     phone={accountPhone}
                     existingOrderId={routeOrderId || null}
+                    couponCode={selectedCouponCode}
                   />
                 ) : null}
               </div>

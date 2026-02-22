@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useState } from 'react'
 import { httpsCallable, type HttpsCallableResult } from 'firebase/functions'
 import { functions } from '../lib/firebase'
+import { logPurchaseFlow, serializeError } from '../utils/purchaseFlowLogger'
 
 export type PixType = 'CPF' | 'CNPJ' | 'EMAIL' | 'PHONE' | 'RANDOM'
 
 export interface CreateDepositInput {
   payerName: string
   phone?: string | null
+  couponCode?: string | null
 }
 
 export interface CreateDepositResponse {
@@ -70,15 +72,22 @@ export function useHorsePay() {
   )
 
   const runCallable = useCallback(
-    async <T>(operation: () => Promise<T>) => {
+    async <T>(label: string, operation: () => Promise<T>) => {
+      logPurchaseFlow('useHorsePay', 'callable_started', 'info', { label })
       setLoading(true)
       setError(null)
 
       try {
-        return await operation()
+        const result = await operation()
+        logPurchaseFlow('useHorsePay', 'callable_succeeded', 'info', { label })
+        return result
       } catch (callableError) {
         const normalizedError = toError(callableError)
         setError(normalizedError)
+        logPurchaseFlow('useHorsePay', 'callable_failed', 'error', {
+          label,
+          error: serializeError(callableError),
+        })
         throw normalizedError
       } finally {
         setLoading(false)
@@ -88,14 +97,18 @@ export function useHorsePay() {
   )
 
   const createDeposit = useCallback(
-    async ({ payerName, phone }: CreateDepositInput) =>
-      runCallable(() => {
+    async ({ payerName, phone, couponCode }: CreateDepositInput) =>
+      runCallable('createPixDeposit', () => {
         const payload: CreateDepositInput = {
           payerName,
         }
 
         if (typeof phone === 'string' && phone.trim()) {
           payload.phone = phone.trim()
+        }
+
+        if (typeof couponCode === 'string' && couponCode.trim()) {
+          payload.couponCode = couponCode.trim().toUpperCase()
         }
 
         return unwrapCallable<CreateDepositResponse>(callables.createPixDeposit(payload))
@@ -105,14 +118,14 @@ export function useHorsePay() {
 
   const requestWithdraw = useCallback(
     async ({ amount, pixKey, pixType }: RequestWithdrawInput) =>
-      runCallable(() =>
+      runCallable('requestWithdraw', () =>
         unwrapCallable<RequestWithdrawResponse>(callables.requestWithdraw({ amount, pixKey, pixType })),
       ),
     [callables.requestWithdraw, runCallable],
   )
 
   const getBalance = useCallback(
-    async () => runCallable(() => unwrapCallable<BalanceResponse>(callables.getBalance({}))),
+    async () => runCallable('getBalance', () => unwrapCallable<BalanceResponse>(callables.getBalance({}))),
     [callables.getBalance, runCallable],
   )
 

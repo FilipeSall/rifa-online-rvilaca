@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import {
   DEFAULT_BONUS_PRIZE,
+  DEFAULT_MIN_PURCHASE_QUANTITY,
   DEFAULT_CAMPAIGN_STATUS,
   DEFAULT_CAMPAIGN_TITLE,
   DEFAULT_MAIN_PRIZE,
@@ -9,7 +10,7 @@ import {
   DEFAULT_TICKET_PRICE,
 } from '../../../const/campaign'
 import { useCampaignSettings } from '../../../hooks/useCampaignSettings'
-import type { CampaignStatus } from '../../../types/campaign'
+import type { CampaignCoupon, CampaignStatus } from '../../../types/campaign'
 import { buildCampaignSettingsInput } from '../services/campaignSettingsFormService'
 
 export function useCampaignForm() {
@@ -23,26 +24,32 @@ export function useCampaignForm() {
   } = useCampaignSettings()
   const [title, setTitle] = useState(DEFAULT_CAMPAIGN_TITLE)
   const [pricePerCotaInput, setPricePerCotaInput] = useState(DEFAULT_TICKET_PRICE.toFixed(2))
+  const [minPurchaseQuantityInput, setMinPurchaseQuantityInput] = useState(String(DEFAULT_MIN_PURCHASE_QUANTITY))
   const [mainPrize, setMainPrize] = useState(DEFAULT_MAIN_PRIZE)
   const [secondPrize, setSecondPrize] = useState(DEFAULT_SECOND_PRIZE)
   const [bonusPrize, setBonusPrize] = useState(DEFAULT_BONUS_PRIZE)
   const [status, setStatus] = useState<CampaignStatus>(DEFAULT_CAMPAIGN_STATUS)
   const [startsAt, setStartsAt] = useState('')
   const [endsAt, setEndsAt] = useState('')
+  const [coupons, setCoupons] = useState<CampaignCoupon[]>([])
   const hasEnsuredCampaignRef = useRef(false)
 
   useEffect(() => {
     setTitle(campaign.title)
     setPricePerCotaInput(campaign.pricePerCota.toFixed(2))
+    setMinPurchaseQuantityInput(String(campaign.minPurchaseQuantity))
     setMainPrize(campaign.mainPrize)
     setSecondPrize(campaign.secondPrize)
     setBonusPrize(campaign.bonusPrize)
     setStatus(campaign.status)
     setStartsAt(campaign.startsAt ?? '')
     setEndsAt(campaign.endsAt ?? '')
+    setCoupons(campaign.coupons)
   }, [
     campaign.bonusPrize,
+    campaign.coupons,
     campaign.mainPrize,
+    campaign.minPurchaseQuantity,
     campaign.pricePerCota,
     campaign.secondPrize,
     campaign.status,
@@ -68,12 +75,14 @@ export function useCampaignForm() {
     const { payload, errorMessage, errorToastId } = buildCampaignSettingsInput({
       title,
       pricePerCotaInput,
+      minPurchaseQuantityInput,
       mainPrize,
       secondPrize,
       bonusPrize,
       status,
       startsAt,
       endsAt,
+      coupons,
     })
 
     if (errorMessage || !payload) {
@@ -93,7 +102,68 @@ export function useCampaignForm() {
         toastId: 'campaign-settings-save-error',
       })
     }
-  }, [bonusPrize, endsAt, mainPrize, pricePerCotaInput, saveCampaignSettings, secondPrize, startsAt, status, title])
+  }, [
+    bonusPrize,
+    coupons,
+    endsAt,
+    mainPrize,
+    minPurchaseQuantityInput,
+    pricePerCotaInput,
+    saveCampaignSettings,
+    secondPrize,
+    startsAt,
+    status,
+    title,
+  ])
+
+  const persistCoupons = useCallback(
+    async (nextCoupons: CampaignCoupon[]) => {
+      const { payload, errorMessage, errorToastId } = buildCampaignSettingsInput({
+        title,
+        pricePerCotaInput,
+        minPurchaseQuantityInput,
+        mainPrize,
+        secondPrize,
+        bonusPrize,
+        status,
+        startsAt,
+        endsAt,
+        coupons: nextCoupons,
+      })
+
+      if (errorMessage || !payload) {
+        toast.error(errorMessage ?? 'Nao foi possivel validar os cupons da campanha.', {
+          toastId: errorToastId ?? 'campaign-coupons-validation-error',
+        })
+        return false
+      }
+
+      try {
+        await saveCampaignSettings(payload)
+        toast.success('Cupons salvos com sucesso.', {
+          toastId: 'campaign-coupons-saved',
+        })
+        return true
+      } catch {
+        toast.error('Falha ao salvar cupons. Tente novamente.', {
+          toastId: 'campaign-coupons-save-error',
+        })
+        return false
+      }
+    },
+    [
+      bonusPrize,
+      endsAt,
+      mainPrize,
+      minPurchaseQuantityInput,
+      pricePerCotaInput,
+      saveCampaignSettings,
+      secondPrize,
+      startsAt,
+      status,
+      title,
+    ],
+  )
 
   return {
     campaign,
@@ -101,20 +171,25 @@ export function useCampaignForm() {
     isSaving,
     title,
     pricePerCotaInput,
+    minPurchaseQuantityInput,
     mainPrize,
     secondPrize,
     bonusPrize,
     status,
     startsAt,
     endsAt,
+    coupons,
     setTitle,
     setPricePerCotaInput,
+    setMinPurchaseQuantityInput,
     setMainPrize,
     setSecondPrize,
     setBonusPrize,
     setStatus,
     setStartsAt,
     setEndsAt,
+    setCoupons,
     handleSaveCampaignSettings,
+    persistCoupons,
   }
 }

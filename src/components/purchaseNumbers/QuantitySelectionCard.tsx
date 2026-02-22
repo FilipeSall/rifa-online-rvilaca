@@ -1,13 +1,15 @@
-import { MIN_QUANTITY, PURCHASE_PACKS } from '../../const/purchaseNumbers'
+import { PURCHASE_PACKS } from '../../const/purchaseNumbers'
 
 type QuantitySelectionCardProps = {
   quantity: number
+  minQuantity: number
   maxSelectable: number
   onSetQuantity: (value: number) => void
 }
 
 export default function QuantitySelectionCard({
   quantity,
+  minQuantity,
   maxSelectable,
   onSetQuantity,
 }: QuantitySelectionCardProps) {
@@ -47,18 +49,18 @@ export default function QuantitySelectionCard({
             className="h-10 w-10 rounded bg-white/5 text-white hover:bg-white/10 disabled:opacity-40"
             type="button"
             onClick={() => onSetQuantity(quantity - 1)}
-            disabled={quantity <= MIN_QUANTITY}
+            disabled={quantity <= minQuantity}
           >
             -
           </button>
           <input
             id="quantity-input"
             className="h-10 w-24 rounded border border-white/15 bg-luxury-card text-center font-bold text-white outline-none focus:border-gold"
-            min={MIN_QUANTITY}
+            min={minQuantity}
             max={maxSelectable}
             type="number"
             value={quantity}
-            onChange={(event) => onSetQuantity(Number(event.target.value || MIN_QUANTITY))}
+            onChange={(event) => onSetQuantity(Number(event.target.value || minQuantity))}
           />
           <button
             className="h-10 w-10 rounded bg-white/5 text-white hover:bg-white/10 disabled:opacity-40"
