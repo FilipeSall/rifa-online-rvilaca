@@ -1,18 +1,34 @@
+import { useCallback, useState } from 'react'
 import { useHeroSection } from '../../hooks/useHeroSection'
 import { CAMPAIGN_SOLD_COTAS, CAMPAIGN_TOTAL_COTAS } from '../../const/home'
 import slideOne from '../../assets/IMG_9379.webp'
 import slideTwo from '../../assets/IMG_9400.webp'
 import slideThree from '../../assets/IMG_9390.webp'
+import Skeleton from 'react-loading-skeleton'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import { Autoplay } from 'swiper/modules'
 import 'swiper/css'
+import 'react-loading-skeleton/dist/skeleton.css'
 
 const HERO_CAROUSEL_IMAGES = [slideOne, slideTwo, slideThree]
 
 export default function HeroSection() {
   const { animatedSoldPercentage, countdownItems, handleOpenBuyModal } = useHeroSection()
+  const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({})
   const soldCotasFormatted = CAMPAIGN_SOLD_COTAS.toLocaleString('pt-BR')
   const totalCotasFormatted = CAMPAIGN_TOTAL_COTAS.toLocaleString('pt-BR')
+  const handleImageLoaded = useCallback((imageSrc: string) => {
+    setLoadedImages((currentState) => {
+      if (currentState[imageSrc]) {
+        return currentState
+      }
+
+      return {
+        ...currentState,
+        [imageSrc]: true,
+      }
+    })
+  }, [])
 
   return (
     <section className="relative pt-12 pb-20 lg:pt-24 lg:pb-32 overflow-hidden hero-bg">
@@ -123,10 +139,24 @@ export default function HeroSection() {
                 speed={700}
               >
                 {HERO_CAROUSEL_IMAGES.map((imageSrc, index) => (
-                  <SwiperSlide key={imageSrc} className="h-full">
+                  <SwiperSlide key={imageSrc} className="relative h-full">
+                    {!loadedImages[imageSrc] ? (
+                      <div className="absolute inset-0 z-10">
+                        <Skeleton
+                          baseColor="rgba(17, 24, 39, 0.95)"
+                          className="block h-full w-full"
+                          highlightColor="rgba(55, 65, 81, 0.75)"
+                        />
+                      </div>
+                    ) : null}
                     <img
                       alt={`BMW R1200 GS slide ${index + 1}`}
-                      className="w-full h-full object-cover"
+                      className={`h-full w-full object-cover transition-opacity duration-500 ${
+                        loadedImages[imageSrc] ? 'opacity-100' : 'opacity-0'
+                      }`}
+                      loading={index === 0 ? 'eager' : 'lazy'}
+                      onError={() => handleImageLoaded(imageSrc)}
+                      onLoad={() => handleImageLoaded(imageSrc)}
                       src={imageSrc}
                     />
                   </SwiperSlide>

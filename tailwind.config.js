@@ -39,6 +39,9 @@ export default {
       backgroundImage: {
         'luxury-gradient': 'linear-gradient(to right bottom, #0A0A0A, #111111, #050505)',
         'gold-gradient': 'linear-gradient(135deg, #F5A800 0%, #FFCC4D 50%, #F5A800 100%)',
+        'medal-gold': 'linear-gradient(135deg, #FFD700 0%, #FDB931 50%, #FFD700 100%)',
+        'medal-silver': 'linear-gradient(135deg, #E0E0E0 0%, #BDBDBD 50%, #E0E0E0 100%)',
+        'medal-bronze': 'linear-gradient(135deg, #CD7F32 0%, #A0522D 50%, #CD7F32 100%)',
       },
     },
   },
