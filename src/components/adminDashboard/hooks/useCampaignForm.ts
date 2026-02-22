@@ -7,6 +7,7 @@ import {
   DEFAULT_CAMPAIGN_TITLE,
   DEFAULT_MAIN_PRIZE,
   DEFAULT_SECOND_PRIZE,
+  DEFAULT_SUPPORT_WHATSAPP_NUMBER,
   DEFAULT_TICKET_PRICE,
 } from '../../../const/campaign'
 import { useCampaignSettings } from '../../../hooks/useCampaignSettings'
@@ -28,6 +29,7 @@ export function useCampaignForm() {
   const [mainPrize, setMainPrize] = useState(DEFAULT_MAIN_PRIZE)
   const [secondPrize, setSecondPrize] = useState(DEFAULT_SECOND_PRIZE)
   const [bonusPrize, setBonusPrize] = useState(DEFAULT_BONUS_PRIZE)
+  const [supportWhatsappNumber, setSupportWhatsappNumber] = useState(DEFAULT_SUPPORT_WHATSAPP_NUMBER)
   const [status, setStatus] = useState<CampaignStatus>(DEFAULT_CAMPAIGN_STATUS)
   const [startsAt, setStartsAt] = useState('')
   const [endsAt, setEndsAt] = useState('')
@@ -41,6 +43,7 @@ export function useCampaignForm() {
     setMainPrize(campaign.mainPrize)
     setSecondPrize(campaign.secondPrize)
     setBonusPrize(campaign.bonusPrize)
+    setSupportWhatsappNumber(campaign.supportWhatsappNumber)
     setStatus(campaign.status)
     setStartsAt(campaign.startsAt ?? '')
     setEndsAt(campaign.endsAt ?? '')
@@ -52,6 +55,7 @@ export function useCampaignForm() {
     campaign.minPurchaseQuantity,
     campaign.pricePerCota,
     campaign.secondPrize,
+    campaign.supportWhatsappNumber,
     campaign.status,
     campaign.startsAt,
     campaign.endsAt,
@@ -79,6 +83,7 @@ export function useCampaignForm() {
       mainPrize,
       secondPrize,
       bonusPrize,
+      supportWhatsappNumber,
       status,
       startsAt,
       endsAt,
@@ -111,6 +116,7 @@ export function useCampaignForm() {
     pricePerCotaInput,
     saveCampaignSettings,
     secondPrize,
+    supportWhatsappNumber,
     startsAt,
     status,
     title,
@@ -125,6 +131,7 @@ export function useCampaignForm() {
         mainPrize,
         secondPrize,
         bonusPrize,
+        supportWhatsappNumber,
         status,
         startsAt,
         endsAt,
@@ -159,6 +166,7 @@ export function useCampaignForm() {
       pricePerCotaInput,
       saveCampaignSettings,
       secondPrize,
+      supportWhatsappNumber,
       startsAt,
       status,
       title,
@@ -175,6 +183,7 @@ export function useCampaignForm() {
     mainPrize,
     secondPrize,
     bonusPrize,
+    supportWhatsappNumber,
     status,
     startsAt,
     endsAt,
@@ -185,6 +194,7 @@ export function useCampaignForm() {
     setMainPrize,
     setSecondPrize,
     setBonusPrize,
+    setSupportWhatsappNumber,
     setStatus,
     setStartsAt,
     setEndsAt,

@@ -287,13 +287,6 @@ export function usePurchaseNumbers() {
     const requestId = autoSelectRequestIdRef.current + 1
     autoSelectRequestIdRef.current = requestId
     setIsAutoSelecting(true)
-    logPurchaseFlow('usePurchaseNumbers', 'auto_select_started', 'info', {
-      requestId,
-      quantity,
-      missingQuantity,
-      preservedSelectionCount: preservedSelection.length,
-    })
-
     void callables.pickRandomAvailableNumbers({
       quantity: missingQuantity,
       excludeNumbers: preservedSelection,
@@ -316,13 +309,6 @@ export function usePurchaseNumbers() {
             ? currentSelection
             : mergedSelection
         ))
-        logPurchaseFlow('usePurchaseNumbers', 'auto_select_succeeded', 'info', {
-          requestId,
-          quantityRequested: missingQuantity,
-          quantitySelected: mergedSelection.length,
-          exhausted: payload.exhausted,
-        })
-
         if (payload.exhausted || mergedSelection.length < quantity) {
           toast.warning(
             `Apenas ${mergedSelection.length} numeros disponiveis encontrados no momento.`,

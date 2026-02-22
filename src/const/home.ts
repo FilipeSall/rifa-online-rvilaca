@@ -56,6 +56,7 @@ export const ANNOUNCEMENT_TEXT =
 
 export const HEADER_NAV_ITEMS: NavItem[] = [
   { label: 'Início', href: '#', isActive: true },
+  { label: 'Prêmios', href: '/premios', isActive: false },
   { label: 'Ganhadores', href: '#ganhadores', isActive: false },
   { label: 'FAQ', href: '#faq', isActive: false },
 ]

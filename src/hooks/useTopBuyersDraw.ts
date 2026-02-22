@@ -44,6 +44,7 @@ type RawTopBuyersDrawResult = {
   winningCode?: unknown
   resolvedBy?: unknown
   winner?: RawTopBuyersDrawWinner
+  winnerTicketNumbers?: unknown
   rankingSnapshot?: unknown
   publishedAtMs?: unknown
 }
@@ -53,10 +54,16 @@ type GetLatestTopBuyersDrawOutput = {
   result?: RawTopBuyersDrawResult | null
 }
 
+type GetTopBuyersDrawHistoryOutput = {
+  results?: unknown
+}
+
+type HistoryScope = 'none' | 'admin' | 'public'
+
 type PublishTopBuyersDrawInput = {
-  drawDate: string
   extractionNumbers: string[]
   rankingLimit?: number
+  drawPrize: string
 }
 
 export type TopBuyersDrawWinner = {
@@ -99,6 +106,7 @@ export type TopBuyersDrawResult = {
   winningCode: string
   resolvedBy: 'federal_extraction' | 'redundancy'
   winner: TopBuyersDrawWinner
+  winnerTicketNumbers: string[]
   rankingSnapshot: TopBuyersDrawItem[]
   publishedAtMs: number
 }
@@ -216,6 +224,9 @@ function normalizeResult(raw: RawTopBuyersDrawResult | null | undefined): TopBuy
     winningCode: sanitizeString(raw.winningCode),
     resolvedBy,
     winner,
+    winnerTicketNumbers: Array.isArray(raw.winnerTicketNumbers)
+      ? raw.winnerTicketNumbers.map((item) => sanitizeString(item)).filter(Boolean).slice(0, 300)
+      : [],
     rankingSnapshot: normalizeRankingSnapshot(raw.rankingSnapshot),
     publishedAtMs: sanitizeNumber(raw.publishedAtMs),
   }
@@ -240,9 +251,11 @@ function normalizeResult(raw: RawTopBuyersDrawResult | null | undefined): TopBuy
   return result
 }
 
-export function useTopBuyersDraw(autoRefresh = true) {
+export function useTopBuyersDraw(autoRefresh = true, historyScope: HistoryScope = 'none') {
   const [result, setResult] = useState<TopBuyersDrawResult | null>(null)
+  const [history, setHistory] = useState<TopBuyersDrawResult[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -254,6 +267,37 @@ export function useTopBuyersDraw(autoRefresh = true) {
     () => httpsCallable<PublishTopBuyersDrawInput, unknown>(functions, 'publishTopBuyersDraw'),
     [],
   )
+  const getTopBuyersDrawHistory = useMemo(
+    () => httpsCallable<Record<string, never>, unknown>(functions, 'getTopBuyersDrawHistory'),
+    [],
+  )
+  const getPublicTopBuyersDrawHistory = useMemo(
+    () => httpsCallable<Record<string, never>, unknown>(functions, 'getPublicTopBuyersDrawHistory'),
+    [],
+  )
+
+  const refreshHistory = useCallback(async () => {
+    if (historyScope === 'none') {
+      setHistory([])
+      return
+    }
+
+    setIsHistoryLoading(true)
+    try {
+      const response = historyScope === 'admin'
+        ? await getTopBuyersDrawHistory({})
+        : await getPublicTopBuyersDrawHistory({})
+      const payload = unwrapCallableData(response.data as CallableEnvelope<GetTopBuyersDrawHistoryOutput>)
+      const normalizedHistory = Array.isArray(payload?.results)
+        ? payload.results.map((item) => normalizeResult(item as RawTopBuyersDrawResult)).filter((item): item is TopBuyersDrawResult => Boolean(item))
+        : []
+      setHistory(normalizedHistory)
+    } catch {
+      setHistory([])
+    } finally {
+      setIsHistoryLoading(false)
+    }
+  }, [getPublicTopBuyersDrawHistory, getTopBuyersDrawHistory, historyScope])
 
   const refreshResult = useCallback(async () => {
     try {
@@ -285,6 +329,10 @@ export function useTopBuyersDraw(autoRefresh = true) {
       }
 
       setResult(normalized)
+      setHistory((current) => {
+        const deduped = [normalized, ...current.filter((item) => item.drawId !== normalized.drawId)]
+        return deduped.sort((left, right) => (right.publishedAtMs || 0) - (left.publishedAtMs || 0))
+      })
       setErrorMessage(null)
       return normalized
     } finally {
@@ -294,6 +342,9 @@ export function useTopBuyersDraw(autoRefresh = true) {
 
   useEffect(() => {
     void refreshResult()
+    if (historyScope !== 'none') {
+      void refreshHistory()
+    }
 
     if (!autoRefresh) {
       return undefined
@@ -301,17 +352,23 @@ export function useTopBuyersDraw(autoRefresh = true) {
 
     const intervalId = window.setInterval(() => {
       void refreshResult()
+      if (historyScope !== 'none') {
+        void refreshHistory()
+      }
     }, 45000)
 
     return () => window.clearInterval(intervalId)
-  }, [autoRefresh, refreshResult])
+  }, [autoRefresh, historyScope, refreshHistory, refreshResult])
 
   return {
     result,
+    history,
     isLoading,
+    isHistoryLoading,
     isPublishing,
     errorMessage,
     refreshResult,
+    refreshHistory,
     publishResult,
   }
 }

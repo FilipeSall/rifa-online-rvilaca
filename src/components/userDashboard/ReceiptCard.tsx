@@ -4,7 +4,11 @@ import { formatTicketNumbers } from '../../utils/ticketNumber'
 import type { UserOrder } from '../../types/userDashboard'
 import { OrderStatusBadge } from './StatusBadges'
 
-function openWhatsAppShare(order: UserOrder) {
+function toWhatsappPhoneDigits(phone: string) {
+  return phone.replace(/\D/g, '')
+}
+
+function openWhatsAppShare(order: UserOrder, supportWhatsappNumber: string) {
   const statusLabel =
     order.status === 'pago'
       ? 'Pago'
@@ -23,16 +27,19 @@ function openWhatsAppShare(order: UserOrder) {
     `Numeros: ${formatTicketNumbers(order.numbers).join(', ') || '-'}`,
   ].join('\n')
 
-  const url = `https://wa.me/?text=${encodeURIComponent(message)}`
+  const targetPhone = toWhatsappPhoneDigits(supportWhatsappNumber)
+  const path = targetPhone ? `/${targetPhone}` : ''
+  const url = `https://wa.me${path}?text=${encodeURIComponent(message)}`
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 type ReceiptCardProps = {
   order: UserOrder
   campaignTitle: string
+  supportWhatsappNumber: string
 }
 
-export default function ReceiptCard({ order, campaignTitle }: ReceiptCardProps) {
+export default function ReceiptCard({ order, campaignTitle, supportWhatsappNumber }: ReceiptCardProps) {
   const navigate = useNavigate()
   const stripe =
     order.status === 'pago' ? 'bg-emerald-500' : order.status === 'aguardando' ? 'bg-amber-500' : 'bg-red-500'
@@ -89,7 +96,7 @@ export default function ReceiptCard({ order, campaignTitle }: ReceiptCardProps) 
               <button
                 type="button"
                 className="flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-500/30 px-4 py-2.5 text-sm font-bold text-emerald-400 transition-all hover:bg-emerald-500 hover:text-white"
-                onClick={() => openWhatsAppShare(order)}
+                onClick={() => openWhatsAppShare(order, supportWhatsappNumber)}
               >
                 <span className="material-symbols-outlined text-[18px]">share</span>
                 Enviar no WhatsApp

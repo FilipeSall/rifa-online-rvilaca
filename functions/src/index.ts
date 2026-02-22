@@ -14,6 +14,9 @@ import {
   createGetWeeklyTopBuyersRankingHandler,
 } from './lib/rankingHandlers.js'
 import {
+  createGetPublicTopBuyersDrawHistoryHandler,
+  createGetMyTopBuyersWinningSummaryHandler,
+  createGetTopBuyersDrawHistoryHandler,
   createGetLatestTopBuyersDrawHandler,
   createPublishTopBuyersDrawHandler,
 } from './lib/topBuyersDrawHandlers.js'
@@ -97,6 +100,9 @@ export const getChampionsRanking = onCall(callableOptions, createGetChampionsRan
 export const getWeeklyTopBuyersRanking = onCall(callableOptions, createGetWeeklyTopBuyersRankingHandler(db))
 export const publishTopBuyersDraw = onCall(callableOptions, createPublishTopBuyersDrawHandler(db))
 export const getLatestTopBuyersDraw = onCall(callableOptions, createGetLatestTopBuyersDrawHandler(db))
+export const getTopBuyersDrawHistory = onCall(callableOptions, createGetTopBuyersDrawHistoryHandler(db))
+export const getPublicTopBuyersDrawHistory = onCall(callableOptions, createGetPublicTopBuyersDrawHistoryHandler(db))
+export const getMyTopBuyersWinningSummary = onCall(callableOptions, createGetMyTopBuyersWinningSummaryHandler(db))
 
 export const pixWebhook = onRequest(
   { region: REGION, secrets: [HORSEPAY_WEBHOOK_TOKEN] },

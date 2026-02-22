@@ -22,6 +22,7 @@ export const DEFAULT_PRICE_PER_COTA = 0.99
 export const DEFAULT_MAIN_PRIZE = 'BMW R1200 GS 2015/2016'
 export const DEFAULT_SECOND_PRIZE = 'Honda CG Start 160 2026/2026'
 export const DEFAULT_BONUS_PRIZE = '20 PIX de R$ 1.000'
+export const DEFAULT_SUPPORT_WHATSAPP_NUMBER = '+55 62 8507-4477'
 export const DEFAULT_CAMPAIGN_STATUS = 'active'
 export const CAMPAIGN_STATUS_VALUES = ['active', 'scheduled', 'paused', 'finished'] as const
 export type CampaignStatus = (typeof CAMPAIGN_STATUS_VALUES)[number]

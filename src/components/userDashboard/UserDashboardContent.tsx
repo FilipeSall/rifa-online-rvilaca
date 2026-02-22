@@ -47,9 +47,11 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
     totalOrders,
     totalTickets,
     campaignTitle,
+    supportWhatsappNumber,
     mainPrize,
     secondPrize,
     bonusPrize,
+    winningSummary,
     nextDrawDateLabel,
     displayName,
     initials,
@@ -59,6 +61,12 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
     loadCpfForUser,
     refreshProfile,
   } = dashboardState
+
+  const supportWhatsappDigits = supportWhatsappNumber.replace(/\D/g, '')
+  const winnerWhatsappMessage = winningSummary.latestWin
+    ? `Olá equipe! Sou um(a) ganhador(a) e preciso do suporte para premiação.\nSorteio: ${winningSummary.latestWin.drawDate}\nPrêmio: ${winningSummary.latestWin.drawPrize}\nCódigo: ${winningSummary.latestWin.drawId}`
+    : 'Olá equipe! Sou um(a) ganhador(a) e preciso de suporte para receber meu prêmio.'
+  const winnerWhatsappUrl = `https://wa.me${supportWhatsappDigits ? `/${supportWhatsappDigits}` : ''}?text=${encodeURIComponent(winnerWhatsappMessage)}`
 
   return (
     <>
@@ -104,6 +112,28 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
 
             <StatsCards paidCount={paidCount} nextDrawDateLabel={nextDrawDateLabel} />
 
+            {winningSummary.hasWins ? (
+              <section className="rounded-2xl border border-emerald-300/30 bg-emerald-500/10 p-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Conta premiada</p>
+                <h2 className="mt-2 text-xl font-black text-white">Parabéns, você tem premiação registrada!</h2>
+                <p className="mt-2 text-sm text-emerald-100">
+                  {winningSummary.latestWin
+                    ? `Último prêmio: ${winningSummary.latestWin.drawPrize} (sorteio ${winningSummary.latestWin.drawDate}).`
+                    : 'Nossa equipe de atendimento irá concluir seu processo de premiação.'}
+                </p>
+                <div className="mt-4">
+                  <a
+                    className="inline-flex h-11 items-center justify-center rounded-lg border border-emerald-200/40 bg-emerald-500/20 px-4 text-xs font-black uppercase tracking-[0.14em] text-emerald-100 transition-colors hover:bg-emerald-500/35"
+                    href={winnerWhatsappUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Falar no WhatsApp da equipe
+                  </a>
+                </div>
+              </section>
+            ) : null}
+
             <MobileSectionTabs activeSection={activeSection} onSectionChange={setActiveSection} />
 
             {activeSection === 'numeros' && (
@@ -127,6 +157,7 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
                 filteredOrders={filteredOrders}
                 totalOrders={totalOrders}
                 campaignTitle={campaignTitle}
+                supportWhatsappNumber={supportWhatsappNumber}
                 onReceiptFilterChange={setReceiptFilter}
                 onReceiptSearchChange={setReceiptSearch}
               />

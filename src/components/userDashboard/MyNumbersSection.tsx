@@ -73,7 +73,7 @@ export default function MyNumbersSection({
           info
         </span>
         <span>
-          Cada numero concorre a <span className="font-semibold text-white">todos os premios</span> simultaneamente:
+          Cada numero concorre a <span className="font-semibold text-white">todos os premios</span>:
         </span>
         <div className="flex flex-wrap gap-2">
           <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 font-medium text-gold">

@@ -1,9 +1,10 @@
 import { signOut } from 'firebase/auth'
 import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
-import { auth, db } from '../lib/firebase'
+import { auth, db, functions } from '../lib/firebase'
 import { loadUserCpf, loadUserPhone, loadUserProfile, uploadUserAvatar } from '../services/userDashboard/userDashboardService'
 import { useAuthStore } from '../stores/authStore'
 import { formatTicketNumber } from '../utils/ticketNumber'
@@ -91,7 +92,20 @@ export function useUserDashboard() {
 
   const [orders, setOrders] = useState<UserOrder[]>([])
   const [tickets, setTickets] = useState<UserTicket[]>([])
+  const [winningSummary, setWinningSummary] = useState<{
+    hasWins: boolean
+    winsCount: number
+    latestWin: { drawId: string, drawDate: string, drawPrize: string, publishedAtMs: number } | null
+  }>({
+    hasWins: false,
+    winsCount: 0,
+    latestWin: null,
+  })
   const appliedRouteSectionKeyRef = useRef<string | null>(null)
+  const getMyTopBuyersWinningSummary = useMemo(
+    () => httpsCallable<Record<string, never>, unknown>(functions, 'getMyTopBuyersWinningSummary'),
+    [],
+  )
 
   useEffect(() => {
     if (appliedRouteSectionKeyRef.current === location.key) {
@@ -155,6 +169,68 @@ export function useUserDashboard() {
 
     return unsubscribe
   }, [isAuthReady, user])
+
+  useEffect(() => {
+    if (!isAuthReady || !user) {
+      setWinningSummary({
+        hasWins: false,
+        winsCount: 0,
+        latestWin: null,
+      })
+      return
+    }
+
+    let isCancelled = false
+
+    ;(async () => {
+      try {
+        const response = await getMyTopBuyersWinningSummary({})
+        const payload = response.data as {
+          hasWins?: unknown
+          winsCount?: unknown
+          latestWin?: {
+            drawId?: unknown
+            drawDate?: unknown
+            drawPrize?: unknown
+            publishedAtMs?: unknown
+          } | null
+        }
+
+        if (isCancelled) {
+          return
+        }
+
+        const latestWin = payload.latestWin
+          ? {
+              drawId: String(payload.latestWin.drawId || ''),
+              drawDate: String(payload.latestWin.drawDate || ''),
+              drawPrize: String(payload.latestWin.drawPrize || ''),
+              publishedAtMs: Number(payload.latestWin.publishedAtMs || 0),
+            }
+          : null
+
+        setWinningSummary({
+          hasWins: Boolean(payload.hasWins),
+          winsCount: Number(payload.winsCount || 0),
+          latestWin: latestWin && latestWin.drawId ? latestWin : null,
+        })
+      } catch {
+        if (isCancelled) {
+          return
+        }
+
+        setWinningSummary({
+          hasWins: false,
+          winsCount: 0,
+          latestWin: null,
+        })
+      }
+    })()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [getMyTopBuyersWinningSummary, isAuthReady, user])
 
   useEffect(() => {
     if (!isAuthReady || !user) {
@@ -387,6 +463,8 @@ export function useUserDashboard() {
     mainPrize: campaign.mainPrize,
     secondPrize: campaign.secondPrize,
     bonusPrize: campaign.bonusPrize,
+    supportWhatsappNumber: campaign.supportWhatsappNumber,
+    winningSummary,
     nextDrawDateLabel,
     displayName,
     initials,

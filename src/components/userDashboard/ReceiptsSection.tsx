@@ -9,6 +9,7 @@ type ReceiptsSectionProps = {
   filteredOrders: UserOrder[]
   totalOrders: number
   campaignTitle: string
+  supportWhatsappNumber: string
   onReceiptFilterChange: (filter: ReceiptFilter) => void
   onReceiptSearchChange: (value: string) => void
 }
@@ -19,6 +20,7 @@ export default function ReceiptsSection({
   filteredOrders,
   totalOrders,
   campaignTitle,
+  supportWhatsappNumber,
   onReceiptFilterChange,
   onReceiptSearchChange,
 }: ReceiptsSectionProps) {
@@ -81,7 +83,12 @@ export default function ReceiptsSection({
       ) : (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {filteredOrders.map((order) => (
-            <ReceiptCard key={order.id} order={order} campaignTitle={campaignTitle} />
+            <ReceiptCard
+              key={order.id}
+              order={order}
+              campaignTitle={campaignTitle}
+              supportWhatsappNumber={supportWhatsappNumber}
+            />
           ))}
         </div>
       )}

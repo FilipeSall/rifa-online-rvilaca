@@ -28,6 +28,45 @@ function formatAttemptLabel(extractionNumber: string, comparisonDigits: number) 
   return normalized.slice(-comparisonDigits).padStart(comparisonDigits, '0')
 }
 
+function buildWinnerCalculationLabel(result: NonNullable<ReturnType<typeof useTopBuyersDraw>['result']>) {
+  if (result.resolvedBy === 'federal_extraction') {
+    const winnerAttempt = result.attempts.find((attempt) => attempt.matchedPosition === result.winningPosition)
+    if (!winnerAttempt) {
+      return `Match direto na posição ${result.winningPosition}.`
+    }
+
+    const winnerCode = winnerAttempt.candidateCode.padStart(result.comparisonDigits, '0')
+    return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${winnerCode} -> match na posição ${result.winningPosition}.`
+  }
+
+  const seed = result.extractionNumbers
+    .map((value) => Number(value))
+    .reduce((sum, value, index) => sum + (value * (index + 1)), 0)
+  const modulo = result.participantCount > 0 ? seed % result.participantCount : 0
+  const normalizedPosition = modulo === 0 ? result.participantCount : modulo
+
+  return `Redundância: seed = Σ(extração × peso) = ${seed}; ${seed} mod ${result.participantCount} = ${modulo}; posição final = ${normalizedPosition}.`
+}
+
+function formatWinnerUserCode(result: NonNullable<ReturnType<typeof useTopBuyersDraw>['result']>) {
+  return String(result.winningCode || '').padStart(result.comparisonDigits, '0')
+}
+
+function pickComparableWinnerTicket(result: NonNullable<ReturnType<typeof useTopBuyersDraw>['result']>) {
+  if (!result.winnerTicketNumbers.length) {
+    return null
+  }
+
+  const matchByEnding = result.winnerTicketNumbers.find((ticket) => ticket.endsWith(result.winningCode))
+  return matchByEnding || result.winnerTicketNumbers[0]
+}
+
+function formatLoteriaInputs(extractionNumbers: string[]) {
+  return extractionNumbers
+    .map((value, index) => `${index + 1}ª extração: ${value}`)
+    .join(' | ')
+}
+
 export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersShowcaseProps) {
   const { campaign } = useCampaignSettings()
   const { result, isLoading, errorMessage } = useTopBuyersDraw()
@@ -109,6 +148,19 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                           <p className="mt-2 text-xs font-semibold text-amber-100">
                             Prêmio vigente: {result.drawPrize || campaign.mainPrize}
                           </p>
+                          <p className="mt-1 text-xs text-gray-200">
+                            Cálculo exato: <span className="font-semibold text-white">{buildWinnerCalculationLabel(result)}</span>
+                          </p>
+                          <p className="mt-1 text-xs text-gray-200">
+                            Código do ganhador premiado: <span className="font-bold text-gold">{formatWinnerUserCode(result)}</span>
+                          </p>
+                          <p className="mt-1 text-xs text-gray-200">
+                            Cupom do ganhador para conferência:{' '}
+                            <span className="font-bold text-gold">{pickComparableWinnerTicket(result) || '-'}</span>
+                          </p>
+                          <p className="mt-1 text-xs text-gray-300">
+                            Códigos da Loteria informados: <span className="font-mono text-white">{formatLoteriaInputs(result.extractionNumbers)}</span>
+                          </p>
                         </div>
                         <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-right">
                           <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Data</p>
@@ -122,19 +174,25 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                     <div className="rounded-xl border border-white/10 bg-black/25 p-4">
                       <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Rastro de apuração (regra de redundância)</p>
                       <div className="mt-3 space-y-2">
-                        {result.attempts.map((attempt) => (
-                          <div
-                            key={`${attempt.extractionIndex}-${attempt.candidateCode}`}
-                            className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs"
-                          >
-                            <span className="text-gray-300">
-                              Tentativa {attempt.extractionIndex}: extração {attempt.extractionNumber} ➜ código {formatAttemptLabel(attempt.extractionNumber, attempt.comparisonDigits)}
-                            </span>
-                            <span className="font-bold text-gold">
-                              {attempt.matchedPosition ? `Match na posição ${attempt.matchedPosition}` : 'Sem match'}
-                            </span>
-                          </div>
-                        ))}
+                        {result.attempts.map((attempt) => {
+                          const isFallback = attempt.extractionIndex > 5 || attempt.extractionNumber.includes('-')
+
+                          return (
+                            <div
+                              key={`${attempt.extractionIndex}-${attempt.candidateCode}`}
+                              className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs"
+                            >
+                              <span className="text-gray-300">
+                                {isFallback
+                                  ? `Tentativa ${attempt.extractionIndex}: cálculo de redundância (seed das 5 extrações) ➜ código ${attempt.candidateCode}`
+                                  : `Tentativa ${attempt.extractionIndex}: extração ${attempt.extractionNumber} ➜ código ${formatAttemptLabel(attempt.extractionNumber, attempt.comparisonDigits)}`}
+                              </span>
+                              <span className="font-bold text-gold">
+                                {attempt.matchedPosition ? `Match na posição ${attempt.matchedPosition}` : 'Sem match'}
+                              </span>
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
 

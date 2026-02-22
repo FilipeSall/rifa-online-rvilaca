@@ -60,9 +60,23 @@ export default function Header() {
     setIsMobileMenuOpen(false)
   }, [location.pathname, location.hash])
 
-  const getNavTarget = (href: string) => (href === '#' ? '/' : `/${href}`)
+  const getNavTarget = (href: string) => {
+    if (href === '#') {
+      return '/'
+    }
+
+    if (href.startsWith('/')) {
+      return href
+    }
+
+    return `/${href}`
+  }
 
   const isNavItemActive = (href: string) => {
+    if (href.startsWith('/')) {
+      return location.pathname === href
+    }
+
     if (!isHomePage) {
       return false
     }

@@ -11,6 +11,7 @@ import {
   DEFAULT_MAIN_PRIZE,
   DEFAULT_PRICE_PER_COTA,
   DEFAULT_SECOND_PRIZE,
+  DEFAULT_SUPPORT_WHATSAPP_NUMBER,
   MAX_PURCHASE_QUANTITY,
   type CampaignStatus,
 } from './constants.js'
@@ -34,6 +35,7 @@ interface UpsertCampaignSettingsInput {
   mainPrize?: string
   secondPrize?: string
   bonusPrize?: string
+  supportWhatsappNumber?: string
   status?: CampaignStatus
   startsAt?: string | null
   endsAt?: string | null
@@ -48,6 +50,7 @@ interface UpsertCampaignSettingsOutput {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  supportWhatsappNumber: string
   status: CampaignStatus
   startsAt: string | null
   endsAt: string | null
@@ -129,6 +132,24 @@ function sanitizeCampaignPrize(value: unknown, fieldName: string): string | null
   }
 
   return normalized.slice(0, 160)
+}
+
+function sanitizeSupportWhatsappNumber(value: unknown): string | null {
+  if (value === undefined || value === null) {
+    return null
+  }
+
+  const normalized = sanitizeString(value)
+  if (!normalized) {
+    throw new HttpsError('invalid-argument', 'supportWhatsappNumber nao pode ser vazio.')
+  }
+
+  const cleaned = normalized.replace(/[^\d+()\-\s]/g, '').slice(0, 32).trim()
+  if (!cleaned) {
+    throw new HttpsError('invalid-argument', 'supportWhatsappNumber invalido.')
+  }
+
+  return cleaned
 }
 
 function sanitizeCampaignStatus(value: unknown): CampaignStatus | null {
@@ -308,6 +329,11 @@ function readCampaignBonusPrize(data: DocumentData | undefined): string {
   return value || DEFAULT_BONUS_PRIZE
 }
 
+function readCampaignSupportWhatsappNumber(data: DocumentData | undefined): string {
+  const value = sanitizeString(data?.supportWhatsappNumber)
+  return value || DEFAULT_SUPPORT_WHATSAPP_NUMBER
+}
+
 function readCampaignStatus(data: DocumentData | undefined): CampaignStatus {
   const value = sanitizeString(data?.status).toLowerCase()
   if (CAMPAIGN_STATUS_VALUES.includes(value as CampaignStatus)) {
@@ -346,6 +372,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       const nextMainPrize = sanitizeCampaignPrize(payload.mainPrize, 'mainPrize')
       const nextSecondPrize = sanitizeCampaignPrize(payload.secondPrize, 'secondPrize')
       const nextBonusPrize = sanitizeCampaignPrize(payload.bonusPrize, 'bonusPrize')
+      const nextSupportWhatsappNumber = sanitizeSupportWhatsappNumber(payload.supportWhatsappNumber)
       const nextStatus = sanitizeCampaignStatus(payload.status)
       const nextStartsAt = sanitizeCampaignDate(payload.startsAt, 'startsAt')
       const nextEndsAt = sanitizeCampaignDate(payload.endsAt, 'endsAt')
@@ -382,6 +409,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
 
       if (nextBonusPrize !== null) {
         updateData.bonusPrize = nextBonusPrize
+      }
+
+      if (nextSupportWhatsappNumber !== null) {
+        updateData.supportWhatsappNumber = nextSupportWhatsappNumber
       }
 
       if (nextStatus !== null) {
@@ -434,6 +465,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
           updateData.bonusPrize = DEFAULT_BONUS_PRIZE
         }
 
+        if (!updateData.supportWhatsappNumber) {
+          updateData.supportWhatsappNumber = DEFAULT_SUPPORT_WHATSAPP_NUMBER
+        }
+
         if (!updateData.status) {
           updateData.status = DEFAULT_CAMPAIGN_STATUS
         }
@@ -450,6 +485,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         nextMainPrize === null &&
         nextSecondPrize === null &&
         nextBonusPrize === null &&
+        nextSupportWhatsappNumber === null &&
         nextStatus === null &&
         nextStartsAt === undefined &&
         nextEndsAt === undefined &&
@@ -478,6 +514,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         mainPrize: readCampaignMainPrize(campaignData),
         secondPrize: readCampaignSecondPrize(campaignData),
         bonusPrize: readCampaignBonusPrize(campaignData),
+        supportWhatsappNumber: readCampaignSupportWhatsappNumber(campaignData),
         status: readCampaignStatus(campaignData),
         startsAt: readCampaignDate(campaignData, 'startsAt'),
         endsAt: readCampaignDate(campaignData, 'endsAt'),

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { CAMPAIGN_STATUS_OPTIONS, DEFAULT_BONUS_PRIZE, DEFAULT_CAMPAIGN_TITLE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../../const/campaign'
 import type { CampaignCoupon, CampaignCouponDiscountType, CampaignStatus } from '../../../types/campaign'
+import { CustomSelect } from '../../ui/CustomSelect'
 import { useCampaignForm } from '../hooks/useCampaignForm'
 import { formatCurrency, getCampaignStatusLabel } from '../utils/formatters'
 
@@ -29,6 +30,7 @@ export default function CampaignTab() {
     mainPrize,
     secondPrize,
     bonusPrize,
+    supportWhatsappNumber,
     status,
     startsAt,
     endsAt,
@@ -39,6 +41,7 @@ export default function CampaignTab() {
     setMainPrize,
     setSecondPrize,
     setBonusPrize,
+    setSupportWhatsappNumber,
     setStatus,
     setStartsAt,
     setEndsAt,
@@ -237,23 +240,31 @@ export default function CampaignTab() {
               />
             </div>
 
+            <div className="rounded-xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-3">
+              <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-support-whatsapp">
+                WhatsApp da equipe (suporte/premiação)
+              </label>
+              <input
+                id="campaign-support-whatsapp"
+                className="mt-2 h-11 w-full rounded-md border border-cyan-200/30 bg-black/25 px-3 text-sm font-semibold text-cyan-50 outline-none transition-colors focus:border-cyan-200/80"
+                type="text"
+                value={supportWhatsappNumber}
+                onChange={(event) => setSupportWhatsappNumber(event.target.value)}
+                placeholder="+55 62 8507-4477"
+              />
+            </div>
+
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
                 <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-status">
                   Status da campanha
                 </label>
-                <select
+                <CustomSelect
                   id="campaign-status"
-                  className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
                   value={status}
-                  onChange={(event) => setStatus(event.target.value as CampaignStatus)}
-                >
-                  {CAMPAIGN_STATUS_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => setStatus(v as CampaignStatus)}
+                  options={CAMPAIGN_STATUS_OPTIONS}
+                />
               </div>
               <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
                 <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-starts-at">
