@@ -30,6 +30,12 @@ const MIN_PURCHASE_QUANTITY = 10
 const MAX_PURCHASE_QUANTITY = 300
 const RAFFLE_NUMBER_START = 540001
 const RAFFLE_NUMBER_END = 540120
+const CAMPAIGN_DOC_ID = 'campanha-bmw-r1200-gs-2026'
+const DEFAULT_CAMPAIGN_TITLE = 'Sorteio BMW R1200 GS'
+const DEFAULT_PRICE_PER_COTA = 0.99
+const DEFAULT_MAIN_PRIZE = 'BMW R1200 GS 2015/2016'
+const DEFAULT_SECOND_PRIZE = 'Honda CG Start 160 2026/2026'
+const DEFAULT_BONUS_PRIZE = '20 PIX de R$ 1.000'
 
 interface HorsePayAuthResponse {
   access_token?: string
@@ -63,6 +69,23 @@ interface ReserveNumbersOutput {
   numbers: number[]
   expiresAtMs: number
   reservationSeconds: number
+}
+
+interface UpsertCampaignSettingsInput {
+  title?: string
+  pricePerCota?: number
+  mainPrize?: string
+  secondPrize?: string
+  bonusPrize?: string
+}
+
+interface UpsertCampaignSettingsOutput {
+  campaignId: string
+  title: string
+  pricePerCota: number
+  mainPrize: string
+  secondPrize: string
+  bonusPrize: string
 }
 
 function maskUid(uid: string): string {
@@ -246,6 +269,92 @@ function sanitizePixType(value: unknown): PixType {
   }
 
   return pixType
+}
+
+function sanitizeCampaignPrice(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') {
+    return null
+  }
+
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    throw new HttpsError('invalid-argument', 'pricePerCota deve ser um numero maior que zero.')
+  }
+
+  return Number(numeric.toFixed(2))
+}
+
+function sanitizeCampaignTitle(value: unknown): string | null {
+  if (value === undefined || value === null) {
+    return null
+  }
+
+  const normalized = sanitizeString(value)
+  if (!normalized) {
+    throw new HttpsError('invalid-argument', 'title nao pode ser vazio.')
+  }
+
+  return normalized.slice(0, 120)
+}
+
+function sanitizeCampaignPrize(value: unknown, fieldName: string): string | null {
+  if (value === undefined || value === null) {
+    return null
+  }
+
+  const normalized = sanitizeString(value)
+  if (!normalized) {
+    throw new HttpsError('invalid-argument', `${fieldName} nao pode ser vazio.`)
+  }
+
+  return normalized.slice(0, 160)
+}
+
+async function assertAdminRole(uid: string) {
+  const userSnapshot = await db.collection('users').doc(uid).get()
+  const role = sanitizeString(userSnapshot.get('role')).toLowerCase()
+
+  if (role !== 'admin') {
+    throw new HttpsError('permission-denied', 'Apenas administradores podem alterar a campanha.')
+  }
+}
+
+function readCampaignTitle(data: DocumentData | undefined): string {
+  const fromTitle = sanitizeString(data?.title)
+  if (fromTitle) {
+    return fromTitle
+  }
+
+  const fromName = sanitizeString(data?.name)
+  if (fromName) {
+    return fromName
+  }
+
+  return DEFAULT_CAMPAIGN_TITLE
+}
+
+function readCampaignPricePerCota(data: DocumentData | undefined): number {
+  const numeric = Number(data?.pricePerCota)
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return DEFAULT_PRICE_PER_COTA
+  }
+
+  return Number(numeric.toFixed(2))
+}
+
+function readCampaignMainPrize(data: DocumentData | undefined): string {
+  const value = sanitizeString(data?.mainPrize)
+  return value || DEFAULT_MAIN_PRIZE
+}
+
+function readCampaignSecondPrize(data: DocumentData | undefined): string {
+  const value = sanitizeString(data?.secondPrize)
+  return value || DEFAULT_SECOND_PRIZE
+}
+
+function readCampaignBonusPrize(data: DocumentData | undefined): string {
+  const value = sanitizeString(data?.bonusPrize)
+  return value || DEFAULT_BONUS_PRIZE
 }
 
 function sanitizeNumberStatus(raw: unknown): 'disponivel' | 'reservado' | 'pago' {
@@ -876,6 +985,100 @@ const securedCallableOptions = {
   ...callableOptions,
   secrets: [HORSEPAY_CLIENT_KEY, HORSEPAY_CLIENT_SECRET],
 }
+
+export const upsertCampaignSettings = onCall(
+  callableOptions,
+  async (request: { auth?: { uid?: string } | null; data: unknown }) => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Usuario precisa estar autenticado')
+    }
+
+    await assertAdminRole(request.auth.uid)
+
+    const payload = asRecord(request.data) as Partial<UpsertCampaignSettingsInput>
+    const nextTitle = sanitizeCampaignTitle(payload.title)
+    const nextPricePerCota = sanitizeCampaignPrice(payload.pricePerCota)
+    const nextMainPrize = sanitizeCampaignPrize(payload.mainPrize, 'mainPrize')
+    const nextSecondPrize = sanitizeCampaignPrize(payload.secondPrize, 'secondPrize')
+    const nextBonusPrize = sanitizeCampaignPrize(payload.bonusPrize, 'bonusPrize')
+    const campaignRef = db.collection('campaigns').doc(CAMPAIGN_DOC_ID)
+    const campaignSnapshot = await campaignRef.get()
+
+    const updateData: DocumentData = {
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: request.auth.uid,
+    }
+
+    if (nextTitle !== null) {
+      updateData.title = nextTitle
+      updateData.name = nextTitle
+    }
+
+    if (nextPricePerCota !== null) {
+      updateData.pricePerCota = nextPricePerCota
+    }
+
+    if (nextMainPrize !== null) {
+      updateData.mainPrize = nextMainPrize
+    }
+
+    if (nextSecondPrize !== null) {
+      updateData.secondPrize = nextSecondPrize
+    }
+
+    if (nextBonusPrize !== null) {
+      updateData.bonusPrize = nextBonusPrize
+    }
+
+    if (!campaignSnapshot.exists) {
+      if (!updateData.title) {
+        updateData.title = DEFAULT_CAMPAIGN_TITLE
+        updateData.name = DEFAULT_CAMPAIGN_TITLE
+      }
+
+      if (!updateData.pricePerCota) {
+        updateData.pricePerCota = DEFAULT_PRICE_PER_COTA
+      }
+
+      if (!updateData.mainPrize) {
+        updateData.mainPrize = DEFAULT_MAIN_PRIZE
+      }
+
+      if (!updateData.secondPrize) {
+        updateData.secondPrize = DEFAULT_SECOND_PRIZE
+      }
+
+      if (!updateData.bonusPrize) {
+        updateData.bonusPrize = DEFAULT_BONUS_PRIZE
+      }
+
+      updateData.status = 'active'
+      updateData.createdAt = FieldValue.serverTimestamp()
+    } else if (
+      nextTitle === null &&
+      nextPricePerCota === null &&
+      nextMainPrize === null &&
+      nextSecondPrize === null &&
+      nextBonusPrize === null
+    ) {
+      throw new HttpsError('invalid-argument', 'Nenhum dado valido para atualizar campanha.')
+    }
+
+    await campaignRef.set(updateData, { merge: true })
+
+    const updatedCampaign = await campaignRef.get()
+    const campaignData = (updatedCampaign.exists ? updatedCampaign.data() : undefined) as DocumentData | undefined
+
+    return {
+      campaignId: CAMPAIGN_DOC_ID,
+      title: readCampaignTitle(campaignData),
+      pricePerCota: readCampaignPricePerCota(campaignData),
+      mainPrize: readCampaignMainPrize(campaignData),
+      secondPrize: readCampaignSecondPrize(campaignData),
+      bonusPrize: readCampaignBonusPrize(campaignData),
+    } satisfies UpsertCampaignSettingsOutput
+  },
+)
 
 export const reserveNumbers = onCall(
   callableOptions,

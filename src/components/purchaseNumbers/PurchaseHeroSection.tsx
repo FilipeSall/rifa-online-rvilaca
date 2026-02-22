@@ -1,7 +1,11 @@
-import { MIN_QUANTITY, UNIT_PRICE } from '../../const/purchaseNumbers'
+import { MIN_QUANTITY } from '../../const/purchaseNumbers'
 import { formatCurrency } from '../../utils/purchaseNumbers'
 
-export default function PurchaseHeroSection() {
+type PurchaseHeroSectionProps = {
+  unitPrice: number
+}
+
+export default function PurchaseHeroSection({ unitPrice }: PurchaseHeroSectionProps) {
   return (
     <section className="hero-bg border-b border-white/5">
       <div className="container mx-auto px-4 py-14 lg:px-8 lg:py-20">
@@ -23,7 +27,7 @@ export default function PurchaseHeroSection() {
           <div className="grid w-full max-w-sm grid-cols-2 gap-3 lg:gap-4">
             <div className="rounded-xl border border-white/10 bg-luxury-card p-4">
               <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Valor da cota</p>
-              <p className="mt-2 text-2xl font-black text-gold">{formatCurrency(UNIT_PRICE)}</p>
+              <p className="mt-2 text-2xl font-black text-gold">{formatCurrency(unitPrice)}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-luxury-card p-4">
               <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Compra minima</p>

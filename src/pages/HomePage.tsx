@@ -22,7 +22,7 @@ export default function HomePage() {
         <main className="flex-grow">
           <HeroSection />
           <div id="comprar-numeros">
-            <PurchaseHeroSection />
+            <PurchaseHeroSection unitPrice={purchaseState.unitPrice} />
             <PurchaseNumbersContent purchaseState={purchaseState} />
           </div>
           <WinnersFaqSection />

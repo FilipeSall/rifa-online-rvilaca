@@ -22,6 +22,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     appliedCoupon,
     couponFeedback,
     couponHint,
+    unitPrice,
     reservationSeconds,
     hasExpiredReservation,
     subtotal,
@@ -60,6 +61,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
         <aside className="xl:col-span-4">
           <PurchaseSummaryCard
             selectedCount={selectedCount}
+            unitPrice={unitPrice}
             subtotal={subtotal}
             discountAmount={discountAmount}
             totalAmount={totalAmount}

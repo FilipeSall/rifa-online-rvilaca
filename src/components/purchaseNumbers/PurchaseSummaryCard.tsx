@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom'
-import { MIN_QUANTITY, UNIT_PRICE } from '../../const/purchaseNumbers'
+import { MIN_QUANTITY } from '../../const/purchaseNumbers'
 import type { CouponFeedback } from '../../types/purchaseNumbers'
 import { formatCurrency, formatTimer } from '../../utils/purchaseNumbers'
 
 type PurchaseSummaryCardProps = {
   selectedCount: number
+  unitPrice: number
   subtotal: number
   discountAmount: number
   totalAmount: number
@@ -24,6 +25,7 @@ type PurchaseSummaryCardProps = {
 
 export default function PurchaseSummaryCard({
   selectedCount,
+  unitPrice,
   subtotal,
   discountAmount,
   totalAmount,
@@ -52,7 +54,7 @@ export default function PurchaseSummaryCard({
         </div>
         <div className="flex justify-between text-gray-300">
           <span>Preco por cota</span>
-          <span className="font-bold text-white">{formatCurrency(UNIT_PRICE)}</span>
+          <span className="font-bold text-white">{formatCurrency(unitPrice)}</span>
         </div>
         <div className="flex justify-between text-gray-300">
           <span>Subtotal</span>

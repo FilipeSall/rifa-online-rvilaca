@@ -1,4 +1,7 @@
-export type AdminTabId = 'dashboard' | 'pedidos' | 'campanha' | 'financeiro'
+import type { OrderDocument } from '../types/order'
+import { mapOrderDocToAdminRow, type AdminOrderRow, type AdminOrderStatus } from '../utils/adminOrders'
+
+export type AdminTabId = 'dashboard' | 'campanha'
 
 export type AdminTab = {
   id: AdminTabId
@@ -18,16 +21,8 @@ export type ConversionPoint = {
   fill: string
 }
 
-export type OrderStatus = 'pago' | 'pendente' | 'cancelado'
-
-export type AdminOrder = {
-  id: string
-  buyer: string
-  quantity: number
-  amount: number
-  status: OrderStatus
-  createdAt: string
-}
+export type OrderStatus = AdminOrderStatus
+export type AdminOrder = AdminOrderRow
 
 export type FinancialEntry = {
   id: string
@@ -40,9 +35,7 @@ export type FinancialEntry = {
 
 export const ADMIN_TABS: AdminTab[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { id: 'pedidos', label: 'Pedidos', icon: 'receipt_long' },
   { id: 'campanha', label: 'Campanha', icon: 'campaign' },
-  { id: 'financeiro', label: 'Financeiro', icon: 'account_balance_wallet' },
 ]
 
 export const ADMIN_KPIS = {
@@ -71,13 +64,70 @@ export const CONVERSION_SERIES: ConversionPoint[] = [
   { stage: 'Pagamento', value: 19, fill: '#ffcc4d' },
 ]
 
-export const ADMIN_ORDERS: AdminOrder[] = [
-  { id: 'PED-01914', buyer: 'Carlos Lima', quantity: 120, amount: 118.8, status: 'pago', createdAt: '22/02/2026 12:20' },
-  { id: 'PED-01913', buyer: 'Luana Pires', quantity: 80, amount: 79.2, status: 'pendente', createdAt: '22/02/2026 12:11' },
-  { id: 'PED-01912', buyer: 'Marta Souza', quantity: 40, amount: 39.6, status: 'pago', createdAt: '22/02/2026 12:07' },
-  { id: 'PED-01911', buyer: 'Joao Arantes', quantity: 25, amount: 24.75, status: 'cancelado', createdAt: '22/02/2026 11:55' },
-  { id: 'PED-01910', buyer: 'Pedro Alves', quantity: 200, amount: 198, status: 'pago', createdAt: '22/02/2026 11:42' },
+function buildReservedNumbers(start: number, quantity: number) {
+  return Array.from({ length: quantity }, (_, index) => start + index)
+}
+
+export const ADMIN_ORDER_DOCUMENTS_MOCK: OrderDocument[] = [
+  {
+    externalId: 'PED-01914',
+    userId: 'u_carlos_lima',
+    type: 'deposit',
+    payerName: 'Carlos Lima',
+    amount: 118.8,
+    status: 'paid',
+    reservedNumbers: buildReservedNumbers(540001, 120),
+    createdAt: '2026-02-22T12:20:00-03:00',
+    updatedAt: '2026-02-22T12:20:00-03:00',
+  },
+  {
+    externalId: 'PED-01913',
+    userId: 'u_luana_pires',
+    type: 'deposit',
+    payerName: 'Luana Pires',
+    amount: 79.2,
+    status: 'pending',
+    reservedNumbers: buildReservedNumbers(540300, 80),
+    createdAt: '2026-02-22T12:11:00-03:00',
+    updatedAt: '2026-02-22T12:11:00-03:00',
+  },
+  {
+    externalId: 'PED-01912',
+    userId: 'u_marta_souza',
+    type: 'deposit',
+    payerName: 'Marta Souza',
+    amount: 39.6,
+    status: 'paid',
+    reservedNumbers: buildReservedNumbers(540500, 40),
+    createdAt: '2026-02-22T12:07:00-03:00',
+    updatedAt: '2026-02-22T12:07:00-03:00',
+  },
+  {
+    externalId: 'PED-01911',
+    userId: 'u_joao_arantes',
+    type: 'deposit',
+    payerName: 'Joao Arantes',
+    amount: 24.75,
+    status: 'failed',
+    reservedNumbers: buildReservedNumbers(540700, 25),
+    failureReason: 'missing_pix_payload',
+    createdAt: '2026-02-22T11:55:00-03:00',
+    updatedAt: '2026-02-22T11:55:00-03:00',
+  },
+  {
+    externalId: 'PED-01910',
+    userId: 'u_pedro_alves',
+    type: 'deposit',
+    payerName: 'Pedro Alves',
+    amount: 198,
+    status: 'paid',
+    reservedNumbers: buildReservedNumbers(541000, 200),
+    createdAt: '2026-02-22T11:42:00-03:00',
+    updatedAt: '2026-02-22T11:42:00-03:00',
+  },
 ]
+
+export const ADMIN_ORDERS: AdminOrder[] = ADMIN_ORDER_DOCUMENTS_MOCK.map(mapOrderDocToAdminRow)
 
 export const FINANCIAL_ENTRIES: FinancialEntry[] = [
   { id: 'MOV-8841', date: '22/02/2026', grossAmount: 221430.32, netAmount: 216981.71, fees: 4448.61, status: 'conciliado' },

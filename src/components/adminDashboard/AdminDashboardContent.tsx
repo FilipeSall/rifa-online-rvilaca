@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Area,
   AreaChart,
@@ -8,7 +8,6 @@ import {
   Cell,
   Pie,
   PieChart,
-  ResponsiveContainer,
   Tooltip,
   type TooltipContentProps,
   XAxis,
@@ -16,20 +15,24 @@ import {
 } from 'recharts'
 import {
   ADMIN_KPIS,
-  ADMIN_ORDERS,
   ADMIN_TABS,
   CAMPAIGN_DRAFT,
   CONVERSION_SERIES,
-  FINANCIAL_ENTRIES,
   SALES_SERIES,
   type AdminTabId,
-  type OrderStatus,
 } from '../../const/adminDashboard'
+import { DEFAULT_CAMPAIGN_TITLE, DEFAULT_TICKET_PRICE } from '../../const/campaign'
+import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 
 type AdminDashboardContentProps = {
   activeTab: AdminTabId
   onTabChange: (tab: AdminTabId) => void
   onSignOut: () => void
+}
+
+type ElementSize = {
+  width: number
+  height: number
 }
 
 type MetricKey = keyof typeof ADMIN_KPIS
@@ -97,18 +100,6 @@ function formatInteger(value: number) {
   return new Intl.NumberFormat('pt-BR').format(value)
 }
 
-function getOrderStatusClass(status: OrderStatus) {
-  if (status === 'pago') {
-    return 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200'
-  }
-
-  if (status === 'pendente') {
-    return 'border-amber-300/30 bg-amber-500/15 text-amber-100'
-  }
-
-  return 'border-rose-400/30 bg-rose-500/15 text-rose-200'
-}
-
 function ConversionTooltip({ active, payload }: TooltipContentProps<number, string>) {
   if (!active || !payload || payload.length === 0) {
     return null
@@ -154,6 +145,33 @@ function useCountUp(targetValue: number, durationMs = 1600) {
   return animatedValue
 }
 
+function useElementSize<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null)
+  const [size, setSize] = useState<ElementSize>({ width: 0, height: 0 })
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element) {
+      return
+    }
+
+    const updateSize = () => {
+      const { width, height } = element.getBoundingClientRect()
+      setSize({ width, height })
+    }
+
+    updateSize()
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(element)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
+  return { ref, size }
+}
+
 type KpiCardProps = {
   card: (typeof KPI_CARDS)[number]
   index: number
@@ -185,6 +203,9 @@ function KpiCard({ card, index }: KpiCardProps) {
 function DashboardTab() {
   const [areChartsReady, setAreChartsReady] = useState(false)
   const [isRevenueAnimationActive, setIsRevenueAnimationActive] = useState(false)
+  const revenueContainer = useElementSize<HTMLDivElement>()
+  const conversionContainer = useElementSize<HTMLDivElement>()
+  const volumeContainer = useElementSize<HTMLDivElement>()
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -212,6 +233,13 @@ function DashboardTab() {
     }
   }, [areChartsReady])
 
+  const canRenderRevenueChart =
+    areChartsReady && revenueContainer.size.width > 0 && revenueContainer.size.height > 0
+  const canRenderConversionChart =
+    areChartsReady && conversionContainer.size.width > 0 && conversionContainer.size.height > 0
+  const canRenderVolumeChart =
+    areChartsReady && volumeContainer.size.width > 0 && volumeContainer.size.height > 0
+
   return (
     <div className="space-y-6">
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -225,60 +253,60 @@ function DashboardTab() {
           <div className="mb-4 flex items-center justify-between gap-4">
             <h3 className="font-luxury text-xl font-bold text-white">Faturamento por dia</h3>
           </div>
-          <div className="h-[360px] min-w-0 xl:flex-1">
-            {areChartsReady ? (
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                <AreaChart
-                  data={SALES_SERIES}
-                  margin={{ top: 8, right: 10, bottom: 6, left: 6 }}
-                >
-                  <defs>
-                    <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#F5A800" stopOpacity={0.7} />
-                      <stop offset="100%" stopColor="#F5A800" stopOpacity={0.05} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="4 8" />
-                  <XAxis
-                    axisLine={false}
-                    dataKey="day"
-                    height={32}
-                    padding={{ left: 12, right: 12 }}
-                    tick={{ fill: '#a3a3a3', fontSize: 12 }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    axisLine={false}
-                    domain={['dataMin - 12000', 'dataMax + 12000']}
-                    tick={{ fill: '#a3a3a3', fontSize: 12 }}
-                    tickFormatter={(value) => `R$${Number(value / 1000).toFixed(0)}k`}
-                    tickLine={false}
-                    tickMargin={10}
-                    width={58}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'rgba(20, 20, 20, 0.96)',
-                      border: '1px solid rgba(245, 168, 0, 0.25)',
-                      borderRadius: '12px',
-                      color: '#fff',
-                    }}
-                    itemStyle={{ color: '#f8fafc', fontWeight: 700 }}
-                    formatter={(value) => [formatCurrency(Number(value ?? 0)), 'Faturamento']}
-                    labelStyle={{ color: '#f5a800', fontWeight: 700 }}
-                  />
-                  <Area
-                    dataKey="revenue"
-                    fill="url(#revenueGradient)"
-                    isAnimationActive={isRevenueAnimationActive}
-                    animationDuration={1000}
-                    animationEasing="ease-out"
-                    stroke="#F5A800"
-                    strokeWidth={3}
-                    type="monotone"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+          <div ref={revenueContainer.ref} className="h-[360px] min-w-0 xl:flex-1">
+            {canRenderRevenueChart ? (
+              <AreaChart
+                width={Math.floor(revenueContainer.size.width)}
+                height={Math.floor(revenueContainer.size.height)}
+                data={SALES_SERIES}
+                margin={{ top: 8, right: 10, bottom: 6, left: 6 }}
+              >
+                <defs>
+                  <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#F5A800" stopOpacity={0.7} />
+                    <stop offset="100%" stopColor="#F5A800" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="4 8" />
+                <XAxis
+                  axisLine={false}
+                  dataKey="day"
+                  height={32}
+                  padding={{ left: 12, right: 12 }}
+                  tick={{ fill: '#a3a3a3', fontSize: 12 }}
+                  tickLine={false}
+                />
+                <YAxis
+                  axisLine={false}
+                  domain={['dataMin - 12000', 'dataMax + 12000']}
+                  tick={{ fill: '#a3a3a3', fontSize: 12 }}
+                  tickFormatter={(value) => `R$${Number(value / 1000).toFixed(0)}k`}
+                  tickLine={false}
+                  tickMargin={10}
+                  width={58}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'rgba(20, 20, 20, 0.96)',
+                    border: '1px solid rgba(245, 168, 0, 0.25)',
+                    borderRadius: '12px',
+                    color: '#fff',
+                  }}
+                  itemStyle={{ color: '#f8fafc', fontWeight: 700 }}
+                  formatter={(value) => [formatCurrency(Number(value ?? 0)), 'Faturamento']}
+                  labelStyle={{ color: '#f5a800', fontWeight: 700 }}
+                />
+                <Area
+                  dataKey="revenue"
+                  fill="url(#revenueGradient)"
+                  isAnimationActive={isRevenueAnimationActive}
+                  animationDuration={1000}
+                  animationEasing="ease-out"
+                  stroke="#F5A800"
+                  strokeWidth={3}
+                  type="monotone"
+                />
+              </AreaChart>
             ) : (
               <div className="h-full w-full animate-pulse rounded-xl bg-white/[0.03]" />
             )}
@@ -288,35 +316,32 @@ function DashboardTab() {
         <article className="flex h-full min-w-0 flex-col rounded-2xl border border-white/10 bg-luxury-card p-5 xl:col-span-5">
           <h3 className="font-luxury text-xl font-bold text-white">Funil de conversao</h3>
           <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gray-500">Visita ate pagamento</p>
-          <div className="h-72 min-w-0 pt-2">
-            {areChartsReady ? (
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                <PieChart>
-                  <Pie
-                    data={CONVERSION_SERIES}
-                    cx="50%"
-                    cy="50%"
-                    dataKey="value"
-                    nameKey="stage"
-                    innerRadius={55}
-                    outerRadius={98}
-                    isAnimationActive
-                    animationBegin={120}
-                    animationDuration={900}
-                    animationEasing="ease-out"
-                    paddingAngle={3}
-                  >
-                    {CONVERSION_SERIES.map((entry) => (
-                      <Cell key={entry.stage} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    content={ConversionTooltip}
-                    cursor={false}
-                    isAnimationActive={false}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+          <div ref={conversionContainer.ref} className="h-72 min-w-0 pt-2">
+            {canRenderConversionChart ? (
+              <PieChart
+                width={Math.floor(conversionContainer.size.width)}
+                height={Math.floor(conversionContainer.size.height)}
+              >
+                <Pie
+                  data={CONVERSION_SERIES}
+                  cx="50%"
+                  cy="50%"
+                  dataKey="value"
+                  nameKey="stage"
+                  innerRadius={55}
+                  outerRadius={98}
+                  isAnimationActive
+                  animationBegin={120}
+                  animationDuration={900}
+                  animationEasing="ease-out"
+                  paddingAngle={3}
+                >
+                  {CONVERSION_SERIES.map((entry) => (
+                    <Cell key={entry.stage} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <Tooltip content={ConversionTooltip} cursor={false} isAnimationActive={false} />
+              </PieChart>
             ) : (
               <div className="h-full w-full animate-pulse rounded-xl bg-white/[0.03]" />
             )}
@@ -335,32 +360,34 @@ function DashboardTab() {
       <section className="rounded-2xl border border-white/10 bg-luxury-card p-5">
         <h3 className="font-luxury text-xl font-bold text-white">Volume de pedidos por dia</h3>
         <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gray-500">Suporte a picos de acesso</p>
-        <div className="mt-4 h-72 min-w-0">
-          {areChartsReady ? (
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-              <BarChart data={SALES_SERIES}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="4 8" vertical={false} />
-                <XAxis axisLine={false} dataKey="day" tick={{ fill: '#a3a3a3', fontSize: 12 }} tickLine={false} />
-                <YAxis axisLine={false} tick={{ fill: '#a3a3a3', fontSize: 12 }} tickLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'rgba(20, 20, 20, 0.96)',
-                    border: '1px solid rgba(245, 168, 0, 0.2)',
-                    borderRadius: '12px',
-                    color: '#fff',
-                  }}
-                  itemStyle={{ color: '#f8fafc', fontWeight: 700 }}
-                  formatter={(value) => [`${formatInteger(Number(value ?? 0))} pedidos`, 'Pedidos']}
-                  labelStyle={{ color: '#f5a800', fontWeight: 700 }}
-                />
-                <Bar
-                  dataKey="orders"
-                  fill="#F5A800"
-                  isAnimationActive={false}
-                  radius={[6, 6, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+        <div ref={volumeContainer.ref} className="mt-4 h-72 min-w-0">
+          {canRenderVolumeChart ? (
+            <BarChart
+              width={Math.floor(volumeContainer.size.width)}
+              height={Math.floor(volumeContainer.size.height)}
+              data={SALES_SERIES}
+            >
+              <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="4 8" vertical={false} />
+              <XAxis axisLine={false} dataKey="day" tick={{ fill: '#a3a3a3', fontSize: 12 }} tickLine={false} />
+              <YAxis axisLine={false} tick={{ fill: '#a3a3a3', fontSize: 12 }} tickLine={false} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'rgba(20, 20, 20, 0.96)',
+                  border: '1px solid rgba(245, 168, 0, 0.2)',
+                  borderRadius: '12px',
+                  color: '#fff',
+                }}
+                itemStyle={{ color: '#f8fafc', fontWeight: 700 }}
+                formatter={(value) => [`${formatInteger(Number(value ?? 0))} pedidos`, 'Pedidos']}
+                labelStyle={{ color: '#f5a800', fontWeight: 700 }}
+              />
+              <Bar
+                dataKey="orders"
+                fill="#F5A800"
+                isAnimationActive={false}
+                radius={[6, 6, 0, 0]}
+              />
+            </BarChart>
           ) : (
             <div className="h-full w-full animate-pulse rounded-xl bg-white/[0.03]" />
           )}
@@ -370,74 +397,69 @@ function DashboardTab() {
   )
 }
 
-function OrdersTab() {
-  return (
-    <section className="rounded-2xl border border-white/10 bg-luxury-card p-5">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="font-luxury text-2xl font-bold text-white">Gestao de pedidos</h3>
-          <p className="mt-1 text-sm text-gray-400">Lista de compradores, status de pagamento e acoes operacionais.</p>
-        </div>
-        <button
-          className="inline-flex h-10 items-center rounded-lg border border-gold/40 bg-gold/10 px-4 text-xs font-bold uppercase tracking-[0.16em] text-gold hover:bg-gold/20"
-          type="button"
-        >
-          Exportar relatorio
-        </button>
-      </div>
-
-      <div className="overflow-x-auto rounded-xl border border-white/10">
-        <table className="min-w-full divide-y divide-white/10 text-sm">
-          <thead className="bg-black/30 text-left text-[10px] uppercase tracking-[0.2em] text-gray-400">
-            <tr>
-              <th className="px-4 py-3">Pedido</th>
-              <th className="px-4 py-3">Comprador</th>
-              <th className="px-4 py-3">Cotas</th>
-              <th className="px-4 py-3">Total</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Acoes</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {ADMIN_ORDERS.map((order) => (
-              <tr key={order.id} className="bg-luxury-bg/60 hover:bg-white/[0.03]">
-                <td className="px-4 py-3 font-bold text-white">{order.id}</td>
-                <td className="px-4 py-3">
-                  <p className="font-semibold text-white">{order.buyer}</p>
-                  <p className="text-xs text-gray-500">{order.createdAt}</p>
-                </td>
-                <td className="px-4 py-3 text-white">{order.quantity}</td>
-                <td className="px-4 py-3 text-gold">{formatCurrency(order.amount)}</td>
-                <td className="px-4 py-3">
-                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${getOrderStatusClass(order.status)}`}>
-                    {order.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end gap-2">
-                    <button className="rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white hover:border-gold/40" type="button">
-                      Reenviar
-                    </button>
-                    <button className="rounded-md border border-rose-400/30 bg-rose-500/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-rose-200 hover:bg-rose-500/20" type="button">
-                      Cancelar
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  )
-}
-
 function CampaignTab() {
+  const {
+    campaign,
+    exists,
+    isLoading,
+    isSaving,
+    errorMessage,
+    ensureCampaignExists,
+    saveCampaignSettings,
+  } = useCampaignSettings()
+  const [title, setTitle] = useState(DEFAULT_CAMPAIGN_TITLE)
+  const [pricePerCotaInput, setPricePerCotaInput] = useState(DEFAULT_TICKET_PRICE.toFixed(2))
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const [feedbackTone, setFeedbackTone] = useState<'success' | 'error'>('success')
+  const hasEnsuredCampaignRef = useRef(false)
+
+  useEffect(() => {
+    setTitle(campaign.title)
+    setPricePerCotaInput(campaign.pricePerCota.toFixed(2))
+  }, [campaign.pricePerCota, campaign.title])
+
+  useEffect(() => {
+    if (isLoading || exists || hasEnsuredCampaignRef.current) {
+      return
+    }
+
+    hasEnsuredCampaignRef.current = true
+    ensureCampaignExists().catch(() => {
+      setFeedbackTone('error')
+      setFeedback('Nao foi possivel criar a campanha no banco de dados.')
+    })
+  }, [ensureCampaignExists, exists, isLoading])
+
+  const handleSaveCampaignSettings = async () => {
+    const normalizedTitle = title.trim() || DEFAULT_CAMPAIGN_TITLE
+    const normalizedPriceText = pricePerCotaInput.replace(',', '.').trim()
+    const normalizedPrice = Number(normalizedPriceText)
+
+    if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0) {
+      setFeedbackTone('error')
+      setFeedback('Informe um valor valido para a cota.')
+      return
+    }
+
+    try {
+      await saveCampaignSettings({
+        title: normalizedTitle,
+        pricePerCota: Number(normalizedPrice.toFixed(2)),
+      })
+      setFeedbackTone('success')
+      setFeedback('Campanha atualizada no banco e sincronizada com o site.')
+    } catch {
+      setFeedbackTone('error')
+      setFeedback('Falha ao salvar campanha. Verifique permissao de admin e tente novamente.')
+    }
+  }
+
   return (
     <section className="space-y-5">
       <article className="rounded-2xl border border-white/10 bg-luxury-card p-5">
-        <h3 className="font-luxury text-2xl font-bold text-white">Gestao da campanha</h3>
-        <p className="mt-2 text-sm text-gray-400">Edicao de premios, data do sorteio, preco da cota e regulamento.</p>
+        <p className="text-[10px] uppercase tracking-[0.2em] text-gold">Campanha ativa</p>
+        <h3 className="mt-2 font-luxury text-2xl font-bold text-white">{campaign.title}</h3>
+        <p className="mt-2 text-sm text-gray-400">Edicao centralizada do nome da campanha e preco da cota.</p>
       </article>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
@@ -456,101 +478,59 @@ function CampaignTab() {
         </article>
 
         <article className="rounded-2xl border border-white/10 bg-luxury-card p-5">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4">
             <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Data do sorteio</p>
-              <p className="mt-1 text-lg font-bold text-white">{CAMPAIGN_DRAFT.drawDate}</p>
+              <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-title">
+                Nome da campanha
+              </label>
+              <input
+                id="campaign-title"
+                className="mt-2 h-10 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none focus:border-gold/50"
+                type="text"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+              />
             </div>
             <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Preco da cota</p>
-              <p className="mt-1 text-lg font-bold text-gold">{formatCurrency(CAMPAIGN_DRAFT.ticketPrice)}</p>
+              <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-ticket-price">
+                Preco por cota (R$)
+              </label>
+              <input
+                id="campaign-ticket-price"
+                className="mt-2 h-10 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-gold outline-none focus:border-gold/50"
+                inputMode="decimal"
+                type="text"
+                value={pricePerCotaInput}
+                onChange={(event) => setPricePerCotaInput(event.target.value)}
+              />
             </div>
-            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 sm:col-span-2">
+            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Regulamento</p>
               <p className="mt-1 text-lg font-bold text-white">{CAMPAIGN_DRAFT.regulationVersion}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Preco atual em todo o site</p>
+              <p className="mt-1 text-lg font-bold text-gold">{formatCurrency(campaign.pricePerCota)}</p>
             </div>
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            <button className="inline-flex h-10 items-center rounded-lg bg-gold px-4 text-xs font-black uppercase tracking-[0.14em] text-black hover:bg-gold-hover" type="button">
-              Salvar alteracoes
-            </button>
-            <button className="inline-flex h-10 items-center rounded-lg border border-white/20 bg-black/25 px-4 text-xs font-bold uppercase tracking-[0.14em] text-white hover:border-gold/30" type="button">
-              Upload de imagens
+            <button
+              className="inline-flex h-10 items-center rounded-lg bg-gold px-4 text-xs font-black uppercase tracking-[0.14em] text-black hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-70"
+              type="button"
+              disabled={isLoading || isSaving}
+              onClick={handleSaveCampaignSettings}
+            >
+              {isSaving ? 'Salvando...' : 'Salvar alteracoes'}
             </button>
           </div>
+
+          {feedback ? (
+            <p className={`mt-3 text-sm ${feedbackTone === 'success' ? 'text-emerald-300' : 'text-rose-300'}`}>{feedback}</p>
+          ) : null}
+          {errorMessage ? <p className="mt-1 text-xs text-rose-300">{errorMessage}</p> : null}
         </article>
       </div>
-    </section>
-  )
-}
-
-function FinanceTab() {
-  return (
-    <section className="space-y-5">
-      <article className="rounded-2xl border border-white/10 bg-luxury-card p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="font-luxury text-2xl font-bold text-white">Gestao financeira</h3>
-            <p className="mt-2 text-sm text-gray-400">Extrato de pagamentos, conciliacao PIX e exportacao de planilhas.</p>
-          </div>
-          <button className="inline-flex h-10 items-center rounded-lg border border-gold/40 bg-gold/10 px-4 text-xs font-bold uppercase tracking-[0.14em] text-gold hover:bg-gold/20" type="button">
-            Exportar planilha
-          </button>
-        </div>
-      </article>
-
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <article className="rounded-xl border border-white/10 bg-luxury-card p-4">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Bruto acumulado</p>
-          <p className="mt-2 text-2xl font-black text-white">{formatCurrency(596773.69)}</p>
-        </article>
-        <article className="rounded-xl border border-white/10 bg-luxury-card p-4">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Liquido acumulado</p>
-          <p className="mt-2 text-2xl font-black text-emerald-300">{formatCurrency(584787.6)}</p>
-        </article>
-        <article className="rounded-xl border border-white/10 bg-luxury-card p-4">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Taxas gateway</p>
-          <p className="mt-2 text-2xl font-black text-amber-200">{formatCurrency(11986.09)}</p>
-        </article>
-      </div>
-
-      <article className="overflow-x-auto rounded-2xl border border-white/10 bg-luxury-card">
-        <table className="min-w-full divide-y divide-white/10 text-sm">
-          <thead className="bg-black/30 text-left text-[10px] uppercase tracking-[0.2em] text-gray-400">
-            <tr>
-              <th className="px-4 py-3">Movimento</th>
-              <th className="px-4 py-3">Data</th>
-              <th className="px-4 py-3">Bruto</th>
-              <th className="px-4 py-3">Taxas</th>
-              <th className="px-4 py-3">Liquido</th>
-              <th className="px-4 py-3">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {FINANCIAL_ENTRIES.map((entry) => (
-              <tr key={entry.id} className="bg-luxury-bg/60 hover:bg-white/[0.03]">
-                <td className="px-4 py-3 font-bold text-white">{entry.id}</td>
-                <td className="px-4 py-3 text-white">{entry.date}</td>
-                <td className="px-4 py-3 text-white">{formatCurrency(entry.grossAmount)}</td>
-                <td className="px-4 py-3 text-amber-200">-{formatCurrency(entry.fees)}</td>
-                <td className="px-4 py-3 text-emerald-200">{formatCurrency(entry.netAmount)}</td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${
-                      entry.status === 'conciliado'
-                        ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200'
-                        : 'border-amber-300/30 bg-amber-500/15 text-amber-100'
-                    }`}
-                  >
-                    {entry.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </article>
     </section>
   )
 }
@@ -611,9 +591,7 @@ export default function AdminDashboardContent({ activeTab, onTabChange, onSignOu
 
         <div className="mt-6">
           {activeTab === 'dashboard' ? <DashboardTab /> : null}
-          {activeTab === 'pedidos' ? <OrdersTab /> : null}
           {activeTab === 'campanha' ? <CampaignTab /> : null}
-          {activeTab === 'financeiro' ? <FinanceTab /> : null}
         </div>
       </main>
     </div>

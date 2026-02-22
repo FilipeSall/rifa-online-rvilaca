@@ -4,8 +4,10 @@ import { httpsCallable } from 'firebase/functions'
 import { toast } from 'react-toastify'
 import { useNavigate } from 'react-router-dom'
 import { OPEN_AUTH_MODAL_EVENT } from '../const/auth'
-import { MAX_QUANTITY, MIN_QUANTITY, UNIT_PRICE } from '../const/purchaseNumbers'
+import { MAX_QUANTITY, MIN_QUANTITY } from '../const/purchaseNumbers'
+import { DEFAULT_TICKET_PRICE } from '../const/campaign'
 import { db, functions } from '../lib/firebase'
+import { useCampaignSettings } from './useCampaignSettings'
 import {
   getCouponHint,
   getPurchaseNumberPool,
@@ -95,6 +97,7 @@ function getReserveErrorMessage(error: unknown) {
 export function usePurchaseNumbers() {
   const navigate = useNavigate()
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
+  const { campaign } = useCampaignSettings()
   const [remoteStateByNumber, setRemoteStateByNumber] = useState<Map<number, RemoteNumberState>>(() => new Map())
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('automatico')
   const [quantity, setQuantity] = useState(MIN_QUANTITY)
@@ -127,7 +130,10 @@ export function usePurchaseNumbers() {
   )
 
   const selectedCount = selectedNumbers.length
-  const subtotal = selectedCount * UNIT_PRICE
+  const unitPrice = Number.isFinite(campaign.pricePerCota) && campaign.pricePerCota > 0
+    ? campaign.pricePerCota
+    : DEFAULT_TICKET_PRICE
+  const subtotal = selectedCount * unitPrice
   const discountAmount = subtotal * discountRate
   const totalAmount = Math.max(subtotal - discountAmount, 0)
   const canProceed = selectedCount >= MIN_QUANTITY && !isReserving
@@ -345,6 +351,7 @@ export function usePurchaseNumbers() {
     appliedCoupon,
     couponFeedback,
     couponHint: getCouponHint(),
+    unitPrice,
     reservationSeconds,
     hasExpiredReservation,
     subtotal,
