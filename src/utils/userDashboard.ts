@@ -1,6 +1,7 @@
 import { FirebaseError } from 'firebase/app'
 import type { User } from 'firebase/auth'
 import type { ReceiptFilter, TicketFilter, UserOrder, UserTicket } from '../types/userDashboard'
+import { formatTicketNumber } from './ticketNumber'
 
 export function getAvatarUploadErrorMessage(error: unknown) {
   if (error instanceof Error && error.message === 'avatar-upload-timeout') {
@@ -136,7 +137,7 @@ export function filterOrders(orders: UserOrder[], receiptFilter: ReceiptFilter, 
     const matchesSearch =
       receiptSearch === ''
       || order.id.toLowerCase().includes(normalizedSearch)
-      || order.numbers.some((number) => String(number).includes(normalizedSearch))
+      || order.numbers.some((number) => formatTicketNumber(number).includes(normalizedSearch))
 
     return matchesFilter && matchesSearch
   })

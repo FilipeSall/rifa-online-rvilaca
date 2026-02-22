@@ -9,6 +9,7 @@ import { db } from '../lib/firebase'
 import { useAuthStore } from '../stores/authStore'
 import { formatCurrency } from '../utils/purchaseNumbers'
 import { logPurchaseFlow } from '../utils/purchaseFlowLogger'
+import { formatTicketNumbers } from '../utils/ticketNumber'
 
 type CheckoutNavigationState = {
   orderId?: string
@@ -132,6 +133,7 @@ export default function CheckoutPage() {
   const amount = useMemo(() => parsePositiveAmount(amountInput.replace(',', '.')), [amountInput])
 
   const selectedNumbers = navigationState.selectedNumbers || []
+  const formattedSelectedNumbers = useMemo(() => formatTicketNumbers(selectedNumbers), [selectedNumbers])
   const selectedCount = navigationState.quantity || selectedNumbers.length || 0
   const selectedCouponCode = parseOptionalText(navigationState.couponCode) || null
 
@@ -266,7 +268,7 @@ export default function CheckoutPage() {
                     <div className="mt-5 rounded-lg border border-white/10 bg-black/20 p-4">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Numeros reservados</p>
                       <p className="mt-2 break-all text-xs text-gray-300">
-                        {selectedNumbers.slice(0, 20).join(', ')}
+                        {formattedSelectedNumbers.slice(0, 20).join(', ')}
                         {selectedNumbers.length > 20 ? ` ... +${selectedNumbers.length - 20}` : ''}
                       </p>
                     </div>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { NumberSlot, SelectionMode } from '../../types/purchaseNumbers'
+import { formatTicketNumber } from '../../utils/ticketNumber'
 
 type NumberSelectionCardProps = {
   numberPool: NumberSlot[]
@@ -74,7 +75,7 @@ export default function NumberSelectionCard({
   }, [currentPage])
 
   const displayedRange = useMemo(
-    () => `${(pageStart ?? 0).toLocaleString('pt-BR')} - ${(pageEnd ?? 0).toLocaleString('pt-BR')}`,
+    () => `${formatTicketNumber(pageStart ?? 0)} - ${formatTicketNumber(pageEnd ?? 0)}`,
     [pageEnd, pageStart],
   )
 
@@ -146,7 +147,7 @@ export default function NumberSelectionCard({
           <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 p-3">
             <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-300">Menor disponivel</p>
             <p className="mt-1 text-sm font-bold text-emerald-200">
-              {smallestAvailableNumber !== null ? smallestAvailableNumber.toLocaleString('pt-BR') : '--'}
+              {smallestAvailableNumber !== null ? formatTicketNumber(smallestAvailableNumber) : '--'}
             </p>
           </div>
         </div>
@@ -201,7 +202,7 @@ export default function NumberSelectionCard({
               <input
                 className="h-10 min-w-0 flex-1 rounded-lg border border-white/15 bg-black/25 px-3 text-sm font-semibold text-white outline-none transition focus:border-gold"
                 inputMode="numeric"
-                placeholder={`Numero (${rangeStart} a ${rangeEnd})`}
+                placeholder={`Numero (${formatTicketNumber(rangeStart)} a ${formatTicketNumber(rangeEnd)})`}
                 type="text"
                 value={manualNumberInput}
                 onChange={(event) => setManualNumberInput(event.target.value.replace(/[^0-9]/g, ''))}
@@ -262,7 +263,7 @@ export default function NumberSelectionCard({
                 onClick={() => onToggleNumber(slot)}
                 disabled={isPageLoading || selectionMode !== 'manual' || isBlocked}
               >
-                {slot.number}
+                {formatTicketNumber(slot.number)}
               </button>
             )
           })}

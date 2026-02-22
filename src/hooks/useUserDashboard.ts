@@ -6,6 +6,7 @@ import { toast } from 'react-toastify'
 import { auth, db } from '../lib/firebase'
 import { loadUserCpf, loadUserPhone, loadUserProfile, uploadUserAvatar } from '../services/userDashboard/userDashboardService'
 import { useAuthStore } from '../stores/authStore'
+import { formatTicketNumber } from '../utils/ticketNumber'
 import { useCampaignSettings } from './useCampaignSettings'
 import type { ReceiptFilter, Section, TicketFilter, UserOrder, UserTicket } from '../types/userDashboard'
 import {
@@ -208,7 +209,7 @@ export function useUserDashboard() {
 
         const nextTickets: UserTicket[] = nextOrders
           .flatMap((order) => order.numbers.map((number) => ({
-            number: String(number),
+            number: formatTicketNumber(number),
             numericNumber: number,
             orderId: order.id,
             date: order.date,

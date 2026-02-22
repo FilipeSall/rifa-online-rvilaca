@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf'
 import type { UserOrder } from '../types/userDashboard'
+import { formatTicketNumbers } from './ticketNumber'
 
 function formatAmount(value: number | null) {
   if (value === null || !Number.isFinite(value)) {
@@ -17,7 +18,7 @@ function chunkNumbers(numbers: number[]) {
     return ['-']
   }
 
-  const joined = numbers.join(', ')
+  const joined = formatTicketNumbers(numbers).join(', ')
   const rows: string[] = []
   let cursor = 0
 

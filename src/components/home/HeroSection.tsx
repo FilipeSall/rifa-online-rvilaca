@@ -171,7 +171,7 @@ export default function HeroSection() {
             {/* CTA button + secure payment */}
             <div className="mt-2 flex flex-col gap-3 max-w-lg">
               <button
-                className="inline-flex w-full h-16 items-center justify-center rounded-xl bg-green-500 px-8 text-base font-black text-white transition-all hover:bg-green-400 hover:scale-[1.02] shadow-[0_0_30px_rgba(34,197,94,0.4)] uppercase tracking-widest gap-3"
+                className="inline-flex w-full h-16 items-center justify-center rounded-xl bg-gold px-8 text-base font-black text-black transition-all hover:bg-yellow-400 hover:scale-[1.02] shadow-[0_0_30px_rgba(245,168,0,0.4)] uppercase tracking-widest gap-3"
                 type="button"
                 onClick={handleOpenBuyModal}
               >
@@ -179,7 +179,7 @@ export default function HeroSection() {
                 Comprar Números Agora
               </button>
               <div className="flex items-center justify-center gap-2 text-gray-400">
-                <span className="material-symbols-outlined text-green-500 text-base">verified_user</span>
+                <span className="material-symbols-outlined text-gold text-base">verified_user</span>
                 <span className="text-xs">Compra 100% segura e processada instantaneamente.</span>
               </div>
             </div>

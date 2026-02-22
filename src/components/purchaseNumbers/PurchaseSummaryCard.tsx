@@ -1,5 +1,6 @@
 import type { CouponFeedback } from '../../types/purchaseNumbers'
 import { formatCurrency } from '../../utils/purchaseNumbers'
+import { formatTicketNumbers } from '../../utils/ticketNumber'
 
 type PurchaseSummaryCardProps = {
   selectedCount: number
@@ -40,6 +41,8 @@ export default function PurchaseSummaryCard({
   onApplyCoupon,
   onProceed,
 }: PurchaseSummaryCardProps) {
+  const formattedSelectedNumbers = formatTicketNumbers(selectedNumbers)
+
   return (
     <div className="sticky top-24 rounded-2xl border border-gold/25 bg-luxury-card p-6 shadow-2xl">
       <p className="text-[10px] uppercase tracking-[0.22em] text-gold">3. Carrinho</p>
@@ -123,7 +126,7 @@ export default function PurchaseSummaryCard({
       <div className="mt-6 border-t border-white/10 pt-4">
         <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Numeros selecionados</p>
         <p className="mt-2 break-all text-sm text-gray-300">
-          {selectedNumbers.slice(0, 20).join(', ') || 'Nenhum numero selecionado.'}
+          {formattedSelectedNumbers.slice(0, 20).join(', ') || 'Nenhum numero selecionado.'}
           {selectedNumbers.length > 20 ? ` ... +${selectedNumbers.length - 20}` : ''}
         </p>
       </div>

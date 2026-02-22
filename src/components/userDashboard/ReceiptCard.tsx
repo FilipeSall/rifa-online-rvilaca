@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { exportOrderReceiptPdf } from '../../utils/receiptPdf'
+import { formatTicketNumbers } from '../../utils/ticketNumber'
 import type { UserOrder } from '../../types/userDashboard'
 import { OrderStatusBadge } from './StatusBadges'
 
@@ -19,7 +20,7 @@ function openWhatsAppShare(order: UserOrder) {
     `Data: ${order.date}`,
     `Cotas: ${order.cotas}`,
     `Valor total: ${order.totalBrl}`,
-    `Numeros: ${order.numbers.join(', ') || '-'}`,
+    `Numeros: ${formatTicketNumbers(order.numbers).join(', ') || '-'}`,
   ].join('\n')
 
   const url = `https://wa.me/?text=${encodeURIComponent(message)}`

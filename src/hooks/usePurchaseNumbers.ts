@@ -16,6 +16,7 @@ import { useAuthStore } from '../stores/authStore'
 import type { CouponFeedback, NumberSlot, SelectionMode } from '../types/purchaseNumbers'
 import { getSafeQuantity } from '../utils/purchaseNumbers'
 import { logPurchaseFlow, serializeError } from '../utils/purchaseFlowLogger'
+import { formatTicketNumber } from '../utils/ticketNumber'
 
 type ReserveNumbersInput = {
   numbers: number[]
@@ -155,7 +156,7 @@ export function usePurchaseNumbers() {
   const [isPageLoading, setIsPageLoading] = useState(true)
   const [isAutoSelecting, setIsAutoSelecting] = useState(false)
   const [isManualAdding, setIsManualAdding] = useState(false)
-  const [selectionMode, setSelectionMode] = useState<SelectionMode>('manual')
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>('automatico')
   const [quantity, setQuantity] = useState(MIN_QUANTITY)
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>([])
   const [couponCode, setCouponCode] = useState('')
@@ -439,6 +440,9 @@ export function usePurchaseNumbers() {
 
   const handleSelectionModeChange = useCallback(
     (mode: SelectionMode) => {
+      if (mode === 'manual') {
+        setSelectedNumbers([])
+      }
       setSelectionMode(mode)
       clearReservationState()
     },
@@ -559,7 +563,7 @@ export function usePurchaseNumbers() {
 
       if (number < rangeStart || number > rangeEnd) {
         toast.warning(
-          `Numero fora da faixa da campanha (${rangeStart.toLocaleString('pt-BR')} a ${rangeEnd.toLocaleString('pt-BR')}).`,
+          `Numero fora da faixa da campanha (${formatTicketNumber(rangeStart)} a ${formatTicketNumber(rangeEnd)}).`,
           { position: 'bottom-right' },
         )
         logPurchaseFlow('usePurchaseNumbers', 'manual_add_rejected_out_of_range', 'warn', {
@@ -752,7 +756,7 @@ export function usePurchaseNumbers() {
         setSelectedNumbers((currentSelection) =>
           currentSelection.filter((number) => number !== conflictedNumber))
         toast.warning(
-          `O numero ${conflictedNumber.toLocaleString('pt-BR')} foi reservado por outro usuario durante o processo. Selecione outro numero e tente novamente.`,
+          `O numero ${formatTicketNumber(conflictedNumber)} foi reservado por outro usuario durante o processo. Selecione outro numero e tente novamente.`,
           { position: 'bottom-right' },
         )
         logPurchaseFlow('usePurchaseNumbers', 'reserve_numbers_conflict', 'warn', {
