@@ -1,21 +1,101 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { collection, onSnapshot } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { toast } from 'react-toastify'
 import { useNavigate } from 'react-router-dom'
 import { OPEN_AUTH_MODAL_EVENT } from '../const/auth'
-import { MAX_QUANTITY, MIN_QUANTITY, RESERVATION_SECONDS, UNIT_PRICE } from '../const/purchaseNumbers'
+import { MAX_QUANTITY, MIN_QUANTITY, UNIT_PRICE } from '../const/purchaseNumbers'
+import { db, functions } from '../lib/firebase'
 import {
   getCouponHint,
   getPurchaseNumberPool,
+  type RemoteNumberState,
   validateCouponCode,
 } from '../services/purchaseNumbers/purchaseNumbersService'
 import { useAuthStore } from '../stores/authStore'
 import type { CouponFeedback, NumberSlot, SelectionMode } from '../types/purchaseNumbers'
 import { getSafeQuantity, pickRandomNumbers } from '../utils/purchaseNumbers'
 
+type ReserveNumbersInput = {
+  numbers: number[]
+}
+
+type ReserveNumbersResponse = {
+  numbers: number[]
+  expiresAtMs: number
+  reservationSeconds: number
+}
+
+type CallableEnvelope<T> = T | { result?: T }
+
+function unwrapCallableData<T>(value: CallableEnvelope<T>) {
+  if (value && typeof value === 'object' && 'result' in value) {
+    const wrapped = value as { result?: T }
+    if (wrapped.result !== undefined) {
+      return wrapped.result
+    }
+  }
+
+  return value as T
+}
+
+function readTimestampMillis(value: unknown): number | null {
+  if (!value) {
+    return null
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (value instanceof Date) {
+    return value.getTime()
+  }
+
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'toMillis' in value &&
+    typeof (value as { toMillis?: unknown }).toMillis === 'function'
+  ) {
+    try {
+      return Number((value as { toMillis: () => number }).toMillis())
+    } catch {
+      return null
+    }
+  }
+
+  return null
+}
+
+function getReserveErrorMessage(error: unknown) {
+  if (!error || typeof error !== 'object') {
+    return 'Nao foi possivel reservar os numeros agora. Tente novamente.'
+  }
+
+  const candidate = error as { code?: string; message?: string }
+  if (candidate.message) {
+    const cleanMessage = candidate.message
+      .replace(/^Firebase:\s*/i, '')
+      .replace(/\s*\(functions\/[a-z-]+\)\.?$/i, '')
+      .trim()
+
+    if (cleanMessage) {
+      return cleanMessage
+    }
+  }
+
+  if (candidate.code === 'functions/unauthenticated') {
+    return 'Voce precisa estar logado para reservar numeros.'
+  }
+
+  return 'Nao foi possivel reservar os numeros agora. Tente novamente.'
+}
+
 export function usePurchaseNumbers() {
   const navigate = useNavigate()
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
-  const [numberPool] = useState(() => getPurchaseNumberPool())
+  const [remoteStateByNumber, setRemoteStateByNumber] = useState<Map<number, RemoteNumberState>>(() => new Map())
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('automatico')
   const [quantity, setQuantity] = useState(MIN_QUANTITY)
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>([])
@@ -25,6 +105,16 @@ export function usePurchaseNumbers() {
   const [couponFeedback, setCouponFeedback] = useState<CouponFeedback | null>(null)
   const [reservationSeconds, setReservationSeconds] = useState<number | null>(null)
   const [hasExpiredReservation, setHasExpiredReservation] = useState(false)
+  const [isReserving, setIsReserving] = useState(false)
+  const reserveNumbers = useMemo(
+    () => httpsCallable<ReserveNumbersInput, unknown>(functions, 'reserveNumbers'),
+    [],
+  )
+
+  const numberPool = useMemo(
+    () => getPurchaseNumberPool(remoteStateByNumber),
+    [remoteStateByNumber],
+  )
 
   const availableNumbers = useMemo(
     () => numberPool.filter((item) => item.status === 'disponivel').map((item) => item.number),
@@ -40,15 +130,45 @@ export function usePurchaseNumbers() {
   const subtotal = selectedCount * UNIT_PRICE
   const discountAmount = subtotal * discountRate
   const totalAmount = Math.max(subtotal - discountAmount, 0)
-  const canProceed = selectedCount >= MIN_QUANTITY
+  const canProceed = selectedCount >= MIN_QUANTITY && !isReserving
 
   useEffect(() => {
-    if (selectionMode !== 'automatico') {
+    const unsubscribe = onSnapshot(
+      collection(db, 'raffleNumbers'),
+      (snapshot) => {
+        const nextState = new Map<number, RemoteNumberState>()
+
+        snapshot.forEach((documentSnapshot) => {
+          const data = documentSnapshot.data()
+          const number = Number(data.number ?? documentSnapshot.id)
+
+          if (!Number.isInteger(number)) {
+            return
+          }
+
+          nextState.set(number, {
+            status: typeof data.status === 'string' ? data.status : 'disponivel',
+            reservationExpiresAtMs: readTimestampMillis(data.reservationExpiresAt ?? data.expiresAt),
+          })
+        })
+
+        setRemoteStateByNumber(nextState)
+      },
+      (error) => {
+        console.warn('Failed to subscribe raffleNumbers:', error)
+      },
+    )
+
+    return unsubscribe
+  }, [])
+
+  useEffect(() => {
+    if (selectionMode !== 'automatico' || reservationSeconds !== null) {
       return
     }
 
     setSelectedNumbers(pickRandomNumbers(availableNumbers, quantity))
-  }, [selectionMode, quantity, availableNumbers])
+  }, [availableNumbers, quantity, reservationSeconds, selectionMode])
 
   useEffect(() => {
     if (selectionMode !== 'manual') {
@@ -63,6 +183,18 @@ export function usePurchaseNumbers() {
       return currentSelection.slice(0, quantity)
     })
   }, [quantity, selectionMode])
+
+  useEffect(() => {
+    if (selectedNumbers.length === 0 || reservationSeconds !== null) {
+      return
+    }
+
+    const availableSet = new Set(availableNumbers)
+    setSelectedNumbers((currentSelection) => {
+      const nextSelection = currentSelection.filter((number) => availableSet.has(number))
+      return nextSelection.length === currentSelection.length ? currentSelection : nextSelection
+    })
+  }, [availableNumbers, reservationSeconds, selectedNumbers.length])
 
   useEffect(() => {
     if (reservationSeconds === null) {
@@ -144,7 +276,7 @@ export function usePurchaseNumbers() {
     setDiscountRate(validation.discountRate)
   }, [couponCode])
 
-  const handleProceed = useCallback(() => {
+  const handleProceed = useCallback(async () => {
     if (!canProceed) {
       return
     }
@@ -160,8 +292,33 @@ export function usePurchaseNumbers() {
     }
 
     if (reservationSeconds === null) {
-      setReservationSeconds(RESERVATION_SECONDS)
-      setHasExpiredReservation(false)
+      setIsReserving(true)
+
+      try {
+        const callableResult = await reserveNumbers({ numbers: selectedNumbers })
+        const payload = unwrapCallableData(callableResult.data as CallableEnvelope<ReserveNumbersResponse>)
+        const secondsFromNow = Math.max(Math.floor((payload.expiresAtMs - Date.now()) / 1000), 0)
+
+        if (secondsFromNow <= 0) {
+          setReservationSeconds(null)
+          setHasExpiredReservation(true)
+          toast.warning('Sua reserva expirou. Tente reservar novamente.', {
+            position: 'bottom-right',
+            toastId: 'reservation-expired',
+          })
+          return
+        }
+
+        setReservationSeconds(secondsFromNow)
+        setHasExpiredReservation(false)
+      } catch (error) {
+        toast.error(getReserveErrorMessage(error), {
+          position: 'bottom-right',
+        })
+      } finally {
+        setIsReserving(false)
+      }
+
       return
     }
 
@@ -172,7 +329,7 @@ export function usePurchaseNumbers() {
         selectedNumbers,
       },
     })
-  }, [canProceed, isLoggedIn, navigate, reservationSeconds, selectedCount, selectedNumbers, totalAmount])
+  }, [canProceed, isLoggedIn, navigate, reservationSeconds, reserveNumbers, selectedCount, selectedNumbers, totalAmount])
 
   return {
     numberPool,
@@ -194,6 +351,7 @@ export function usePurchaseNumbers() {
     discountAmount,
     totalAmount,
     canProceed,
+    isReserving,
     handleSetQuantity,
     handleToggleNumber,
     handleApplyCoupon,

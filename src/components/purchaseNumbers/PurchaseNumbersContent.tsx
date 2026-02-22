@@ -28,6 +28,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     discountAmount,
     totalAmount,
     canProceed,
+    isReserving,
     handleSetQuantity,
     handleToggleNumber,
     handleApplyCoupon,
@@ -69,6 +70,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
             reservationSeconds={reservationSeconds}
             hasExpiredReservation={hasExpiredReservation}
             canProceed={canProceed}
+            isReserving={isReserving}
             selectedNumbers={selectedNumbers}
             onCouponCodeChange={setCouponCode}
             onApplyCoupon={handleApplyCoupon}

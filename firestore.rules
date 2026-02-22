@@ -34,6 +34,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Grade de números da rifa: leitura pública, escrita apenas via backend (Admin SDK).
+    match /raffleNumbers/{numberId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Reserva ativa por usuário: leitura somente do dono, escrita apenas via backend.
+    match /numberReservations/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+    }
+
     // Perfil do usuário: somente o próprio usuário pode ler e escrever.
     // delete: if false explícito é seguro porque write foi separado em create/update.
     match /users/{uid} {

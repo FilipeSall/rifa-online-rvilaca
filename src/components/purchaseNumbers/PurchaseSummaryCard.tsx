@@ -15,6 +15,7 @@ type PurchaseSummaryCardProps = {
   reservationSeconds: number | null
   hasExpiredReservation: boolean
   canProceed: boolean
+  isReserving: boolean
   selectedNumbers: number[]
   onCouponCodeChange: (value: string) => void
   onApplyCoupon: () => void
@@ -33,6 +34,7 @@ export default function PurchaseSummaryCard({
   reservationSeconds,
   hasExpiredReservation,
   canProceed,
+  isReserving,
   selectedNumbers,
   onCouponCodeChange,
   onApplyCoupon,
@@ -117,10 +119,10 @@ export default function PurchaseSummaryCard({
       <button
         className="mt-5 h-12 w-full rounded-xl bg-green-500 px-4 text-sm font-black uppercase tracking-widest text-white transition-all hover:bg-green-400 disabled:cursor-not-allowed disabled:opacity-40"
         type="button"
-        disabled={!canProceed}
+        disabled={!canProceed || isReserving}
         onClick={onProceed}
       >
-        {reservationSeconds === null ? 'Reservar por 10 min' : 'Ir para pagamento PIX'}
+        {isReserving ? 'Reservando...' : reservationSeconds === null ? 'Reservar por 10 min' : 'Ir para pagamento PIX'}
       </button>
 
       <p className="mt-3 text-[11px] text-gray-500">
