@@ -168,6 +168,8 @@ export function usePurchaseNumbers() {
   const [isReserving, setIsReserving] = useState(false)
   const pageRequestIdRef = useRef(0)
   const autoSelectRequestIdRef = useRef(0)
+  const selectedNumbersRef = useRef<number[]>(selectedNumbers)
+  selectedNumbersRef.current = selectedNumbers
   const callables = useMemo(
     () => ({
       reserveNumbers: httpsCallable<ReserveNumbersInput, unknown>(functions, 'reserveNumbers'),
@@ -262,7 +264,7 @@ export function usePurchaseNumbers() {
       return
     }
 
-    const preservedSelection = Array.from(new Set(selectedNumbers))
+    const preservedSelection = Array.from(new Set(selectedNumbersRef.current))
       .slice(0, quantity)
       .sort((a, b) => a - b)
     const missingQuantity = Math.max(quantity - preservedSelection.length, 0)
@@ -334,7 +336,6 @@ export function usePurchaseNumbers() {
     callables.pickRandomAvailableNumbers,
     quantity,
     reservationSeconds,
-    selectedNumbers,
     selectionMode,
   ])
 
