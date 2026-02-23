@@ -15,7 +15,7 @@ function parseErrorMessage(error: unknown) {
       return message.replace(/^Firebase:\s*/i, '')
     }
   }
-  return 'Falha ao publicar sorteio geral. Verifique os dados e tente novamente.'
+  return 'Falha ao publicar sorteio principal. Verifique os dados e tente novamente.'
 }
 
 function formatPublishedAt(timestampMs: number) {
@@ -107,8 +107,10 @@ export default function MainRaffleDrawTab() {
   }
 
   const handlePublish = async () => {
-    if (!selectedPrize || extractionInputs.some((item) => item.length === 0)) {
-      toast.warning('Selecione o premio e preencha as 5 extracoes.', {
+    const selectedExtractionValue = extractionInputs[extractionIndex - 1] || ''
+
+    if (!selectedPrize || !selectedExtractionValue) {
+      toast.warning('Selecione o premio e preencha a extracao usada.', {
         toastId: 'main-raffle-draw-invalid-input',
       })
       return
@@ -118,11 +120,11 @@ export default function MainRaffleDrawTab() {
       const published = await publishResult({
         drawPrize: selectedPrize,
         extractionIndex,
-        extractionNumbers: extractionInputs.map((item) => item.padStart(7, '0')),
+        extractionNumbers: extractionInputs,
       })
 
       toast.success(
-        `Sorteio geral publicado: numero ${published.winningNumberFormatted} - ${published.winner.name}.`,
+        `Sorteio principal publicado: numero ${published.winningNumberFormatted} - ${published.winner.name}.`,
         { toastId: 'main-raffle-draw-published' },
       )
       setDrawPrizeInput('')
@@ -161,7 +163,7 @@ export default function MainRaffleDrawTab() {
       </article>
 
       <article className="rounded-3xl border border-white/10 bg-luxury-card p-6">
-        <h4 className="font-luxury text-2xl font-bold text-white">Publicar sorteio geral</h4>
+        <h4 className="font-luxury text-2xl font-bold text-white">Publicar sorteio principal</h4>
 
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div>
@@ -181,9 +183,22 @@ export default function MainRaffleDrawTab() {
           </div>
 
           <div>
-            <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="main-draw-extraction-index">
-              Extracao usada (1-5)
-            </label>
+            <div className="flex items-center gap-2">
+              <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="main-draw-extraction-index">
+                Extracao usada (1-5)
+              </label>
+              <span className="group relative inline-flex">
+                <span
+                  className="material-symbols-outlined cursor-help text-sm text-gray-400 transition-colors group-hover:text-gold"
+                  aria-hidden="true"
+                >
+                  info
+                </span>
+                <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-72 -translate-x-1/2 rounded-lg border border-white/15 bg-black/95 px-3 py-2 text-[11px] leading-relaxed text-gray-200 shadow-xl group-hover:block">
+                  Escolha qual das 5 extracoes da Loteria Federal sera usada no calculo base. Apenas a extracao escolhida e obrigatoria; as demais podem ficar em branco.
+                </span>
+              </span>
+            </div>
             <input
               id="main-draw-extraction-index"
               type="number"
@@ -202,7 +217,7 @@ export default function MainRaffleDrawTab() {
               disabled={isPublishing || selectablePrizes.length === 0}
               className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-gold px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition-colors hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isPublishing ? 'Publicando...' : 'Publicar sorteio geral'}
+              {isPublishing ? 'Publicando...' : 'Publicar sorteio principal'}
             </button>
           </div>
         </div>
@@ -230,7 +245,7 @@ export default function MainRaffleDrawTab() {
       </article>
 
       <article className="rounded-3xl border border-white/10 bg-luxury-card p-6">
-        <h4 className="font-luxury text-2xl font-bold text-white">Historico do sorteio geral</h4>
+        <h4 className="font-luxury text-2xl font-bold text-white">Historico do sorteio principal</h4>
 
         {isLoading || isHistoryLoading ? (
           <div className="mt-4 space-y-2">
@@ -242,7 +257,7 @@ export default function MainRaffleDrawTab() {
 
         {!isLoading && !isHistoryLoading && history.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-white/20 bg-white/5 p-5 text-sm text-gray-300">
-            Nenhum sorteio geral publicado ate o momento.
+            Nenhum sorteio principal publicado ate o momento.
           </div>
         ) : null}
 

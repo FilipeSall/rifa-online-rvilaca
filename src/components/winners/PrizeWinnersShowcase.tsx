@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useCampaignSettings } from '../../hooks/useCampaignSettings'
+import { useMainRaffleDraw } from '../../hooks/useMainRaffleDraw'
 import { useTopBuyersDraw } from '../../hooks/useTopBuyersDraw'
 
 type PrizeWinnersShowcaseProps = {
@@ -28,6 +29,11 @@ function formatAttemptLabel(extractionNumber: string, comparisonDigits: number) 
   return normalized.slice(-comparisonDigits).padStart(comparisonDigits, '0')
 }
 
+function formatWinningPosition(position: number, participantCount: number) {
+  const digits = Math.max(2, String(participantCount || 0).length)
+  return String(position || 0).padStart(digits, '0')
+}
+
 function buildWinnerCalculationLabel(result: NonNullable<ReturnType<typeof useTopBuyersDraw>['result']>) {
   if (result.resolvedBy === 'federal_extraction') {
     const winnerAttempt = result.attempts.find((attempt) => attempt.matchedPosition === result.winningPosition)
@@ -41,10 +47,10 @@ function buildWinnerCalculationLabel(result: NonNullable<ReturnType<typeof useTo
 
     if (hasPath) {
       const directionLabel = winnerAttempt.nearestDirection === 'below' ? 'abaixo' : 'acima'
-      return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${rawCode} -> aproximação: ${rawCode} -> ${resolvedCode} (${directionLabel}, dist ${winnerAttempt.nearestDistance ?? '?'}) -> match na posição ${result.winningPosition}.`
+      return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${rawCode} -> aproximação aplicada (${directionLabel}, dist ${winnerAttempt.nearestDistance ?? '?'}) -> match na posição ${formatWinningPosition(result.winningPosition, result.participantCount)}.`
     }
 
-    return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${resolvedCode} -> match na posição ${result.winningPosition}.`
+    return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${resolvedCode} -> match na posição ${formatWinningPosition(result.winningPosition, result.participantCount)}.`
   }
 
   return 'Fallback de segurança: nenhuma extração encontrou código elegível e o sistema aplicou posição final de contingência.'
@@ -64,7 +70,7 @@ function formatNearestPath(attempt: NonNullable<ReturnType<typeof useTopBuyersDr
   const distanceLabel = Number.isFinite(Number(attempt.nearestDistance))
     ? String(attempt.nearestDistance)
     : '?'
-  return `${raw} -> ${attempt.candidateCode} (${directionLabel}, dist ${distanceLabel})`
+  return `${raw} (${directionLabel}, dist ${distanceLabel})`
 }
 
 function formatWinnerUserCode(result: NonNullable<ReturnType<typeof useTopBuyersDraw>['result']>) {
@@ -87,10 +93,51 @@ function formatLoteriaInputs(extractionNumbers: string[]) {
     .join(' | ')
 }
 
+function formatMainFallbackDirectionLabel(direction: 'none' | 'above' | 'below') {
+  if (direction === 'above') {
+    return 'acima'
+  }
+  if (direction === 'below') {
+    return 'abaixo'
+  }
+  return 'match exato'
+}
+
+function buildMainWinnerCalculationLabel(result: NonNullable<ReturnType<typeof useMainRaffleDraw>['result']>) {
+  const total = Math.max(1, Number(result.raffleTotalNumbers) || 1)
+  const direction = formatMainFallbackDirectionLabel(result.fallbackDirection)
+  return `Extração ${result.selectedExtractionIndex} (${result.selectedExtractionNumber}) MOD ${total} = ${result.moduloTargetOffset} -> alvo ${result.targetNumberFormatted} -> vencedor ${result.winningNumberFormatted} (${direction}).`
+}
+
+function buildMainFallbackPath(result: NonNullable<ReturnType<typeof useMainRaffleDraw>['result']>) {
+  if (result.fallbackDirection === 'none') {
+    return null
+  }
+
+  const distance = Math.abs((result.winningNumber || 0) - (result.targetNumber || 0))
+  const direction = formatMainFallbackDirectionLabel(result.fallbackDirection)
+  return `${result.targetNumberFormatted} -> ${result.winningNumberFormatted} (${direction}, dist ${distance})`
+}
+
 export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersShowcaseProps) {
   const { campaign } = useCampaignSettings()
-  const { result, isLoading, errorMessage } = useTopBuyersDraw()
+  const {
+    result: topResult,
+    isLoading: isTopLoading,
+    errorMessage: topErrorMessage,
+  } = useTopBuyersDraw()
+  const {
+    result: mainResult,
+    isLoading: isMainLoading,
+    errorMessage: mainErrorMessage,
+  } = useMainRaffleDraw()
   const isPublicMode = mode === 'public'
+  const topPublishedAt = topResult?.publishedAtMs || 0
+  const mainPublishedAt = mainResult?.publishedAtMs || 0
+  const latestResultType = mainResult && (!topResult || mainPublishedAt >= topPublishedAt) ? 'main' : 'top'
+  const hasAnyResult = Boolean(topResult || mainResult)
+  const isLoadingLatest = !hasAnyResult && (isTopLoading || isMainLoading)
+  const mergedErrorMessage = [topErrorMessage, mainErrorMessage].filter(Boolean).join(' | ')
 
   return (
     <section className={isPublicMode ? 'pb-20 pt-14' : ''}>
@@ -140,53 +187,53 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
               <article className="rounded-2xl border border-white/10 bg-black/30 p-5 lg:col-span-7">
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-300">Último resultado publicado</p>
 
-                {isLoading ? (
+                {isLoadingLatest ? (
                   <div className="mt-4 h-48 animate-pulse rounded-xl bg-white/5" />
                 ) : null}
 
-                {!isLoading && !result ? (
+                {!isLoadingLatest && !hasAnyResult ? (
                   <div className="mt-4 rounded-xl border border-dashed border-white/20 bg-white/5 p-6 text-center">
                     <p className="text-sm text-gray-300">
                       Nenhuma apuração publicada ainda.
                     </p>
-                    {errorMessage ? (
-                      <p className="mt-2 text-xs text-red-300">{errorMessage}</p>
+                    {mergedErrorMessage ? (
+                      <p className="mt-2 text-xs text-red-300">{mergedErrorMessage}</p>
                     ) : null}
                   </div>
                 ) : null}
 
-                {!isLoading && result ? (
+                {!isLoadingLatest && hasAnyResult && latestResultType === 'top' && topResult ? (
                   <div className="mt-4 space-y-4">
                     <div className="rounded-xl border border-amber-300/25 bg-gradient-to-r from-amber-400/15 via-white/5 to-emerald-400/10 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <p className="text-[10px] uppercase tracking-[0.14em] text-amber-200">Ganhador</p>
-                          <p className="mt-1 text-2xl font-black text-white">{result.winner.name}</p>
+                          <p className="mt-1 text-2xl font-black text-white">{topResult.winner.name}</p>
                           <p className="mt-1 text-xs text-gray-200">
-                            Posição {result.winner.pos} com {result.winner.cotas} cotas.
+                            Posição {topResult.winner.pos} com {topResult.winner.cotas} cotas.
                           </p>
                           <p className="mt-2 text-xs font-semibold text-amber-100">
-                            Prêmio vigente: {result.drawPrize || campaign.mainPrize}
+                            Prêmio vigente: {topResult.drawPrize || campaign.mainPrize}
                           </p>
                           <p className="mt-1 text-xs text-gray-200">
-                            Cálculo exato: <span className="font-semibold text-white">{buildWinnerCalculationLabel(result)}</span>
+                            Cálculo exato: <span className="font-semibold text-white">{buildWinnerCalculationLabel(topResult)}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-200">
-                            Posição do jogador premiado: <span className="font-bold text-gold">{formatWinnerUserCode(result)}</span>
+                            Posição do jogador premiado: <span className="font-bold text-gold">{formatWinnerUserCode(topResult)}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-200">
                             Número premiado:{' '}
-                            <span className="font-bold text-gold">{pickComparableWinnerTicket(result) || '-'}</span>
+                            <span className="font-bold text-gold">{pickComparableWinnerTicket(topResult) || '-'}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-300">
-                            Códigos da Loteria informados: <span className="font-mono text-white">{formatLoteriaInputs(result.extractionNumbers)}</span>
+                            Códigos da Loteria informados: <span className="font-mono text-white">{formatLoteriaInputs(topResult.extractionNumbers)}</span>
                           </p>
                         </div>
                         <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-right">
                           <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Data</p>
-                          <p className="mt-1 text-xs font-bold text-white">{formatDateLabel(result.drawDate)}</p>
-                          <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-gray-500">Código vencedor</p>
-                          <p className="mt-1 text-sm font-black text-gold">{result.winningCode}</p>
+                          <p className="mt-1 text-xs font-bold text-white">{formatDateLabel(topResult.drawDate)}</p>
+                          <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-gray-500">Posição premiada</p>
+                          <p className="mt-1 text-sm font-black text-gold">{formatWinningPosition(topResult.winningPosition, topResult.participantCount)}</p>
                         </div>
                       </div>
                     </div>
@@ -194,7 +241,7 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                     <div className="rounded-xl border border-white/10 bg-black/25 p-4">
                       <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Rastro de apuração (regra de redundância)</p>
                       <div className="mt-3 space-y-2">
-                        {result.attempts.map((attempt) => {
+                        {topResult.attempts.map((attempt) => {
                           const isFallback = attempt.extractionIndex > 5 || attempt.extractionNumber.includes('-')
 
                           return (
@@ -208,7 +255,7 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                                   : `Tentativa ${attempt.extractionIndex}: extração ${attempt.extractionNumber} ➜ código ${formatAttemptLabel(attempt.extractionNumber, attempt.comparisonDigits)}${formatNearestPath(attempt) ? ` | caminho ${formatNearestPath(attempt)}` : ''}`}
                               </span>
                               <span className="font-bold text-gold">
-                                {attempt.matchedPosition ? `Match na posição ${attempt.matchedPosition}` : 'Sem match'}
+                                {attempt.matchedPosition ? `Match na posição ${formatWinningPosition(attempt.matchedPosition, topResult.participantCount)}` : 'Sem match'}
                               </span>
                             </div>
                           )
@@ -219,16 +266,85 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2">
                         <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Participantes</p>
-                        <p className="mt-1 text-sm font-bold text-white">{result.participantCount}</p>
+                        <p className="mt-1 text-sm font-bold text-white">{topResult.participantCount}</p>
                       </div>
                       <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2">
                         <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Dígitos usados</p>
-                        <p className="mt-1 text-sm font-bold text-white">{result.comparisonDigits}</p>
+                        <p className="mt-1 text-sm font-bold text-white">{topResult.comparisonDigits}</p>
                       </div>
                       <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2">
                         <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Resolução</p>
                         <p className="mt-1 text-sm font-bold text-white">
-                          {result.resolvedBy === 'federal_extraction' ? 'Extração oficial' : 'Redundância'}
+                          {topResult.resolvedBy === 'federal_extraction' ? 'Extração oficial' : 'Redundância'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {!isLoadingLatest && hasAnyResult && latestResultType === 'main' && mainResult ? (
+                  <div className="mt-4 space-y-4">
+                    <div className="rounded-xl border border-emerald-300/25 bg-gradient-to-r from-emerald-400/15 via-white/5 to-cyan-400/10 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-200">Ganhador</p>
+                          <p className="mt-1 text-2xl font-black text-white">{mainResult.winner.name}</p>
+                          <p className="mt-1 text-xs text-gray-200">
+                            Sorteio principal por número da rifa.
+                          </p>
+                          <p className="mt-2 text-xs font-semibold text-emerald-100">
+                            Prêmio vigente: {mainResult.drawPrize || campaign.mainPrize}
+                          </p>
+                          <p className="mt-1 text-xs text-gray-200">
+                            Cálculo exato: <span className="font-semibold text-white">{buildMainWinnerCalculationLabel(mainResult)}</span>
+                          </p>
+                          <p className="mt-1 text-xs text-gray-200">
+                            Número premiado:{' '}
+                            <span className="font-bold text-gold">{mainResult.winningNumberFormatted}</span>
+                          </p>
+                          <p className="mt-1 text-xs text-gray-300">
+                            Códigos da Loteria informados: <span className="font-mono text-white">{formatLoteriaInputs(mainResult.extractionNumbers)}</span>
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-right">
+                          <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Data</p>
+                          <p className="mt-1 text-xs font-bold text-white">{formatDateLabel(mainResult.drawDate)}</p>
+                          <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-gray-500">Tipo</p>
+                          <p className="mt-1 text-sm font-black text-emerald-200">Sorteio principal</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-white/10 bg-black/25 p-4">
+                      <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Rastro de apuração (número da rifa)</p>
+                      <div className="mt-3 space-y-2">
+                        <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs">
+                          <span className="text-gray-300">
+                            Extração usada: {mainResult.selectedExtractionIndex} ({mainResult.selectedExtractionNumber}) ➜ alvo {mainResult.targetNumberFormatted}
+                            {buildMainFallbackPath(mainResult) ? ` | caminho ${buildMainFallbackPath(mainResult)}` : ''}
+                          </span>
+                          <span className="font-bold text-gold">
+                            {mainResult.fallbackDirection === 'none' ? 'Match exato' : 'Fallback por aproximação'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Faixa da rifa</p>
+                        <p className="mt-1 text-sm font-bold text-white">
+                          {String(mainResult.raffleRangeStart).padStart(7, '0')} - {String(mainResult.raffleRangeEnd).padStart(7, '0')}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Total de números</p>
+                        <p className="mt-1 text-sm font-bold text-white">{mainResult.raffleTotalNumbers}</p>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Resolução</p>
+                        <p className="mt-1 text-sm font-bold text-white">
+                          {mainResult.fallbackDirection === 'none' ? 'Extração oficial' : 'Aproximação do mais próximo'}
                         </p>
                       </div>
                     </div>

@@ -104,7 +104,7 @@ function normalizeResult(raw: RawMainRaffleResult | null | undefined): MainRaffl
   }
 
   const extractionNumbers = Array.isArray(raw.extractionNumbers)
-    ? raw.extractionNumbers.map((item) => sanitizeString(item)).filter(Boolean)
+    ? raw.extractionNumbers.map((item) => sanitizeString(item))
     : []
   const winnerRaw = raw.winner || {}
   const fallbackDirection = raw.fallbackDirection === 'above'
@@ -185,7 +185,7 @@ export function useMainRaffleDraw(autoRefresh = true) {
       setResult(normalized)
       setErrorMessage(null)
     } catch {
-      setErrorMessage('Nao foi possivel carregar o ultimo sorteio geral.')
+      setErrorMessage('Nao foi possivel carregar o ultimo sorteio principal.')
     } finally {
       setIsLoading(false)
     }
@@ -216,7 +216,7 @@ export function useMainRaffleDraw(autoRefresh = true) {
       const payload = unwrapCallableData(response.data as CallableEnvelope<RawMainRaffleResult>)
       const normalized = normalizeResult(payload)
       if (!normalized) {
-        throw new Error('Resposta invalida ao publicar sorteio geral.')
+        throw new Error('Resposta invalida ao publicar sorteio principal.')
       }
 
       setResult(normalized)

@@ -28,6 +28,11 @@ function formatDateTime(timestampMs: number | null) {
   }).format(new Date(timestampMs))
 }
 
+function formatWinningPosition(position: number, participantCount: number) {
+  const digits = Math.max(2, String(participantCount || 0).length)
+  return String(position || 0).padStart(digits, '0')
+}
+
 function RankingBoard({
   title,
   subtitle,
@@ -133,7 +138,8 @@ function RankingSection() {
           {latestDrawResult ? (
             <p className="mt-3 text-xs text-amber-200">
               Ultimo ganhador semanal publicado: <span className="font-bold">{latestDrawResult.winner.name}</span>{' '}
-              (data {latestDrawResult.drawDate}, posicao {latestDrawResult.winningPosition}, codigo {latestDrawResult.winningCode}).
+              (data {latestDrawResult.drawDate}, posicao do jogador premiado{' '}
+              {formatWinningPosition(latestDrawResult.winningPosition, latestDrawResult.participantCount)}).
             </p>
           ) : null}
         </div>

@@ -89,7 +89,7 @@ function formatNearestPath(attempt: {
   const distanceLabel = Number.isFinite(Number(attempt.nearestDistance))
     ? String(attempt.nearestDistance)
     : '?'
-  return `${raw} -> ${attempt.candidateCode} (${directionLabel}, dist ${distanceLabel})`
+  return `${raw} (${directionLabel}, dist ${distanceLabel})`
 }
 
 function formatWinnerUserCode(item: {
@@ -116,6 +116,50 @@ function formatLoteriaInputs(extractionNumbers: string[]) {
   return extractionNumbers
     .map((value, index) => `${index + 1}ª extração: ${value}`)
     .join(' | ')
+}
+
+function formatMainFallbackDirectionLabel(direction: 'none' | 'above' | 'below') {
+  if (direction === 'above') {
+    return 'acima'
+  }
+  if (direction === 'below') {
+    return 'abaixo'
+  }
+  return 'match exato'
+}
+
+function buildMainRaffleCalculationLabel(item: {
+  selectedExtractionIndex: number
+  selectedExtractionNumber: string
+  raffleTotalNumbers: number
+  moduloTargetOffset: number
+  targetNumberFormatted: string
+  winningNumberFormatted: string
+  fallbackDirection: 'none' | 'above' | 'below'
+}) {
+  const total = Math.max(1, Number(item.raffleTotalNumbers) || 1)
+  const selected = item.selectedExtractionNumber || '-'
+  const modulo = String(item.moduloTargetOffset || 0)
+  const target = item.targetNumberFormatted || '-'
+  const winning = item.winningNumberFormatted || '-'
+  const direction = formatMainFallbackDirectionLabel(item.fallbackDirection)
+  return `Extração ${item.selectedExtractionIndex} (${selected}) MOD ${total} = ${modulo} -> alvo ${target} -> vencedor ${winning} (${direction}).`
+}
+
+function buildMainRaffleFallbackPath(item: {
+  targetNumber: number
+  winningNumber: number
+  targetNumberFormatted: string
+  winningNumberFormatted: string
+  fallbackDirection: 'none' | 'above' | 'below'
+}) {
+  if (item.fallbackDirection === 'none') {
+    return null
+  }
+
+  const distance = Math.abs((item.winningNumber || 0) - (item.targetNumber || 0))
+  const direction = formatMainFallbackDirectionLabel(item.fallbackDirection)
+  return `${item.targetNumberFormatted} -> ${item.winningNumberFormatted} (${direction}, dist ${distance})`
 }
 
 export default function PrizesPage() {
@@ -192,8 +236,27 @@ export default function PrizesPage() {
                         {item.winner.name})
                       </p>
                       <p className="mt-1 text-xs text-gray-300">
-                        Extracao usada: {item.selectedExtractionIndex} ({item.selectedExtractionNumber}) | alvo por MOD:{' '}
-                        {item.targetNumberFormatted} | fallback: {item.fallbackDirection}
+                        Cálculo exato:{' '}
+                        <span className="font-semibold text-white">{buildMainRaffleCalculationLabel(item)}</span>
+                      </p>
+                      <p className="mt-1 text-xs text-gray-300">
+                        Códigos da Loteria informados:{' '}
+                        <span className="font-mono text-white">{formatLoteriaInputs(item.extractionNumbers)}</span>
+                      </p>
+                      {buildMainRaffleFallbackPath(item) ? (
+                        <p className="mt-1 text-xs text-gray-300">
+                          Rastro de aproximação:{' '}
+                          <span className="font-semibold text-white">{buildMainRaffleFallbackPath(item)}</span>
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-gray-300">
+                          Rastro de aproximação:{' '}
+                          <span className="font-semibold text-white">não foi necessário (match exato no alvo)</span>
+                        </p>
+                      )}
+                      <p className="mt-1 text-xs text-gray-300">
+                        Extração usada: {item.selectedExtractionIndex} ({item.selectedExtractionNumber}) | alvo por MOD:{' '}
+                        {item.targetNumberFormatted}
                       </p>
                       <p className="mt-1 text-xs text-gray-400">Data: {item.drawDate}</p>
                     </article>
@@ -233,11 +296,22 @@ export default function PrizesPage() {
 
               {visibleResults.length > 0 ? (
                 <div className="space-y-3">
-                  {visibleResults.map((item) => (
-                    <article
-                      key={item.drawId}
-                      className="rounded-xl border border-white/10 bg-black/30 p-4 lg:p-5"
-                    >
+                  {visibleResults.map((item) => {
+                    const winnerAttempt = item.attempts.find((attempt) => attempt.matchedPosition === item.winningPosition)
+                    const rawWinnerCode = winnerAttempt?.rawCandidateCode || winnerAttempt?.candidateCode || item.winningCode
+                    const resolvedWinnerCode = winnerAttempt?.candidateCode || item.winningCode
+                    const hasApproximationPath = Boolean(rawWinnerCode && resolvedWinnerCode && rawWinnerCode !== resolvedWinnerCode)
+                    const directionLabel = winnerAttempt?.nearestDirection === 'below'
+                      ? 'abaixo'
+                      : winnerAttempt?.nearestDirection === 'above'
+                        ? 'acima'
+                        : 'proximo'
+
+                    return (
+                      <article
+                        key={item.drawId}
+                        className="rounded-xl border border-white/10 bg-black/30 p-4 lg:p-5"
+                      >
                       <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_auto] lg:items-start">
                         <div>
                           <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">
@@ -264,11 +338,21 @@ export default function PrizesPage() {
                         <div className="rounded-lg border border-cyan-300/25 bg-cyan-500/10 px-3 py-2 text-xs">
                           <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-100">Cálculo usado</p>
                           <p className="mt-1 text-cyan-50">
-                            Últimos {item.comparisonDigits} dígitos das extrações oficiais.
+                            Últimos {item.comparisonDigits} dígitos da extração {winnerAttempt?.extractionIndex || 1} ({winnerAttempt?.extractionNumber || item.extractionNumbers[0] || '-'}) ={' '}
+                            <span className="font-black text-white">{String(rawWinnerCode).padStart(item.comparisonDigits, '0')}</span>.
                           </p>
+                          {hasApproximationPath ? (
+                            <p className="mt-1 text-cyan-50">
+                              Aproximação aplicada:{' '}
+                              <span className="font-black text-white">
+                                {String(rawWinnerCode).padStart(item.comparisonDigits, '0')}{' -> '}{String(resolvedWinnerCode).padStart(item.comparisonDigits, '0')}
+                              </span>{' '}
+                              ({directionLabel}, dist {winnerAttempt?.nearestDistance ?? '?'}).
+                            </p>
+                          ) : null}
                           <p className="mt-1 text-cyan-50">
-                            Código vencedor <span className="font-black text-white">{item.winningCode}</span> ➜ posição{' '}
-                            <span className="font-black text-white">{item.winningPosition}</span> do ranking.
+                            Código final comparado <span className="font-black text-white">{String(resolvedWinnerCode).padStart(item.comparisonDigits, '0')}</span> ➜ posição{' '}
+                            <span className="font-black text-white">{formatWinnerUserCode(item)}</span> do ranking.
                           </p>
                         </div>
                         <div className="rounded-lg border border-white/10 bg-black/35 px-3 py-2 text-right text-xs">
@@ -305,7 +389,8 @@ export default function PrizesPage() {
                         })}
                       </div>
                     </article>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : null}
             </div>

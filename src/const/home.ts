@@ -51,7 +51,10 @@ export type FooterLinkItem = {
 export const CAMPAIGN_TOTAL_COTAS = 3_450_000
 export const CAMPAIGN_SOLD_COTAS = 2_242_500
 
-export const ANNOUNCEMENT_TEXT =
+export const ANNOUNCEMENT_URGENCY_THRESHOLD_PERCENT = 60
+export const ANNOUNCEMENT_MARKETING_TEXT =
+  '🚀 COMPRE AGORA E MULTIPLIQUE SUAS CHANCES — Concorra a BMW R 1200 GS + Honda CG Start 160 + R$ 20.000 em PIX! 🏆'
+export const ANNOUNCEMENT_URGENCY_TEXT =
   '🔥 ÚLTIMAS COTAS DISPONÍVEIS — Concorra a BMW R 1200 GS + Honda CG Start 160 + R$ 20.000 em PIX! 🏆'
 
 export const HEADER_NAV_ITEMS: NavItem[] = [

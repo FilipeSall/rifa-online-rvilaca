@@ -13,6 +13,7 @@ interface PublishMainRaffleDrawInput {
   extractionNumbers?: Array<number | string>
   extractionIndex?: number
   drawPrize?: string
+  drawDate?: string
 }
 
 interface MainRaffleWinner {
@@ -89,7 +90,7 @@ function formatPublicName(name: string, uid: string): string {
 function sanitizeExtractionNumber(value: unknown, index: number): string {
   const raw = String(value ?? '').replace(/\D/g, '')
   if (!raw) {
-    throw new HttpsError('invalid-argument', `Extracao ${index + 1} invalida.`)
+    return ''
   }
 
   const parsed = Number(raw)
@@ -154,6 +155,19 @@ function sanitizeDrawPrize(value: unknown, allowedPrizes: string[]): string {
   return normalized
 }
 
+function sanitizeOptionalDrawDate(value: unknown): string {
+  const normalized = sanitizeString(value)
+  if (!normalized) {
+    return formatBrazilDateId(Date.now())
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    throw new HttpsError('invalid-argument', 'drawDate deve estar no formato YYYY-MM-DD.')
+  }
+
+  return normalized
+}
+
 async function assertAdminRole(db: Firestore, uid: string) {
   const userSnapshot = await db.collection('users').doc(uid).get()
   const role = sanitizeString(userSnapshot.get('role')).toLowerCase()
@@ -169,6 +183,102 @@ type ResolvedCandidate = {
   ownerUid: string
   paidAtMs: number | null
   fallbackDirection: 'none' | 'above' | 'below'
+}
+
+function normalizePaidStatus(value: unknown): 'pago' | 'disponivel' {
+  const normalized = sanitizeString(value).toLowerCase()
+  return normalized === 'pago' || normalized === 'paid' ? 'pago' : 'disponivel'
+}
+
+function chooseDirectionalCandidate(
+  direction: 'above' | 'below',
+  current: ResolvedCandidate | null,
+  incoming: ResolvedCandidate | null,
+): ResolvedCandidate | null {
+  if (!incoming) {
+    return current
+  }
+  if (!current) {
+    return incoming
+  }
+
+  if (direction === 'above') {
+    return incoming.number < current.number ? incoming : current
+  }
+
+  return incoming.number > current.number ? incoming : current
+}
+
+async function findNearestCandidateByStatus(
+  transaction: Transaction,
+  db: Firestore,
+  params: {
+    campaignId: string
+    targetNumber: number
+    rangeStart: number
+    rangeEnd: number
+    direction: 'above' | 'below'
+    statusValue: 'pago' | 'paid'
+  },
+): Promise<ResolvedCandidate | null> {
+  const { campaignId, targetNumber, rangeStart, rangeEnd, direction, statusValue } = params
+  const collectionRef = db.collection('numberStates')
+  const pageSize = 50
+  const maxPages = 20
+  let lastNumberCursor: number | null = null
+
+  for (let page = 0; page < maxPages; page += 1) {
+    let query = collectionRef
+      .where('campaignId', '==', campaignId)
+      .where('status', '==', statusValue)
+
+    if (direction === 'above') {
+      query = query
+        .where('number', '>', targetNumber)
+        .where('number', '<=', rangeEnd)
+        .orderBy('number', 'asc')
+    } else {
+      query = query
+        .where('number', '>=', rangeStart)
+        .where('number', '<', targetNumber)
+        .orderBy('number', 'desc')
+    }
+
+    if (Number.isInteger(lastNumberCursor)) {
+      query = query.startAfter(lastNumberCursor as number)
+    }
+
+    const snapshot = await transaction.get(query.limit(pageSize))
+    if (snapshot.empty) {
+      return null
+    }
+
+    for (const document of snapshot.docs) {
+      const number = Number(document.get('number'))
+      const ownerUid = sanitizeString(document.get('ownerUid'))
+      const awardedDrawId = sanitizeString(document.get('awardedDrawId'))
+
+      if (!Number.isInteger(number) || !ownerUid || awardedDrawId) {
+        continue
+      }
+
+      return {
+        number,
+        numberStateRefPath: document.ref.path,
+        ownerUid,
+        paidAtMs: readTimestampMillis(document.get('paidAt')),
+        fallbackDirection: direction,
+      }
+    }
+
+    const lastNumber = Number(snapshot.docs[snapshot.docs.length - 1]?.get('number'))
+    if (!Number.isInteger(lastNumber)) {
+      return null
+    }
+    lastNumberCursor = lastNumber
+  }
+
+  return null
 }
 
 async function findEligiblePaidNumber(
@@ -187,7 +297,7 @@ async function findEligiblePaidNumber(
   const exactRef = collectionRef.doc(`${campaignId}_${targetNumber}`)
   const exactSnapshot = await transaction.get(exactRef)
   if (exactSnapshot.exists) {
-    const exactStatus = sanitizeString(exactSnapshot.get('status')).toLowerCase()
+    const exactStatus = normalizePaidStatus(exactSnapshot.get('status'))
     const exactOwnerUid = sanitizeString(exactSnapshot.get('ownerUid'))
     const exactAwardedDrawId = sanitizeString(exactSnapshot.get('awardedDrawId'))
     if (exactStatus === 'pago' && exactOwnerUid && !exactAwardedDrawId) {
@@ -201,59 +311,30 @@ async function findEligiblePaidNumber(
     }
   }
 
-  const aboveQuery = collectionRef
-    .where('campaignId', '==', campaignId)
-    .where('status', '==', 'pago')
-    .where('awardedDrawId', '==', null)
-    .where('number', '>', targetNumber)
-    .where('number', '<=', rangeEnd)
-    .orderBy('number', 'asc')
-    .limit(1)
-  const aboveSnapshot = await transaction.get(aboveQuery)
-  const aboveCandidate = !aboveSnapshot.empty
-    ? (() => {
-        const document = aboveSnapshot.docs[0]
-        const number = Number(document.get('number'))
-        const ownerUid = sanitizeString(document.get('ownerUid'))
-        if (!Number.isInteger(number) || !ownerUid) {
-          return null
-        }
-        return {
-          number,
-          numberStateRefPath: document.ref.path,
-          ownerUid,
-          paidAtMs: readTimestampMillis(document.get('paidAt')),
-          fallbackDirection: 'above' as const,
-        }
-      })()
-    : null
+  let aboveCandidate: ResolvedCandidate | null = null
+  let belowCandidate: ResolvedCandidate | null = null
 
-  const belowQuery = collectionRef
-    .where('campaignId', '==', campaignId)
-    .where('status', '==', 'pago')
-    .where('awardedDrawId', '==', null)
-    .where('number', '>=', rangeStart)
-    .where('number', '<', targetNumber)
-    .orderBy('number', 'desc')
-    .limit(1)
-  const belowSnapshot = await transaction.get(belowQuery)
-  const belowCandidate = !belowSnapshot.empty
-    ? (() => {
-        const document = belowSnapshot.docs[0]
-        const number = Number(document.get('number'))
-        const ownerUid = sanitizeString(document.get('ownerUid'))
-        if (!Number.isInteger(number) || !ownerUid) {
-          return null
-        }
-        return {
-          number,
-          numberStateRefPath: document.ref.path,
-          ownerUid,
-          paidAtMs: readTimestampMillis(document.get('paidAt')),
-          fallbackDirection: 'below' as const,
-        }
-      })()
-    : null
+  for (const statusValue of ['pago', 'paid'] as const) {
+    const aboveForStatus = await findNearestCandidateByStatus(transaction, db, {
+      campaignId,
+      targetNumber,
+      rangeStart,
+      rangeEnd,
+      direction: 'above',
+      statusValue,
+    })
+    aboveCandidate = chooseDirectionalCandidate('above', aboveCandidate, aboveForStatus)
+
+    const belowForStatus = await findNearestCandidateByStatus(transaction, db, {
+      campaignId,
+      targetNumber,
+      rangeStart,
+      rangeEnd,
+      direction: 'below',
+      statusValue,
+    })
+    belowCandidate = chooseDirectionalCandidate('below', belowCandidate, belowForStatus)
+  }
 
   if (belowCandidate && aboveCandidate) {
     const distanceBelow = targetNumber - belowCandidate.number
@@ -297,7 +378,7 @@ function parseMainRaffleResult(raw: Record<string, unknown> | null | undefined):
 
   const winnerRaw = asRecord(raw.winner)
   const extractionNumbers = Array.isArray(raw.extractionNumbers)
-    ? raw.extractionNumbers.map((item) => sanitizeString(item)).filter(Boolean)
+    ? raw.extractionNumbers.map((item) => sanitizeString(item))
     : []
 
   const result: MainRaffleDrawResult = {
@@ -360,11 +441,14 @@ export function createPublishMainRaffleDrawHandler(db: Firestore) {
 
     await assertAdminRole(db, uid)
 
-    const payload = asRecord(request.data) as PublishMainRaffleDrawInput
-    const extractionNumbers = sanitizeExtractionNumbers(payload.extractionNumbers)
-    const extractionIndex = sanitizeExtractionIndex(payload.extractionIndex)
-    const selectedExtractionNumber = extractionNumbers[extractionIndex - 1]
-    const selectedExtractionValue = Number(selectedExtractionNumber)
+  const payload = asRecord(request.data) as PublishMainRaffleDrawInput
+  const extractionNumbers = sanitizeExtractionNumbers(payload.extractionNumbers)
+  const extractionIndex = sanitizeExtractionIndex(payload.extractionIndex)
+  const selectedExtractionNumber = extractionNumbers[extractionIndex - 1]
+  if (!selectedExtractionNumber) {
+    throw new HttpsError('invalid-argument', 'A extracao usada deve estar preenchida.')
+  }
+  const selectedExtractionValue = Number(selectedExtractionNumber)
 
     const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
     const campaignData = campaignSnapshot.data()
@@ -380,7 +464,7 @@ export function createPublishMainRaffleDrawHandler(db: Firestore) {
       : selectedExtractionValue % raffleRange.total
     const targetNumber = raffleRange.start + moduloTargetOffset - 1
     const targetNumberFormatted = String(targetNumber).padStart(7, '0')
-    const drawDate = formatBrazilDateId(Date.now())
+    const drawDate = sanitizeOptionalDrawDate(payload.drawDate)
     const publishedAtMs = Date.now()
 
     const drawRef = db.collection(MAIN_RAFFLE_DRAW_HISTORY_COLLECTION).doc()
@@ -490,10 +574,25 @@ export function createPublishMainRaffleDrawHandler(db: Firestore) {
         throw error
       }
 
+      const rawMessage = sanitizeString((error as { message?: unknown } | null)?.message)
+      const lowerMessage = rawMessage.toLowerCase()
+
+      if (lowerMessage.includes('index') || lowerMessage.includes('requires an index')) {
+        throw new HttpsError(
+          'failed-precondition',
+          rawMessage
+            || 'A consulta do sorteio precisa de indice no Firestore. Verifique os logs da funcao para criar o indice sugerido.',
+        )
+      }
+
       logger.error('publishMainRaffleDraw failed', {
         error: String(error),
+        message: rawMessage,
       })
-      throw new HttpsError('internal', 'Nao foi possivel publicar o sorteio geral agora.')
+      throw new HttpsError(
+        'internal',
+        rawMessage || 'Nao foi possivel publicar o sorteio principal agora.',
+      )
     }
   }
 }
@@ -519,7 +618,7 @@ export function createGetLatestMainRaffleDrawHandler(db: Firestore) {
       logger.error('getLatestMainRaffleDraw failed', {
         error: String(error),
       })
-      throw new HttpsError('internal', 'Nao foi possivel carregar o ultimo sorteio geral.')
+      throw new HttpsError('internal', 'Nao foi possivel carregar o ultimo sorteio principal.')
     }
   }
 }
@@ -543,7 +642,7 @@ export function createGetPublicMainRaffleDrawHistoryHandler(db: Firestore) {
       logger.error('getPublicMainRaffleDrawHistory failed', {
         error: String(error),
       })
-      throw new HttpsError('internal', 'Nao foi possivel carregar o historico do sorteio geral.')
+      throw new HttpsError('internal', 'Nao foi possivel carregar o historico do sorteio principal.')
     }
   }
 }
