@@ -11,7 +11,15 @@
     "preview": "vite preview",
     "deploy:rules": "firebase deploy --only firestore:rules --project rifa-online-395d9",
     "seed:firestore": "bun run scripts/seed-firestore.ts",
-    "backfill:cpf-registry": "bun run scripts/backfill-cpf-registry.ts"
+    "backfill:cpf-registry": "bun run scripts/backfill-cpf-registry.ts",
+    "reset:winners": "bun run scripts/reset-draws.ts",
+    "reset:winners:dry": "bun run scripts/reset-draws.ts",
+    "reset:winners:apply": "bun run scripts/reset-draws.ts --confirm",
+    "reset:winners:apply:legacy": "bun run scripts/reset-draws.ts --confirm --include-legacy",
+    "reset:draws": "bun run scripts/reset-draws.ts",
+    "reset:draws:dry": "bun run scripts/reset-draws.ts",
+    "reset:draws:apply": "bun run scripts/reset-draws.ts --confirm",
+    "reset:draws:apply:legacy": "bun run scripts/reset-draws.ts --confirm --include-legacy"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",

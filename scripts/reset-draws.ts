@@ -3,13 +3,13 @@ import { resolve } from 'node:path'
 import process from 'node:process'
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import {
+  FieldPath,
   FieldValue,
   getFirestore,
   type DocumentData,
   type Query,
   type QueryDocumentSnapshot,
   type WriteBatch,
-  documentId,
 } from 'firebase-admin/firestore'
 
 type ServiceAccount = {
@@ -84,7 +84,7 @@ async function deleteByQueryInChunks(params: {
   let lastDoc: QueryDocumentSnapshot<DocumentData> | null = null
 
   while (true) {
-    let query = params.queryFactory().orderBy(documentId()).limit(params.chunkSize)
+    let query = params.queryFactory().orderBy(FieldPath.documentId()).limit(params.chunkSize)
     if (lastDoc) {
       query = query.startAfter(lastDoc.id)
     }
@@ -123,7 +123,7 @@ async function clearAwardedFlagsInNumberStates(params: {
     let query = db.collection('numberStates')
       .where('awardedDrawId', '!=', null)
       .orderBy('awardedDrawId')
-      .orderBy(documentId())
+      .orderBy(FieldPath.documentId())
       .limit(params.chunkSize)
 
     if (lastDoc) {
@@ -193,7 +193,7 @@ const db = getFirestore()
 async function run() {
   const options = parseArgs(process.argv.slice(2))
 
-  console.log(`Reset draws on project "${projectId}"`)
+  console.log(`Reset winners on project "${projectId}"`)
   console.log(`Mode: ${options.dryRun ? 'DRY-RUN (no writes)' : 'CONFIRMED (writes enabled)'}`)
   console.log(`Campaign: ${options.campaignId}`)
   console.log(`Include legacy collections (draws/winners): ${options.includeLegacyCollections ? 'yes' : 'no'}`)
@@ -255,6 +255,6 @@ async function run() {
 }
 
 run().catch((error) => {
-  console.error('Reset draws failed:', error)
+  console.error('Reset winners failed:', error)
   process.exit(1)
 })

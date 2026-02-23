@@ -139,7 +139,8 @@ export default function MainRaffleDrawTab() {
         <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-300">Sorteio principal</p>
         <h3 className="mt-2 font-luxury text-3xl font-bold text-white">BMW / CG / PIX por numero da rifa</h3>
         <p className="mt-2 max-w-2xl text-sm text-gray-300">
-          Apuracao com 5 extracoes da Loteria Federal, modulo da faixa da rifa e fallback para numero pago acima/abaixo.
+          Apuracao com 5 extracoes da Loteria Federal, modulo da faixa da rifa e fallback para numero pago mais proximo
+          (abaixo/acima).
           Numero ja premiado nao participa novamente.
         </p>
 

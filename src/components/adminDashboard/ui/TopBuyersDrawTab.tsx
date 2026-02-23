@@ -191,7 +191,7 @@ export default function TopBuyersDrawTab() {
   )
 
   const previewCodes = useMemo(() => {
-    const comparisonDigits = result?.comparisonDigits || 2
+    const comparisonDigits = Math.max(3, result?.comparisonDigits || 3)
     return extractionInputs.map((item) => item.padStart(6, '0').slice(-comparisonDigits))
   }, [extractionInputs, result?.comparisonDigits])
 
@@ -242,7 +242,7 @@ export default function TopBuyersDrawTab() {
             <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-amber-300">Operacao de sorteio</p>
             <h3 className="mt-2 font-luxury text-3xl font-bold text-white">Sorteio Federal com redundancia</h3>
             <p className="mt-3 max-w-2xl text-sm text-gray-300">
-              Regras ativas: 5 extracoes oficiais, comparacao por digitos dinamicos e fallback de redundancia para garantir ganhador.
+              Regras ativas: 5 extracoes oficiais, comparacao por digitos dinamicos (minimo 3) e fallback por codigo mais proximo.
             </p>
 
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -268,8 +268,8 @@ export default function TopBuyersDrawTab() {
             <div className="mt-3 rounded-xl border border-cyan-300/25 bg-cyan-500/10 p-4 text-xs text-cyan-100">
               <p>1) Escolha do premio vigente para a rodada</p>
               <p>2) 5 extracoes da Federal</p>
-              <p>3) Digitos por quantidade de participantes</p>
-              <p>4) Sem match: regra de redundancia</p>
+              <p>3) Digitos por quantidade de participantes (minimo 3)</p>
+              <p>4) Sem match exato: codigo mais proximo (abaixo/acima)</p>
             </div>
             <div className="mt-4 rounded-xl border border-white/10 bg-black/40 p-4">
               <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Previa de codigos</p>

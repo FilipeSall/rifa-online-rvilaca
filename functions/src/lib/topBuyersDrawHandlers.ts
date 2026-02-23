@@ -452,24 +452,71 @@ function resolveWinnerByFederalRule(
   const participantCount = rankingSnapshot.length
   const comparisonDigits = getComparisonDigits(participantCount)
   const positionByCode = new Map<string, number>()
+  const firstPurchaseAtByCode = new Map<string, number>()
+  const availableCodes = new Set<number>()
 
   for (const item of rankingSnapshot) {
     const code = String(item.pos).padStart(comparisonDigits, '0')
     positionByCode.set(code, item.pos)
+    firstPurchaseAtByCode.set(code, item.firstPurchaseAtMs)
+    availableCodes.add(Number(code))
+  }
+
+  function findNearestAvailableCode(targetCode: string): string | null {
+    const targetNumber = Number(targetCode)
+    const maxCode = (10 ** comparisonDigits) - 1
+
+    if (availableCodes.has(targetNumber)) {
+      return targetCode
+    }
+
+    for (let distance = 1; distance <= maxCode; distance += 1) {
+      const below = targetNumber - distance
+      const above = targetNumber + distance
+
+      const hasBelow = below >= 0 && availableCodes.has(below)
+      const hasAbove = above <= maxCode && availableCodes.has(above)
+
+      if (hasBelow && hasAbove) {
+        const belowCode = String(below).padStart(comparisonDigits, '0')
+        const aboveCode = String(above).padStart(comparisonDigits, '0')
+        const belowFirstPurchaseAt = Number(firstPurchaseAtByCode.get(belowCode) || 0)
+        const aboveFirstPurchaseAt = Number(firstPurchaseAtByCode.get(aboveCode) || 0)
+
+        // Empate por distancia: prioriza quem comprou primeiro (menor timestamp).
+        if (belowFirstPurchaseAt > 0 && aboveFirstPurchaseAt > 0 && belowFirstPurchaseAt !== aboveFirstPurchaseAt) {
+          return belowFirstPurchaseAt < aboveFirstPurchaseAt ? belowCode : aboveCode
+        }
+
+        // Fallback deterministico para empate absoluto.
+        return belowCode
+      }
+
+      if (hasBelow) {
+        return String(below).padStart(comparisonDigits, '0')
+      }
+
+      if (hasAbove) {
+        return String(above).padStart(comparisonDigits, '0')
+      }
+    }
+
+    return null
   }
 
   const attempts: ExtractionAttempt[] = []
 
   for (let index = 0; index < extractionNumbers.length; index += 1) {
     const extractionNumber = extractionNumbers[index]
-    const candidateCode = extractionNumber.slice(-comparisonDigits).padStart(comparisonDigits, '0')
-    const matchedPosition = positionByCode.get(candidateCode) || null
+    const rawCandidateCode = extractionNumber.slice(-comparisonDigits).padStart(comparisonDigits, '0')
+    const resolvedCandidateCode = findNearestAvailableCode(rawCandidateCode) || rawCandidateCode
+    const matchedPosition = positionByCode.get(resolvedCandidateCode) || null
 
     attempts.push({
       extractionIndex: index + 1,
       extractionNumber,
       comparisonDigits,
-      candidateCode,
+      candidateCode: resolvedCandidateCode,
       matchedPosition,
     })
 
@@ -478,18 +525,14 @@ function resolveWinnerByFederalRule(
         comparisonDigits,
         attempts,
         winningPosition: matchedPosition,
-        winningCode: candidateCode,
+        winningCode: resolvedCandidateCode,
         resolvedBy: 'federal_extraction',
       }
     }
   }
 
-  const fallbackSeed = extractionNumbers
-    .map((item) => Number(item))
-    .reduce((sum, value, index) => sum + (value * (index + 1)), 0)
-  const fallbackPosition = fallbackSeed % participantCount === 0
-    ? participantCount
-    : fallbackSeed % participantCount
+  // Fallback de seguranca: garante ganhador mesmo em dados inconsistentes.
+  const fallbackPosition = 1
   const fallbackCode = String(fallbackPosition).padStart(comparisonDigits, '0')
 
   attempts.push({

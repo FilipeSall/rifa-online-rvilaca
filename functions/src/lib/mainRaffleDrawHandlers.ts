@@ -3,7 +3,7 @@ import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
 import { CAMPAIGN_DOC_ID, DEFAULT_MAIN_PRIZE } from './constants.js'
 import { readCampaignNumberRange } from './numberStateStore.js'
-import { asRecord, sanitizeString } from './shared.js'
+import { asRecord, readTimestampMillis, sanitizeString } from './shared.js'
 
 const MAIN_RAFFLE_DRAW_HISTORY_COLLECTION = 'mainRaffleDrawResults'
 const EXTRACTION_COUNT = 5
@@ -167,6 +167,7 @@ type ResolvedCandidate = {
   number: number
   numberStateRefPath: string
   ownerUid: string
+  paidAtMs: number | null
   fallbackDirection: 'none' | 'above' | 'below'
 }
 
@@ -194,6 +195,7 @@ async function findEligiblePaidNumber(
         number: targetNumber,
         numberStateRefPath: exactRef.path,
         ownerUid: exactOwnerUid,
+        paidAtMs: readTimestampMillis(exactSnapshot.get('paidAt')),
         fallbackDirection: 'none',
       }
     }
@@ -208,19 +210,23 @@ async function findEligiblePaidNumber(
     .orderBy('number', 'asc')
     .limit(1)
   const aboveSnapshot = await transaction.get(aboveQuery)
-  if (!aboveSnapshot.empty) {
-    const document = aboveSnapshot.docs[0]
-    const number = Number(document.get('number'))
-    const ownerUid = sanitizeString(document.get('ownerUid'))
-    if (Number.isInteger(number) && ownerUid) {
-      return {
-        number,
-        numberStateRefPath: document.ref.path,
-        ownerUid,
-        fallbackDirection: 'above',
-      }
-    }
-  }
+  const aboveCandidate = !aboveSnapshot.empty
+    ? (() => {
+        const document = aboveSnapshot.docs[0]
+        const number = Number(document.get('number'))
+        const ownerUid = sanitizeString(document.get('ownerUid'))
+        if (!Number.isInteger(number) || !ownerUid) {
+          return null
+        }
+        return {
+          number,
+          numberStateRefPath: document.ref.path,
+          ownerUid,
+          paidAtMs: readTimestampMillis(document.get('paidAt')),
+          fallbackDirection: 'above' as const,
+        }
+      })()
+    : null
 
   const belowQuery = collectionRef
     .where('campaignId', '==', campaignId)
@@ -231,18 +237,54 @@ async function findEligiblePaidNumber(
     .orderBy('number', 'desc')
     .limit(1)
   const belowSnapshot = await transaction.get(belowQuery)
-  if (!belowSnapshot.empty) {
-    const document = belowSnapshot.docs[0]
-    const number = Number(document.get('number'))
-    const ownerUid = sanitizeString(document.get('ownerUid'))
-    if (Number.isInteger(number) && ownerUid) {
-      return {
-        number,
-        numberStateRefPath: document.ref.path,
-        ownerUid,
-        fallbackDirection: 'below',
-      }
+  const belowCandidate = !belowSnapshot.empty
+    ? (() => {
+        const document = belowSnapshot.docs[0]
+        const number = Number(document.get('number'))
+        const ownerUid = sanitizeString(document.get('ownerUid'))
+        if (!Number.isInteger(number) || !ownerUid) {
+          return null
+        }
+        return {
+          number,
+          numberStateRefPath: document.ref.path,
+          ownerUid,
+          paidAtMs: readTimestampMillis(document.get('paidAt')),
+          fallbackDirection: 'below' as const,
+        }
+      })()
+    : null
+
+  if (belowCandidate && aboveCandidate) {
+    const distanceBelow = targetNumber - belowCandidate.number
+    const distanceAbove = aboveCandidate.number - targetNumber
+
+    if (distanceBelow !== distanceAbove) {
+      return distanceBelow < distanceAbove ? belowCandidate : aboveCandidate
     }
+
+    const belowPaidAtMs = belowCandidate.paidAtMs
+    const abovePaidAtMs = aboveCandidate.paidAtMs
+
+    // Empate por distancia: prioriza quem comprou primeiro (paidAt menor).
+    if (
+      Number.isFinite(belowPaidAtMs)
+      && Number.isFinite(abovePaidAtMs)
+      && belowPaidAtMs !== abovePaidAtMs
+    ) {
+      return (belowPaidAtMs as number) < (abovePaidAtMs as number) ? belowCandidate : aboveCandidate
+    }
+
+    // Fallback deterministico para empate absoluto.
+    return belowCandidate
+  }
+
+  if (belowCandidate) {
+    return belowCandidate
+  }
+
+  if (aboveCandidate) {
+    return aboveCandidate
   }
 
   return null
