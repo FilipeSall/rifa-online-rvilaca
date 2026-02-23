@@ -15,7 +15,6 @@ import {
 import { useAuthStore } from '../stores/authStore'
 import type { CouponFeedback, NumberSlot, SelectionMode } from '../types/purchaseNumbers'
 import { getSafeQuantity } from '../utils/purchaseNumbers'
-import { logPurchaseFlow, serializeError } from '../utils/purchaseFlowLogger'
 import { formatTicketNumber } from '../utils/ticketNumber'
 
 type ReserveNumbersInput = {
@@ -239,10 +238,6 @@ export function usePurchaseNumbers() {
         return payload
       } catch (error) {
         if (pageRequestIdRef.current === requestId) {
-          logPurchaseFlow('usePurchaseNumbers', 'load_window_failed', 'error', {
-            requestId,
-            error: serializeError(error),
-          })
           toast.error(
             getCallableErrorMessage(error, 'Nao foi possivel carregar a pagina de numeros agora.'),
             { position: 'bottom-right' },
@@ -325,10 +320,6 @@ export function usePurchaseNumbers() {
         }
 
         setSelectedNumbers(preservedSelection)
-        logPurchaseFlow('usePurchaseNumbers', 'auto_select_failed', 'error', {
-          requestId,
-          error: serializeError(error),
-        })
         toast.error(
           getCallableErrorMessage(error, 'Nao foi possivel selecionar numeros automaticos agora.'),
           { position: 'bottom-right' },
@@ -514,19 +505,9 @@ export function usePurchaseNumbers() {
 
   const handleAddManualNumber = useCallback(
     async (number: number) => {
-      logPurchaseFlow('usePurchaseNumbers', 'manual_add_requested', 'info', {
-        number,
-        selectionMode,
-        quantity,
-        selectedCount: selectedNumbers.length,
-      })
       if (selectionMode !== 'manual') {
         toast.info('Mude para o modo manual para adicionar um numero especifico.', {
           position: 'bottom-right',
-        })
-        logPurchaseFlow('usePurchaseNumbers', 'manual_add_rejected_mode', 'warn', {
-          number,
-          selectionMode,
         })
         return
       }
@@ -535,7 +516,6 @@ export function usePurchaseNumbers() {
         toast.warning('Digite um numero inteiro valido.', {
           position: 'bottom-right',
         })
-        logPurchaseFlow('usePurchaseNumbers', 'manual_add_rejected_not_integer', 'warn', { number })
         return
       }
 
@@ -543,7 +523,6 @@ export function usePurchaseNumbers() {
         toast.warning('A faixa de numeros ainda nao foi carregada.', {
           position: 'bottom-right',
         })
-        logPurchaseFlow('usePurchaseNumbers', 'manual_add_rejected_range_not_loaded', 'warn', { number })
         return
       }
 
@@ -552,11 +531,6 @@ export function usePurchaseNumbers() {
           `Numero fora da faixa da campanha (${formatTicketNumber(rangeStart)} a ${formatTicketNumber(rangeEnd)}).`,
           { position: 'bottom-right' },
         )
-        logPurchaseFlow('usePurchaseNumbers', 'manual_add_rejected_out_of_range', 'warn', {
-          number,
-          rangeStart,
-          rangeEnd,
-        })
         return
       }
 
@@ -564,7 +538,6 @@ export function usePurchaseNumbers() {
         toast.info('Este numero ja esta na sua selecao.', {
           position: 'bottom-right',
         })
-        logPurchaseFlow('usePurchaseNumbers', 'manual_add_rejected_duplicate', 'warn', { number })
         return
       }
 
@@ -573,11 +546,6 @@ export function usePurchaseNumbers() {
           `Voce ja atingiu o limite de ${quantity} numeros na selecao manual. Use "Limpar selecionados" ou remova alguns.`,
           { position: 'bottom-right' },
         )
-        logPurchaseFlow('usePurchaseNumbers', 'manual_add_rejected_limit', 'warn', {
-          number,
-          quantity,
-          selectedCount: selectedNumbers.length,
-        })
         return
       }
 
@@ -596,20 +564,12 @@ export function usePurchaseNumbers() {
           toast.warning('Nao foi possivel localizar esse numero nesta campanha.', {
             position: 'bottom-right',
           })
-          logPurchaseFlow('usePurchaseNumbers', 'manual_add_rejected_not_found', 'warn', {
-            number,
-            targetPageStart,
-          })
           return
         }
 
         if (targetNumber.status !== 'disponivel') {
           toast.warning('Esse numero nao esta disponivel no momento.', {
             position: 'bottom-right',
-          })
-          logPurchaseFlow('usePurchaseNumbers', 'manual_add_rejected_unavailable', 'warn', {
-            number,
-            targetStatus: targetNumber.status,
           })
           return
         }
@@ -620,10 +580,6 @@ export function usePurchaseNumbers() {
           }
 
           return [...currentSelection, number].sort((a, b) => a - b)
-        })
-        logPurchaseFlow('usePurchaseNumbers', 'manual_add_succeeded', 'info', {
-          number,
-          targetPageStart,
         })
         clearReservationState()
       } finally {
@@ -654,18 +610,7 @@ export function usePurchaseNumbers() {
   }, [campaign.coupons, couponCode, subtotal])
 
   const handleProceed = useCallback(async () => {
-    logPurchaseFlow('usePurchaseNumbers', 'proceed_requested', 'info', {
-      canProceed,
-      isLoggedIn,
-      selectedCount,
-      totalAmount,
-    })
     if (!canProceed) {
-      logPurchaseFlow('usePurchaseNumbers', 'proceed_blocked', 'warn', {
-        canProceed,
-        isLoggedIn,
-        selectedCount,
-      })
       return
     }
 
@@ -676,26 +621,14 @@ export function usePurchaseNumbers() {
       })
       window.scrollTo({ top: 0, behavior: 'smooth' })
       window.dispatchEvent(new Event(OPEN_AUTH_MODAL_EVENT))
-      logPurchaseFlow('usePurchaseNumbers', 'proceed_blocked_unauthenticated', 'warn', {
-        selectedCount,
-      })
       return
     }
     setIsReserving(true)
-    logPurchaseFlow('usePurchaseNumbers', 'reserve_numbers_started', 'info', {
-      selectedCount,
-      selectedNumbersPreview: selectedNumbers.slice(0, 10),
-      totalAmount,
-    })
 
     try {
       const callableResult = await callables.reserveNumbers({ numbers: selectedNumbers })
       const payload = unwrapCallableData(callableResult.data as CallableEnvelope<ReserveNumbersResponse>)
       const secondsFromNow = Math.max(Math.floor((payload.expiresAtMs - Date.now()) / 1000), 0)
-      logPurchaseFlow('usePurchaseNumbers', 'reserve_numbers_succeeded', 'info', {
-        reservedCount: payload.numbers.length,
-        reservationSeconds: secondsFromNow,
-      })
 
       if (secondsFromNow <= 0) {
         setReservationSeconds(null)
@@ -703,9 +636,6 @@ export function usePurchaseNumbers() {
         toast.warning('Sua reserva expirou durante o processamento. Tente novamente.', {
           position: 'bottom-right',
           toastId: 'reservation-expired',
-        })
-        logPurchaseFlow('usePurchaseNumbers', 'reserve_numbers_expired_immediately', 'warn', {
-          expiresAtMs: payload.expiresAtMs,
         })
         return
       }
@@ -721,19 +651,10 @@ export function usePurchaseNumbers() {
           couponCode: appliedCoupon || undefined,
         },
       })
-      logPurchaseFlow('usePurchaseNumbers', 'navigate_checkout', 'info', {
-        quantity: payload.numbers.length,
-        amount: totalAmount,
-      })
     } catch (error) {
       const errorMessage = getReserveErrorMessage(error)
       const conflictedNumber = extractConflictedNumber(errorMessage)
       const normalized = errorMessage.toLowerCase()
-      logPurchaseFlow('usePurchaseNumbers', 'reserve_numbers_failed', 'error', {
-        errorMessage,
-        error: serializeError(error),
-        conflictedNumber,
-      })
 
       if (
         conflictedNumber !== null
@@ -745,9 +666,6 @@ export function usePurchaseNumbers() {
           `O numero ${formatTicketNumber(conflictedNumber)} foi reservado por outro usuario durante o processo. Selecione outro numero e tente novamente.`,
           { position: 'bottom-right' },
         )
-        logPurchaseFlow('usePurchaseNumbers', 'reserve_numbers_conflict', 'warn', {
-          conflictedNumber,
-        })
 
         void loadNumberWindow(pageStart)
       } else {
