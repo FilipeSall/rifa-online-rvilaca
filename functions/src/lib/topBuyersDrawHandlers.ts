@@ -265,10 +265,6 @@ function getWeeklyRankingWindow(nowMs = Date.now()): RankingWindow {
 }
 
 function getComparisonDigits(participantCount: number) {
-  if (participantCount <= 100) {
-    return 2
-  }
-
   if (participantCount <= 1000) {
     return 3
   }

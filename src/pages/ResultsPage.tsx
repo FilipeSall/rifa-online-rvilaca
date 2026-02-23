@@ -1,6 +1,7 @@
 import Header from '../components/home/Header'
 import Footer from '../components/home/Footer'
 import PrizeWinnersShowcase from '../components/winners/PrizeWinnersShowcase'
+import PublicNumberLookupSection from '../components/winners/PublicNumberLookupSection'
 
 const federalRules = [
   'Apuração vinculada às extrações da Loteria Federal.',
@@ -39,6 +40,8 @@ export default function ResultsPage() {
             </div>
           </div>
         </section>
+
+        <PublicNumberLookupSection />
 
         <PrizeWinnersShowcase mode="public" />
       </main>

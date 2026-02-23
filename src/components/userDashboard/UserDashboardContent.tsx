@@ -145,8 +145,12 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
                 mainPrize={mainPrize}
                 secondPrize={secondPrize}
                 bonusPrize={bonusPrize}
+                hasWins={winningSummary.hasWins}
+                latestWinDate={winningSummary.latestWin?.drawDate || null}
+                latestWinPrize={winningSummary.latestWin?.drawPrize || null}
                 onTicketFilterChange={setTicketFilter}
                 onTicketSearchChange={setTicketSearch}
+                onCheckIfWon={() => setActiveSection('ganhadores')}
               />
             )}
 

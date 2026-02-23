@@ -154,7 +154,7 @@ function RankingSection() {
             accentClassName="bg-gradient-to-r from-emerald-400 via-cyan-300 to-blue-300"
             emptyMessage="Ainda nao ha compras pagas na janela semanal."
             errorMessage={weeklyRanking.errorMessage}
-            footer="Regra DOC: domingo 00:00 ate sexta 23:59, desempate por compra mais antiga."
+            footer="Regra: domingo 00:00 ate sexta 23:59, desempate por compra mais antiga."
             isLoading={weeklyRanking.isLoading}
             items={weeklyRanking.items}
             subtitle={weeklySubtitle}

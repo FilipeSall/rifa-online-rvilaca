@@ -5,6 +5,7 @@ export const DEFAULT_MIN_PURCHASE_QUANTITY = 10
 export const DEFAULT_MAIN_PRIZE = 'BMW R1200 GS 2015/2016'
 export const DEFAULT_SECOND_PRIZE = 'Honda CG Start 160 2026/2026'
 export const DEFAULT_BONUS_PRIZE = '20 PIX de R$ 1.000'
+export const DEFAULT_ADDITIONAL_PRIZES: string[] = []
 export const DEFAULT_SUPPORT_WHATSAPP_NUMBER = '+55 62 8507-4477'
 export const DEFAULT_CAMPAIGN_STATUS = 'active' as const
 

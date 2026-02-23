@@ -10,8 +10,12 @@ type MyNumbersSectionProps = {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  hasWins: boolean
+  latestWinDate: string | null
+  latestWinPrize: string | null
   onTicketFilterChange: (filter: TicketFilter) => void
   onTicketSearchChange: (value: string) => void
+  onCheckIfWon: () => void
 }
 
 export default function MyNumbersSection({
@@ -22,17 +26,44 @@ export default function MyNumbersSection({
   mainPrize,
   secondPrize,
   bonusPrize,
+  hasWins,
+  latestWinDate,
+  latestWinPrize,
   onTicketFilterChange,
   onTicketSearchChange,
+  onCheckIfWon,
 }: MyNumbersSectionProps) {
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-xl font-bold text-white">Meus Numeros</h2>
-        <p className="mt-0.5 text-sm text-text-muted">
-          Gerencie seus numeros da sorte e confira o status dos seus bilhetes.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-white">Meus Numeros</h2>
+          <p className="mt-0.5 text-sm text-text-muted">
+            Gerencie seus numeros da sorte e confira o status dos seus bilhetes.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onCheckIfWon}
+          className={`inline-flex h-10 items-center justify-center rounded-lg border px-4 text-xs font-black uppercase tracking-[0.12em] transition-colors ${
+            hasWins
+              ? 'border-emerald-300/40 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30'
+              : 'border-gold/35 bg-gold/10 text-gold hover:bg-gold/20'
+          }`}
+        >
+          Ver se fui sorteado
+        </button>
       </div>
+
+      {hasWins ? (
+        <div className="rounded-xl border border-emerald-300/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-100">
+          Voce possui premiacao registrada{latestWinPrize ? `: ${latestWinPrize}` : ''}{latestWinDate ? ` (${latestWinDate})` : ''}.
+        </div>
+      ) : (
+        <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-text-muted">
+          Nenhuma premiacao registrada ate o momento. Use o botao acima para abrir a aba de conferencia.
+        </div>
+      )}
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap gap-3">

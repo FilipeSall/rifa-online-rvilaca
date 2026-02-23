@@ -5,6 +5,16 @@ import { CustomSelect } from '../../ui/CustomSelect'
 import { useCampaignForm } from '../hooks/useCampaignForm'
 import { formatCurrency, getCampaignStatusLabel } from '../utils/formatters'
 
+function applyPhoneMask(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 13)
+  if (digits.length === 0) return ''
+  if (digits.length <= 2) return `+${digits}`
+  if (digits.length <= 4) return `+${digits.slice(0, 2)}(${digits.slice(2)}`
+  if (digits.length <= 9) return `+${digits.slice(0, 2)}(${digits.slice(2, 4)})${digits.slice(4)}`
+  if (digits.length <= 13) return `+${digits.slice(0, 2)}(${digits.slice(2, 4)})${digits.slice(4, 9)}-${digits.slice(9)}`
+  return `+${digits.slice(0, 2)}(${digits.slice(2, 4)})${digits.slice(4, 9)}-${digits.slice(9, 13)}`
+}
+
 function generateCouponCode() {
   const seed = Math.random().toString(36).slice(2, 8).toUpperCase()
   const suffix = String(Date.now()).slice(-4)
@@ -30,6 +40,7 @@ export default function CampaignTab() {
     mainPrize,
     secondPrize,
     bonusPrize,
+    additionalPrizes,
     supportWhatsappNumber,
     status,
     startsAt,
@@ -41,6 +52,7 @@ export default function CampaignTab() {
     setMainPrize,
     setSecondPrize,
     setBonusPrize,
+    setAdditionalPrizes,
     setSupportWhatsappNumber,
     setStatus,
     setStartsAt,
@@ -181,6 +193,12 @@ export default function CampaignTab() {
                 <p className="text-[10px] uppercase tracking-[0.15em] text-emerald-300">Prêmio extra</p>
                 <p className="mt-1 text-sm font-semibold text-white">{bonusPrize.trim() || DEFAULT_BONUS_PRIZE}</p>
               </div>
+              {additionalPrizes.map((prize, index) => (
+                <div key={index} className="rounded-xl border border-purple-400/20 bg-purple-500/5 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.15em] text-purple-300">Prêmio adicional {index + 1}</p>
+                  <p className="mt-1 text-sm font-semibold text-white">{prize}</p>
+                </div>
+              ))}
             </div>
           </div>
         </article>
@@ -229,7 +247,7 @@ export default function CampaignTab() {
 
             <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 px-4 py-3">
               <label className="text-[10px] uppercase tracking-[0.16em] text-emerald-300" htmlFor="campaign-bonus-prize">
-                Prêmio extra (20 PIX)
+                Prêmio extra
               </label>
               <input
                 id="campaign-bonus-prize"
@@ -238,6 +256,49 @@ export default function CampaignTab() {
                 value={bonusPrize}
                 onChange={(event) => setBonusPrize(event.target.value)}
               />
+            </div>
+
+            <div className="rounded-xl border border-purple-400/20 bg-purple-500/5 px-4 py-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-purple-300">
+                  Prêmios adicionais <span className="normal-case tracking-normal text-purple-400/60">(opcional)</span>
+                </p>
+                <button
+                  type="button"
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-purple-300/30 bg-purple-500/15 px-2.5 text-[11px] font-bold text-purple-200 transition hover:bg-purple-500/25"
+                  onClick={() => setAdditionalPrizes([...additionalPrizes, ''])}
+                >
+                  + Adicionar
+                </button>
+              </div>
+              {additionalPrizes.length === 0 ? (
+                <p className="mt-2 text-xs text-purple-400/50">Nenhum prêmio adicional cadastrado.</p>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {additionalPrizes.map((prize, index) => (
+                    <div key={index} className="flex gap-2">
+                      <input
+                        className="h-10 w-full rounded-md border border-purple-300/25 bg-black/30 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-purple-300/60"
+                        type="text"
+                        value={prize}
+                        placeholder="Ex: iPhone 15 Pro, Viagem..."
+                        onChange={(event) => {
+                          const next = [...additionalPrizes]
+                          next[index] = event.target.value
+                          setAdditionalPrizes(next)
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md border border-red-400/30 bg-red-500/10 text-base font-bold text-red-300 transition hover:bg-red-500/20"
+                        onClick={() => setAdditionalPrizes(additionalPrizes.filter((_, i) => i !== index))}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="rounded-xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-3">
@@ -249,8 +310,8 @@ export default function CampaignTab() {
                 className="mt-2 h-11 w-full rounded-md border border-cyan-200/30 bg-black/25 px-3 text-sm font-semibold text-cyan-50 outline-none transition-colors focus:border-cyan-200/80"
                 type="text"
                 value={supportWhatsappNumber}
-                onChange={(event) => setSupportWhatsappNumber(event.target.value)}
-                placeholder="+55 62 8507-4477"
+                onChange={(event) => setSupportWhatsappNumber(applyPhoneMask(event.target.value))}
+                placeholder="+55(62)98507-4477"
               />
             </div>
 

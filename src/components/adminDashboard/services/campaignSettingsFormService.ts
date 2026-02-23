@@ -1,4 +1,5 @@
 import {
+  DEFAULT_ADDITIONAL_PRIZES,
   DEFAULT_BONUS_PRIZE,
   DEFAULT_MIN_PURCHASE_QUANTITY,
   DEFAULT_CAMPAIGN_TITLE,
@@ -15,6 +16,7 @@ export type CampaignFormState = {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  additionalPrizes: string[]
   supportWhatsappNumber: string
   status: CampaignStatus
   startsAt: string
@@ -33,6 +35,10 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
   const normalizedMainPrize = formState.mainPrize.trim() || DEFAULT_MAIN_PRIZE
   const normalizedSecondPrize = formState.secondPrize.trim() || DEFAULT_SECOND_PRIZE
   const normalizedBonusPrize = formState.bonusPrize.trim() || DEFAULT_BONUS_PRIZE
+  const normalizedAdditionalPrizes = formState.additionalPrizes
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .slice(0, 20) ?? DEFAULT_ADDITIONAL_PRIZES
   const normalizedSupportWhatsappNumber = formState.supportWhatsappNumber.trim() || DEFAULT_SUPPORT_WHATSAPP_NUMBER
   const normalizedPriceText = formState.pricePerCotaInput.replace(',', '.').trim()
   const normalizedPrice = Number(normalizedPriceText)
@@ -72,6 +78,7 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
       mainPrize: normalizedMainPrize,
       secondPrize: normalizedSecondPrize,
       bonusPrize: normalizedBonusPrize,
+      additionalPrizes: normalizedAdditionalPrizes,
       supportWhatsappNumber: normalizedSupportWhatsappNumber,
       status: formState.status,
       startsAt: formState.startsAt.trim() ? formState.startsAt : null,

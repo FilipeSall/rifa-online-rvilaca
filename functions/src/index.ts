@@ -21,6 +21,12 @@ import {
   createPublishTopBuyersDrawHandler,
 } from './lib/topBuyersDrawHandlers.js'
 import {
+  createGetLatestMainRaffleDrawHandler,
+  createGetPublicMainRaffleDrawHistoryHandler,
+  createPublishMainRaffleDrawHandler,
+} from './lib/mainRaffleDrawHandlers.js'
+import {
+  createGetPublicNumberLookupHandler,
   createGetNumberWindowHandler,
   createPickRandomAvailableNumbersHandler,
 } from './lib/numberHandlers.js'
@@ -76,6 +82,8 @@ export const releaseReservation = onCall(callableOptions, createReleaseReservati
 
 export const getNumberWindow = onCall(callableOptions, createGetNumberWindowHandler(db))
 
+export const getPublicNumberLookup = onCall(callableOptions, createGetPublicNumberLookupHandler(db))
+
 export const pickRandomAvailableNumbers = onCall(
   callableOptions,
   createPickRandomAvailableNumbersHandler(db),
@@ -103,6 +111,12 @@ export const getLatestTopBuyersDraw = onCall(callableOptions, createGetLatestTop
 export const getTopBuyersDrawHistory = onCall(callableOptions, createGetTopBuyersDrawHistoryHandler(db))
 export const getPublicTopBuyersDrawHistory = onCall(callableOptions, createGetPublicTopBuyersDrawHistoryHandler(db))
 export const getMyTopBuyersWinningSummary = onCall(callableOptions, createGetMyTopBuyersWinningSummaryHandler(db))
+export const publishMainRaffleDraw = onCall(callableOptions, createPublishMainRaffleDrawHandler(db))
+export const getLatestMainRaffleDraw = onCall(callableOptions, createGetLatestMainRaffleDrawHandler(db))
+export const getPublicMainRaffleDrawHistory = onCall(
+  callableOptions,
+  createGetPublicMainRaffleDrawHistoryHandler(db),
+)
 
 export const pixWebhook = onRequest(
   { region: REGION, secrets: [HORSEPAY_WEBHOOK_TOKEN] },

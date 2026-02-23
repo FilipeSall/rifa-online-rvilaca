@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import {
+  DEFAULT_ADDITIONAL_PRIZES,
   DEFAULT_BONUS_PRIZE,
   DEFAULT_MIN_PURCHASE_QUANTITY,
   DEFAULT_CAMPAIGN_STATUS,
@@ -29,6 +30,7 @@ export function useCampaignForm() {
   const [mainPrize, setMainPrize] = useState(DEFAULT_MAIN_PRIZE)
   const [secondPrize, setSecondPrize] = useState(DEFAULT_SECOND_PRIZE)
   const [bonusPrize, setBonusPrize] = useState(DEFAULT_BONUS_PRIZE)
+  const [additionalPrizes, setAdditionalPrizes] = useState<string[]>(DEFAULT_ADDITIONAL_PRIZES)
   const [supportWhatsappNumber, setSupportWhatsappNumber] = useState(DEFAULT_SUPPORT_WHATSAPP_NUMBER)
   const [status, setStatus] = useState<CampaignStatus>(DEFAULT_CAMPAIGN_STATUS)
   const [startsAt, setStartsAt] = useState('')
@@ -43,12 +45,14 @@ export function useCampaignForm() {
     setMainPrize(campaign.mainPrize)
     setSecondPrize(campaign.secondPrize)
     setBonusPrize(campaign.bonusPrize)
+    setAdditionalPrizes(campaign.additionalPrizes)
     setSupportWhatsappNumber(campaign.supportWhatsappNumber)
     setStatus(campaign.status)
     setStartsAt(campaign.startsAt ?? '')
     setEndsAt(campaign.endsAt ?? '')
     setCoupons(campaign.coupons)
   }, [
+    campaign.additionalPrizes,
     campaign.bonusPrize,
     campaign.coupons,
     campaign.mainPrize,
@@ -83,6 +87,7 @@ export function useCampaignForm() {
       mainPrize,
       secondPrize,
       bonusPrize,
+      additionalPrizes,
       supportWhatsappNumber,
       status,
       startsAt,
@@ -108,6 +113,7 @@ export function useCampaignForm() {
       })
     }
   }, [
+    additionalPrizes,
     bonusPrize,
     coupons,
     endsAt,
@@ -131,6 +137,7 @@ export function useCampaignForm() {
         mainPrize,
         secondPrize,
         bonusPrize,
+        additionalPrizes,
         supportWhatsappNumber,
         status,
         startsAt,
@@ -159,6 +166,7 @@ export function useCampaignForm() {
       }
     },
     [
+      additionalPrizes,
       bonusPrize,
       endsAt,
       mainPrize,
@@ -183,6 +191,7 @@ export function useCampaignForm() {
     mainPrize,
     secondPrize,
     bonusPrize,
+    additionalPrizes,
     supportWhatsappNumber,
     status,
     startsAt,
@@ -194,6 +203,7 @@ export function useCampaignForm() {
     setMainPrize,
     setSecondPrize,
     setBonusPrize,
+    setAdditionalPrizes,
     setSupportWhatsappNumber,
     setStatus,
     setStartsAt,

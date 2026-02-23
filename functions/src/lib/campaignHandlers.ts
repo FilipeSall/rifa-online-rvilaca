@@ -4,6 +4,7 @@ import { HttpsError } from 'firebase-functions/v2/https'
 import {
   CAMPAIGN_DOC_ID,
   CAMPAIGN_STATUS_VALUES,
+  DEFAULT_ADDITIONAL_PRIZES,
   DEFAULT_BONUS_PRIZE,
   DEFAULT_CAMPAIGN_STATUS,
   DEFAULT_CAMPAIGN_TITLE,
@@ -35,6 +36,7 @@ interface UpsertCampaignSettingsInput {
   mainPrize?: string
   secondPrize?: string
   bonusPrize?: string
+  additionalPrizes?: string[]
   supportWhatsappNumber?: string
   status?: CampaignStatus
   startsAt?: string | null
@@ -50,6 +52,7 @@ interface UpsertCampaignSettingsOutput {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  additionalPrizes: string[]
   supportWhatsappNumber: string
   status: CampaignStatus
   startsAt: string | null
@@ -132,6 +135,18 @@ function sanitizeCampaignPrize(value: unknown, fieldName: string): string | null
   }
 
   return normalized.slice(0, 160)
+}
+
+function sanitizeCampaignAdditionalPrizes(value: unknown): string[] | null {
+  if (value === undefined) {
+    return null
+  }
+
+  const items = Array.isArray(value) ? value : []
+  return items
+    .map((item) => (typeof item === 'string' ? item.trim().slice(0, 160) : ''))
+    .filter((item) => item.length > 0)
+    .slice(0, 20)
 }
 
 function sanitizeSupportWhatsappNumber(value: unknown): string | null {
@@ -329,6 +344,15 @@ function readCampaignBonusPrize(data: DocumentData | undefined): string {
   return value || DEFAULT_BONUS_PRIZE
 }
 
+function readCampaignAdditionalPrizes(data: DocumentData | undefined): string[] {
+  const raw = data?.additionalPrizes
+  if (!Array.isArray(raw)) return DEFAULT_ADDITIONAL_PRIZES
+  return raw
+    .map((item) => (typeof item === 'string' ? item.trim().slice(0, 160) : ''))
+    .filter((item) => item.length > 0)
+    .slice(0, 20)
+}
+
 function readCampaignSupportWhatsappNumber(data: DocumentData | undefined): string {
   const value = sanitizeString(data?.supportWhatsappNumber)
   return value || DEFAULT_SUPPORT_WHATSAPP_NUMBER
@@ -372,6 +396,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       const nextMainPrize = sanitizeCampaignPrize(payload.mainPrize, 'mainPrize')
       const nextSecondPrize = sanitizeCampaignPrize(payload.secondPrize, 'secondPrize')
       const nextBonusPrize = sanitizeCampaignPrize(payload.bonusPrize, 'bonusPrize')
+      const nextAdditionalPrizes = sanitizeCampaignAdditionalPrizes(payload.additionalPrizes)
       const nextSupportWhatsappNumber = sanitizeSupportWhatsappNumber(payload.supportWhatsappNumber)
       const nextStatus = sanitizeCampaignStatus(payload.status)
       const nextStartsAt = sanitizeCampaignDate(payload.startsAt, 'startsAt')
@@ -409,6 +434,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
 
       if (nextBonusPrize !== null) {
         updateData.bonusPrize = nextBonusPrize
+      }
+
+      if (nextAdditionalPrizes !== null) {
+        updateData.additionalPrizes = nextAdditionalPrizes
       }
 
       if (nextSupportWhatsappNumber !== null) {
@@ -485,6 +514,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         nextMainPrize === null &&
         nextSecondPrize === null &&
         nextBonusPrize === null &&
+        nextAdditionalPrizes === null &&
         nextSupportWhatsappNumber === null &&
         nextStatus === null &&
         nextStartsAt === undefined &&
@@ -514,6 +544,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         mainPrize: readCampaignMainPrize(campaignData),
         secondPrize: readCampaignSecondPrize(campaignData),
         bonusPrize: readCampaignBonusPrize(campaignData),
+        additionalPrizes: readCampaignAdditionalPrizes(campaignData),
         supportWhatsappNumber: readCampaignSupportWhatsappNumber(campaignData),
         status: readCampaignStatus(campaignData),
         startsAt: readCampaignDate(campaignData, 'startsAt'),

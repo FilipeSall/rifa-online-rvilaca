@@ -1,0 +1,507 @@
+import { FieldValue, type DocumentData, type Firestore, type Transaction } from 'firebase-admin/firestore'
+import * as logger from 'firebase-functions/logger'
+import { HttpsError } from 'firebase-functions/v2/https'
+import { CAMPAIGN_DOC_ID, DEFAULT_MAIN_PRIZE } from './constants.js'
+import { readCampaignNumberRange } from './numberStateStore.js'
+import { asRecord, sanitizeString } from './shared.js'
+
+const MAIN_RAFFLE_DRAW_HISTORY_COLLECTION = 'mainRaffleDrawResults'
+const EXTRACTION_COUNT = 5
+const MAX_EXTRACTION_VALUE = 9_999_999
+
+interface PublishMainRaffleDrawInput {
+  extractionNumbers?: Array<number | string>
+  extractionIndex?: number
+  drawPrize?: string
+}
+
+interface MainRaffleWinner {
+  userId: string
+  name: string
+}
+
+interface MainRaffleDrawResult {
+  campaignId: string
+  drawId: string
+  drawDate: string
+  drawPrize: string
+  extractionNumbers: string[]
+  selectedExtractionIndex: number
+  selectedExtractionNumber: string
+  raffleRangeStart: number
+  raffleRangeEnd: number
+  raffleTotalNumbers: number
+  moduloTargetOffset: number
+  targetNumber: number
+  targetNumberFormatted: string
+  winningNumber: number
+  winningNumberFormatted: string
+  fallbackDirection: 'none' | 'above' | 'below'
+  winner: MainRaffleWinner
+  publishedAtMs: number
+}
+
+interface GetLatestMainRaffleDrawOutput {
+  hasResult: boolean
+  result: MainRaffleDrawResult | null
+}
+
+interface GetMainRaffleDrawHistoryOutput {
+  results: MainRaffleDrawResult[]
+}
+
+const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
+
+function toBrazilLocalDate(sourceMs: number) {
+  return new Date(sourceMs + BRAZIL_OFFSET_MS)
+}
+
+function formatBrazilDateId(sourceMs: number) {
+  const localDate = toBrazilLocalDate(sourceMs)
+  const year = localDate.getUTCFullYear()
+  const month = String(localDate.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(localDate.getUTCDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function formatPublicName(name: string, uid: string): string {
+  const normalized = sanitizeString(name)
+
+  if (!normalized) {
+    return `Participante ${uid.slice(-4).toUpperCase()}`
+  }
+
+  const tokens = normalized.split(/\s+/).filter(Boolean)
+  const firstName = tokens[0] || normalized
+  const secondInitial = tokens[1]?.[0]
+
+  if (secondInitial) {
+    return `${firstName} ${secondInitial.toUpperCase()}.`
+  }
+
+  if (firstName.length <= 2) {
+    return `${firstName[0] || 'P'}*`
+  }
+
+  return `${firstName.slice(0, 1).toUpperCase()}${firstName.slice(1).toLowerCase()}`
+}
+
+function sanitizeExtractionNumber(value: unknown, index: number): string {
+  const raw = String(value ?? '').replace(/\D/g, '')
+  if (!raw) {
+    throw new HttpsError('invalid-argument', `Extracao ${index + 1} invalida.`)
+  }
+
+  const parsed = Number(raw)
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > MAX_EXTRACTION_VALUE) {
+    throw new HttpsError('invalid-argument', `Extracao ${index + 1} fora da faixa 0000000-9999999.`)
+  }
+
+  return String(parsed).padStart(7, '0')
+}
+
+function sanitizeExtractionNumbers(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length !== EXTRACTION_COUNT) {
+    throw new HttpsError('invalid-argument', 'Informe exatamente 5 extracoes da Loteria Federal.')
+  }
+
+  return value.map((item, index) => sanitizeExtractionNumber(item, index))
+}
+
+function sanitizeExtractionIndex(value: unknown): number {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > EXTRACTION_COUNT) {
+    throw new HttpsError('invalid-argument', 'extractionIndex deve estar entre 1 e 5.')
+  }
+  return parsed
+}
+
+function buildAvailableDrawPrizes(campaignData: DocumentData | undefined): string[] {
+  const mainPrize = sanitizeString(campaignData?.mainPrize) || DEFAULT_MAIN_PRIZE
+  const secondPrize = sanitizeString(campaignData?.secondPrize)
+  const bonusPrize = sanitizeString(campaignData?.bonusPrize)
+
+  const directPrizes = [mainPrize, secondPrize].filter(Boolean)
+  const expandedPixPrizes: string[] = []
+
+  const pixMatch = bonusPrize.match(/^\s*(\d+)\s*pix\b/i)
+  if (bonusPrize && pixMatch) {
+    const totalPix = Number(pixMatch[1])
+    if (Number.isInteger(totalPix) && totalPix > 1 && totalPix <= 100) {
+      for (let index = 1; index <= totalPix; index += 1) {
+        expandedPixPrizes.push(`${bonusPrize} (Cota PIX ${index})`)
+      }
+    } else {
+      expandedPixPrizes.push(bonusPrize)
+    }
+  } else if (bonusPrize) {
+    expandedPixPrizes.push(bonusPrize)
+  }
+
+  return Array.from(new Set([...directPrizes, ...expandedPixPrizes]))
+}
+
+function sanitizeDrawPrize(value: unknown, allowedPrizes: string[]): string {
+  const normalized = sanitizeString(value)
+  if (!normalized) {
+    throw new HttpsError('invalid-argument', 'Selecione o premio vigente do sorteio.')
+  }
+
+  if (!allowedPrizes.includes(normalized)) {
+    throw new HttpsError('invalid-argument', 'Premio selecionado nao pertence aos premios vigentes da campanha.')
+  }
+
+  return normalized
+}
+
+async function assertAdminRole(db: Firestore, uid: string) {
+  const userSnapshot = await db.collection('users').doc(uid).get()
+  const role = sanitizeString(userSnapshot.get('role')).toLowerCase()
+
+  if (role !== 'admin') {
+    throw new HttpsError('permission-denied', 'Apenas administradores podem publicar o resultado.')
+  }
+}
+
+type ResolvedCandidate = {
+  number: number
+  numberStateRefPath: string
+  ownerUid: string
+  fallbackDirection: 'none' | 'above' | 'below'
+}
+
+async function findEligiblePaidNumber(
+  transaction: Transaction,
+  db: Firestore,
+  params: {
+    campaignId: string
+    targetNumber: number
+    rangeStart: number
+    rangeEnd: number
+  },
+): Promise<ResolvedCandidate | null> {
+  const { campaignId, targetNumber, rangeStart, rangeEnd } = params
+  const collectionRef = db.collection('numberStates')
+
+  const exactRef = collectionRef.doc(`${campaignId}_${targetNumber}`)
+  const exactSnapshot = await transaction.get(exactRef)
+  if (exactSnapshot.exists) {
+    const exactStatus = sanitizeString(exactSnapshot.get('status')).toLowerCase()
+    const exactOwnerUid = sanitizeString(exactSnapshot.get('ownerUid'))
+    const exactAwardedDrawId = sanitizeString(exactSnapshot.get('awardedDrawId'))
+    if (exactStatus === 'pago' && exactOwnerUid && !exactAwardedDrawId) {
+      return {
+        number: targetNumber,
+        numberStateRefPath: exactRef.path,
+        ownerUid: exactOwnerUid,
+        fallbackDirection: 'none',
+      }
+    }
+  }
+
+  const aboveQuery = collectionRef
+    .where('campaignId', '==', campaignId)
+    .where('status', '==', 'pago')
+    .where('awardedDrawId', '==', null)
+    .where('number', '>', targetNumber)
+    .where('number', '<=', rangeEnd)
+    .orderBy('number', 'asc')
+    .limit(1)
+  const aboveSnapshot = await transaction.get(aboveQuery)
+  if (!aboveSnapshot.empty) {
+    const document = aboveSnapshot.docs[0]
+    const number = Number(document.get('number'))
+    const ownerUid = sanitizeString(document.get('ownerUid'))
+    if (Number.isInteger(number) && ownerUid) {
+      return {
+        number,
+        numberStateRefPath: document.ref.path,
+        ownerUid,
+        fallbackDirection: 'above',
+      }
+    }
+  }
+
+  const belowQuery = collectionRef
+    .where('campaignId', '==', campaignId)
+    .where('status', '==', 'pago')
+    .where('awardedDrawId', '==', null)
+    .where('number', '>=', rangeStart)
+    .where('number', '<', targetNumber)
+    .orderBy('number', 'desc')
+    .limit(1)
+  const belowSnapshot = await transaction.get(belowQuery)
+  if (!belowSnapshot.empty) {
+    const document = belowSnapshot.docs[0]
+    const number = Number(document.get('number'))
+    const ownerUid = sanitizeString(document.get('ownerUid'))
+    if (Number.isInteger(number) && ownerUid) {
+      return {
+        number,
+        numberStateRefPath: document.ref.path,
+        ownerUid,
+        fallbackDirection: 'below',
+      }
+    }
+  }
+
+  return null
+}
+
+function parseMainRaffleResult(raw: Record<string, unknown> | null | undefined): MainRaffleDrawResult | null {
+  if (!raw) {
+    return null
+  }
+
+  const winnerRaw = asRecord(raw.winner)
+  const extractionNumbers = Array.isArray(raw.extractionNumbers)
+    ? raw.extractionNumbers.map((item) => sanitizeString(item)).filter(Boolean)
+    : []
+
+  const result: MainRaffleDrawResult = {
+    campaignId: sanitizeString(raw.campaignId),
+    drawId: sanitizeString(raw.drawId),
+    drawDate: sanitizeString(raw.drawDate),
+    drawPrize: sanitizeString(raw.drawPrize),
+    extractionNumbers,
+    selectedExtractionIndex: Number(raw.selectedExtractionIndex),
+    selectedExtractionNumber: sanitizeString(raw.selectedExtractionNumber),
+    raffleRangeStart: Number(raw.raffleRangeStart),
+    raffleRangeEnd: Number(raw.raffleRangeEnd),
+    raffleTotalNumbers: Number(raw.raffleTotalNumbers),
+    moduloTargetOffset: Number(raw.moduloTargetOffset),
+    targetNumber: Number(raw.targetNumber),
+    targetNumberFormatted: sanitizeString(raw.targetNumberFormatted),
+    winningNumber: Number(raw.winningNumber),
+    winningNumberFormatted: sanitizeString(raw.winningNumberFormatted),
+    fallbackDirection: raw.fallbackDirection === 'above'
+      ? 'above'
+      : raw.fallbackDirection === 'below'
+        ? 'below'
+        : 'none',
+    winner: {
+      userId: sanitizeString(winnerRaw.userId),
+      name: sanitizeString(winnerRaw.name) || 'Participante',
+    },
+    publishedAtMs: Number(raw.publishedAtMs),
+  }
+
+  if (
+    !result.campaignId ||
+    !result.drawId ||
+    !result.drawDate ||
+    !result.drawPrize ||
+    result.extractionNumbers.length !== EXTRACTION_COUNT ||
+    !Number.isInteger(result.selectedExtractionIndex) ||
+    result.selectedExtractionIndex < 1 ||
+    result.selectedExtractionIndex > EXTRACTION_COUNT ||
+    !result.selectedExtractionNumber ||
+    !Number.isInteger(result.targetNumber) ||
+    result.targetNumber <= 0 ||
+    !Number.isInteger(result.winningNumber) ||
+    result.winningNumber <= 0 ||
+    !result.winner.userId ||
+    !Number.isFinite(result.publishedAtMs)
+  ) {
+    return null
+  }
+
+  return result
+}
+
+export function createPublishMainRaffleDrawHandler(db: Firestore) {
+  return async (request: { auth?: { uid?: string | null } | null, data: unknown }): Promise<MainRaffleDrawResult> => {
+    const uid = sanitizeString(request.auth?.uid)
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Autenticacao obrigatoria para publicar resultado.')
+    }
+
+    await assertAdminRole(db, uid)
+
+    const payload = asRecord(request.data) as PublishMainRaffleDrawInput
+    const extractionNumbers = sanitizeExtractionNumbers(payload.extractionNumbers)
+    const extractionIndex = sanitizeExtractionIndex(payload.extractionIndex)
+    const selectedExtractionNumber = extractionNumbers[extractionIndex - 1]
+    const selectedExtractionValue = Number(selectedExtractionNumber)
+
+    const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
+    const campaignData = campaignSnapshot.data()
+    const availableDrawPrizes = buildAvailableDrawPrizes(campaignData)
+    const drawPrize = sanitizeDrawPrize(payload.drawPrize, availableDrawPrizes)
+    const raffleRange = readCampaignNumberRange(campaignData, CAMPAIGN_DOC_ID)
+    if (raffleRange.total <= 0) {
+      throw new HttpsError('failed-precondition', 'Campanha sem faixa de numeros configurada.')
+    }
+
+    const moduloTargetOffset = selectedExtractionValue % raffleRange.total === 0
+      ? raffleRange.total
+      : selectedExtractionValue % raffleRange.total
+    const targetNumber = raffleRange.start + moduloTargetOffset - 1
+    const targetNumberFormatted = String(targetNumber).padStart(7, '0')
+    const drawDate = formatBrazilDateId(Date.now())
+    const publishedAtMs = Date.now()
+
+    const drawRef = db.collection(MAIN_RAFFLE_DRAW_HISTORY_COLLECTION).doc()
+
+    try {
+      let result: MainRaffleDrawResult | null = null
+
+      await db.runTransaction(async (transaction) => {
+        const existingPrizeSnapshot = await transaction.get(
+          db.collection(MAIN_RAFFLE_DRAW_HISTORY_COLLECTION)
+            .where('drawPrize', '==', drawPrize)
+            .limit(1),
+        )
+        if (!existingPrizeSnapshot.empty) {
+          throw new HttpsError(
+            'failed-precondition',
+            'Este premio ja foi sorteado em uma rodada anterior e nao pode ser reutilizado.',
+          )
+        }
+
+        const candidate = await findEligiblePaidNumber(transaction, db, {
+          campaignId: CAMPAIGN_DOC_ID,
+          targetNumber,
+          rangeStart: raffleRange.start,
+          rangeEnd: raffleRange.end,
+        })
+
+        if (!candidate) {
+          throw new HttpsError(
+            'failed-precondition',
+            'Nao ha numeros pagos elegiveis para apuracao no momento.',
+          )
+        }
+
+        const winnerUserSnapshot = await transaction.get(db.collection('users').doc(candidate.ownerUid))
+        const winnerUserData = asRecord(winnerUserSnapshot.data())
+        const winnerName = formatPublicName(
+          sanitizeString(winnerUserData.name) || sanitizeString(winnerUserData.displayName),
+          candidate.ownerUid,
+        )
+        const winningNumberFormatted = String(candidate.number).padStart(7, '0')
+
+        result = {
+          campaignId: CAMPAIGN_DOC_ID,
+          drawId: drawRef.id,
+          drawDate,
+          drawPrize,
+          extractionNumbers,
+          selectedExtractionIndex: extractionIndex,
+          selectedExtractionNumber,
+          raffleRangeStart: raffleRange.start,
+          raffleRangeEnd: raffleRange.end,
+          raffleTotalNumbers: raffleRange.total,
+          moduloTargetOffset,
+          targetNumber,
+          targetNumberFormatted,
+          winningNumber: candidate.number,
+          winningNumberFormatted,
+          fallbackDirection: candidate.fallbackDirection,
+          winner: {
+            userId: candidate.ownerUid,
+            name: winnerName,
+          },
+          publishedAtMs,
+        }
+
+        transaction.set(drawRef, {
+          ...result,
+          publishedByUid: uid,
+          publishedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+
+        transaction.set(
+          db.doc(candidate.numberStateRefPath),
+          {
+            awardedDrawId: drawRef.id,
+            awardedPrize: drawPrize,
+            awardedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+
+        transaction.set(
+          db.collection('campaigns').doc(CAMPAIGN_DOC_ID),
+          {
+            latestMainRaffleDraw: {
+              ...result,
+              publishedByUid: uid,
+              publishedAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+      })
+
+      if (!result) {
+        throw new HttpsError('internal', 'Nao foi possivel concluir a apuracao.')
+      }
+
+      return result
+    } catch (error) {
+      if (error instanceof HttpsError) {
+        throw error
+      }
+
+      logger.error('publishMainRaffleDraw failed', {
+        error: String(error),
+      })
+      throw new HttpsError('internal', 'Nao foi possivel publicar o sorteio geral agora.')
+    }
+  }
+}
+
+export function createGetLatestMainRaffleDrawHandler(db: Firestore) {
+  return async (): Promise<GetLatestMainRaffleDrawOutput> => {
+    try {
+      const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
+      const raw = asRecord(campaignSnapshot.get('latestMainRaffleDraw'))
+      const result = parseMainRaffleResult(raw)
+      if (!result) {
+        return {
+          hasResult: false,
+          result: null,
+        }
+      }
+
+      return {
+        hasResult: true,
+        result,
+      }
+    } catch (error) {
+      logger.error('getLatestMainRaffleDraw failed', {
+        error: String(error),
+      })
+      throw new HttpsError('internal', 'Nao foi possivel carregar o ultimo sorteio geral.')
+    }
+  }
+}
+
+export function createGetPublicMainRaffleDrawHistoryHandler(db: Firestore) {
+  return async (): Promise<GetMainRaffleDrawHistoryOutput> => {
+    try {
+      const historySnapshot = await db.collection(MAIN_RAFFLE_DRAW_HISTORY_COLLECTION)
+        .orderBy('publishedAtMs', 'desc')
+        .limit(120)
+        .get()
+
+      const results = historySnapshot.docs
+        .map((documentSnapshot) => parseMainRaffleResult(asRecord(documentSnapshot.data())))
+        .filter((item): item is MainRaffleDrawResult => Boolean(item))
+
+      return {
+        results,
+      }
+    } catch (error) {
+      logger.error('getPublicMainRaffleDrawHistory failed', {
+        error: String(error),
+      })
+      throw new HttpsError('internal', 'Nao foi possivel carregar o historico do sorteio geral.')
+    }
+  }
+}

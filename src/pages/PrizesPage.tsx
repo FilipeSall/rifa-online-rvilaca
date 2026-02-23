@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import Footer from '../components/home/Footer'
 import Header from '../components/home/Header'
 import PrizeWinnersShowcase from '../components/winners/PrizeWinnersShowcase'
+import { useMainRaffleDraw } from '../hooks/useMainRaffleDraw'
 import { useTopBuyersDraw } from '../hooks/useTopBuyersDraw'
 
 function formatDrawDate(value: string) {
@@ -86,11 +87,21 @@ function formatLoteriaInputs(extractionNumbers: string[]) {
 
 export default function PrizesPage() {
   const { result, history, isHistoryLoading } = useTopBuyersDraw(true, 'public')
+  const {
+    result: latestMainResult,
+    history: mainHistory,
+    isHistoryLoading: isMainHistoryLoading,
+  } = useMainRaffleDraw(true)
   const visibleResults = useMemo(() => {
     const merged = result ? [result, ...history] : history
     const uniqueByDrawId = new Map(merged.map((item) => [item.drawId, item]))
     return Array.from(uniqueByDrawId.values()).sort((left, right) => (right.publishedAtMs || 0) - (left.publishedAtMs || 0))
   }, [history, result])
+  const visibleMainResults = useMemo(() => {
+    const merged = latestMainResult ? [latestMainResult, ...mainHistory] : mainHistory
+    const uniqueByDrawId = new Map(merged.map((item) => [item.drawId, item]))
+    return Array.from(uniqueByDrawId.values()).sort((left, right) => (right.publishedAtMs || 0) - (left.publishedAtMs || 0))
+  }, [latestMainResult, mainHistory])
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-luxury-bg font-display text-white selection:bg-gold selection:text-black">
@@ -113,6 +124,52 @@ export default function PrizesPage() {
         </section>
 
         <PrizeWinnersShowcase mode="public" />
+
+        <section className="pb-12">
+          <div className="container mx-auto px-4 lg:px-8">
+            <div className="rounded-[1.7rem] border border-white/10 bg-[linear-gradient(165deg,rgba(17,24,39,0.96),rgba(7,10,15,0.95))] p-5 lg:p-7">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300">Sorteio principal</p>
+              <h2 className="mt-2 font-luxury text-3xl font-black text-white">BMW / CG / PIX por numero da rifa</h2>
+              <p className="mt-2 text-sm text-gray-300">
+                Formula oficial: numero alvo = resultado da extracao selecionada MOD total da rifa. Se nao houver numero pago
+                elegivel no alvo, aplica fallback para o proximo pago acima e, se necessario, abaixo.
+              </p>
+
+              {isMainHistoryLoading && visibleMainResults.length === 0 ? (
+                <div className="mt-4 space-y-2">
+                  {[1, 2, 3].map((row) => (
+                    <div key={row} className="h-14 animate-pulse rounded-lg bg-white/5" />
+                  ))}
+                </div>
+              ) : null}
+
+              {!isMainHistoryLoading && visibleMainResults.length === 0 ? (
+                <div className="mt-4 rounded-xl border border-dashed border-white/20 bg-white/5 p-6 text-sm text-gray-300">
+                  Nenhum resultado do sorteio principal publicado ate o momento.
+                </div>
+              ) : null}
+
+              {visibleMainResults.length > 0 ? (
+                <div className="mt-4 space-y-3">
+                  {visibleMainResults.map((item) => (
+                    <article key={item.drawId} className="rounded-xl border border-white/10 bg-black/30 p-4">
+                      <p className="text-lg font-black text-white">{item.drawPrize}</p>
+                      <p className="mt-1 text-sm text-gray-200">
+                        Numero vencedor: <span className="font-mono font-bold text-gold">{item.winningNumberFormatted}</span> (
+                        {item.winner.name})
+                      </p>
+                      <p className="mt-1 text-xs text-gray-300">
+                        Extracao usada: {item.selectedExtractionIndex} ({item.selectedExtractionNumber}) | alvo por MOD:{' '}
+                        {item.targetNumberFormatted} | fallback: {item.fallbackDirection}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-400">Data: {item.drawDate}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </section>
 
         <section className="pb-20">
           <div className="container mx-auto px-4 lg:px-8">

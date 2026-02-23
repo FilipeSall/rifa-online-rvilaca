@@ -55,6 +55,23 @@ interface PickRandomAvailableNumbersOutput {
   exhausted: boolean
 }
 
+interface GetPublicNumberLookupInput {
+  campaignId?: string
+  number?: number | string
+}
+
+interface GetPublicNumberLookupOutput {
+  campaignId: string
+  number: number
+  formattedNumber: string
+  status: 'disponivel' | 'reservado' | 'vendido'
+  owner: {
+    name: string
+    city: string | null
+    display: string
+  } | null
+}
+
 const SEARCH_BLOCK_SIZE = 240
 const RANDOM_ROUNDS = 20
 
@@ -100,6 +117,24 @@ function sanitizeQuantity(raw: unknown): number {
   }
 
   return quantity
+}
+
+function sanitizeLookupNumber(raw: unknown, rangeStart: number, rangeEnd: number): number {
+  const fromString = typeof raw === 'string' ? raw.replace(/\D/g, '') : raw
+  const number = Number(fromString)
+
+  if (!Number.isInteger(number)) {
+    throw new HttpsError('invalid-argument', 'Informe um numero inteiro valido para consulta.')
+  }
+
+  if (number < rangeStart || number > rangeEnd) {
+    throw new HttpsError(
+      'invalid-argument',
+      `Numero fora da faixa da campanha (${rangeStart} a ${rangeEnd}).`,
+    )
+  }
+
+  return number
 }
 
 function sanitizeExcludeNumbers(raw: unknown, rangeStart: number, rangeEnd: number): number[] {
@@ -231,6 +266,46 @@ function clampPageStart(pageStart: number, rangeStart: number, rangeEnd: number)
   }
 
   return pageStart
+}
+
+function formatPublicName(name: string, uid: string): string {
+  const normalized = sanitizeString(name)
+
+  if (!normalized) {
+    return `Participante ${uid.slice(-4).toUpperCase()}`
+  }
+
+  const tokens = normalized.split(/\s+/).filter(Boolean)
+  const firstName = tokens[0] || normalized
+  const secondInitial = tokens[1]?.[0]
+
+  if (secondInitial) {
+    return `${firstName} ${secondInitial.toUpperCase()}.`
+  }
+
+  if (firstName.length <= 2) {
+    return `${firstName[0] || 'P'}*`
+  }
+
+  return `${firstName.slice(0, 1).toUpperCase()}${firstName.slice(1).toLowerCase()}`
+}
+
+function readOwnerCity(data: Record<string, unknown>): string | null {
+  const cityCandidates = [
+    data.city,
+    data.cidade,
+    data.locationCity,
+    data.cityName,
+  ]
+
+  for (const candidate of cityCandidates) {
+    const normalized = sanitizeString(candidate)
+    if (normalized) {
+      return normalized
+    }
+  }
+
+  return null
 }
 
 async function resolveCampaignRange(db: Firestore, campaignId: string) {
@@ -445,6 +520,76 @@ export function createPickRandomAvailableNumbersHandler(db: Firestore) {
       }
 
       throw new HttpsError('internal', 'Falha ao selecionar numeros automaticamente.')
+    }
+  }
+}
+
+export function createGetPublicNumberLookupHandler(db: Firestore) {
+  return async (request: { data: unknown }) => {
+    try {
+      const payload = asRecord(request.data) as Partial<GetPublicNumberLookupInput>
+      const campaignId = sanitizeCampaignId(payload.campaignId)
+      const campaignRange = await resolveCampaignRange(db, campaignId)
+      const number = sanitizeLookupNumber(payload.number, campaignRange.start, campaignRange.end)
+      const nowMs = Date.now()
+      const numberStateRef = getNumberStateRef(db, campaignId, number)
+      const numberStateSnapshot = await numberStateRef.get()
+      const state = buildNumberStateView({
+        number,
+        nowMs,
+        numberStateData: numberStateSnapshot.exists ? numberStateSnapshot.data() : null,
+      })
+
+      if (state.status !== 'pago') {
+        return {
+          campaignId,
+          number,
+          formattedNumber: String(number).padStart(7, '0'),
+          status: state.status === 'reservado' ? 'reservado' : 'disponivel',
+          owner: null,
+        } satisfies GetPublicNumberLookupOutput
+      }
+
+      const ownerUid = sanitizeString(numberStateSnapshot.get('ownerUid'))
+      if (!ownerUid) {
+        return {
+          campaignId,
+          number,
+          formattedNumber: String(number).padStart(7, '0'),
+          status: 'vendido',
+          owner: null,
+        } satisfies GetPublicNumberLookupOutput
+      }
+
+      const ownerSnapshot = await db.collection('users').doc(ownerUid).get()
+      const ownerData = asRecord(ownerSnapshot.data())
+      const ownerName = formatPublicName(
+        sanitizeString(ownerData.name) || sanitizeString(ownerData.displayName),
+        ownerUid,
+      )
+      const ownerCity = readOwnerCity(ownerData)
+
+      return {
+        campaignId,
+        number,
+        formattedNumber: String(number).padStart(7, '0'),
+        status: 'vendido',
+        owner: {
+          name: ownerName,
+          city: ownerCity,
+          display: ownerCity ? `${ownerName} - ${ownerCity}` : ownerName,
+        },
+      } satisfies GetPublicNumberLookupOutput
+    } catch (error) {
+      logger.error('getPublicNumberLookup failed', {
+        error: String(error),
+      })
+
+      if (error instanceof HttpsError) {
+        throw error
+      }
+
+      throw new HttpsError('internal', 'Falha ao consultar o numero agora.')
     }
   }
 }

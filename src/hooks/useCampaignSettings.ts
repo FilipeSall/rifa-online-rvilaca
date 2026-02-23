@@ -4,6 +4,7 @@ import { httpsCallable } from 'firebase/functions'
 import {
   CAMPAIGN_STATUS_OPTIONS,
   CAMPAIGN_DOC_ID,
+  DEFAULT_ADDITIONAL_PRIZES,
   DEFAULT_BONUS_PRIZE,
   DEFAULT_MIN_PURCHASE_QUANTITY,
   DEFAULT_CAMPAIGN_STATUS,
@@ -194,6 +195,9 @@ function mapSnapshotToSettings(raw: unknown): CampaignSettings {
     mainPrize: sanitizePrizeText(payload.mainPrize, DEFAULT_MAIN_PRIZE),
     secondPrize: sanitizePrizeText(payload.secondPrize, DEFAULT_SECOND_PRIZE),
     bonusPrize: sanitizePrizeText(payload.bonusPrize, DEFAULT_BONUS_PRIZE),
+    additionalPrizes: Array.isArray(payload.additionalPrizes)
+      ? payload.additionalPrizes.map((p) => (typeof p === 'string' ? p.trim() : '')).filter(Boolean)
+      : DEFAULT_ADDITIONAL_PRIZES,
     supportWhatsappNumber: sanitizeSupportWhatsappNumber(payload.supportWhatsappNumber),
     status: sanitizeCampaignStatus(payload.status),
     startsAt: sanitizeCampaignDate(payload.startsAt),
@@ -211,6 +215,7 @@ export function useCampaignSettings() {
     mainPrize: DEFAULT_MAIN_PRIZE,
     secondPrize: DEFAULT_SECOND_PRIZE,
     bonusPrize: DEFAULT_BONUS_PRIZE,
+    additionalPrizes: DEFAULT_ADDITIONAL_PRIZES,
     supportWhatsappNumber: DEFAULT_SUPPORT_WHATSAPP_NUMBER,
     status: DEFAULT_CAMPAIGN_STATUS,
     startsAt: null,
@@ -279,6 +284,9 @@ export function useCampaignSettings() {
           mainPrize: sanitizePrizeText(payload.mainPrize, DEFAULT_MAIN_PRIZE),
           secondPrize: sanitizePrizeText(payload.secondPrize, DEFAULT_SECOND_PRIZE),
           bonusPrize: sanitizePrizeText(payload.bonusPrize, DEFAULT_BONUS_PRIZE),
+          additionalPrizes: Array.isArray(payload.additionalPrizes)
+      ? payload.additionalPrizes.map((p) => (typeof p === 'string' ? p.trim() : '')).filter(Boolean)
+      : DEFAULT_ADDITIONAL_PRIZES,
           supportWhatsappNumber: sanitizeSupportWhatsappNumber(payload.supportWhatsappNumber),
           status: sanitizeCampaignStatus(payload.status),
           startsAt: sanitizeCampaignDate(payload.startsAt),

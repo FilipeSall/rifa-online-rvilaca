@@ -145,6 +145,9 @@ export function buildPaidNumberStateData(params: {
     ownerUid: params.userId,
     orderId: params.orderId,
     paidAt: FieldValue.serverTimestamp(),
+    awardedDrawId: null,
+    awardedPrize: null,
+    awardedAt: null,
     updatedAt: FieldValue.serverTimestamp(),
   }
 }

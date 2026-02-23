@@ -3,6 +3,7 @@ import AdminMobileTabs from './ui/AdminMobileTabs'
 import AdminSidebar from './ui/AdminSidebar'
 import CampaignTab from './ui/CampaignTab'
 import DashboardTab from './ui/DashboardTab'
+import MainRaffleDrawTab from './ui/MainRaffleDrawTab'
 import TopBuyersDrawTab from './ui/TopBuyersDrawTab'
 
 export default function AdminDashboardContent({ activeTab, onTabChange, onSignOut }: AdminDashboardContentProps) {
@@ -17,6 +18,7 @@ export default function AdminDashboardContent({ activeTab, onTabChange, onSignOu
           {activeTab === 'dashboard' ? <DashboardTab /> : null}
           {activeTab === 'campanha' ? <CampaignTab /> : null}
           {activeTab === 'sorteio-top' ? <TopBuyersDrawTab /> : null}
+          {activeTab === 'sorteio-geral' ? <MainRaffleDrawTab /> : null}
         </div>
       </main>
     </div>
