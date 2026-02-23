@@ -3,7 +3,6 @@ import { doc, onSnapshot, type DocumentData } from 'firebase/firestore'
 import { toast } from 'react-toastify'
 import { db } from '../lib/firebase'
 import { useHorsePay, type CreateDepositResponse } from '../hooks/useHorsePay'
-import { logPurchaseFlow, serializeError } from '../utils/purchaseFlowLogger'
 
 interface PixCheckoutProps {
   amount: number
@@ -92,20 +91,9 @@ export default function PixCheckout({
 
     orderListenerRef.current()
     orderListenerRef.current = null
-    logPurchaseFlow('PixCheckout', 'order_listener_stopped', 'info')
   }, [])
 
   useEffect(() => () => stopOrderListener(), [stopOrderListener])
-
-  useEffect(() => {
-    logPurchaseFlow('PixCheckout', 'component_initialized', 'info', {
-      amount,
-      existingOrderId,
-      hasPayerName: Boolean(payerName.trim()),
-      hasPhone: Boolean(phone),
-      couponCode,
-    })
-  }, [amount, couponCode, existingOrderId, payerName, phone])
 
   useEffect(() => {
     if (!existingOrderId) {
@@ -125,9 +113,6 @@ export default function PixCheckout({
       status: 'pending',
     })
     setStatus('pending')
-    logPurchaseFlow('PixCheckout', 'existing_order_loaded', 'info', {
-      existingOrderId,
-    })
   }, [clearError, existingOrderId, stopOrderListener])
 
   useEffect(() => {
@@ -140,18 +125,11 @@ export default function PixCheckout({
       return
     }
 
-    logPurchaseFlow('PixCheckout', 'order_listener_started', 'info', {
-      externalId: order.externalId,
-      status,
-    })
     const orderRef = doc(db, 'orders', order.externalId)
     const unsubscribe = onSnapshot(
       orderRef,
       (snapshot) => {
         if (!snapshot.exists()) {
-          logPurchaseFlow('PixCheckout', 'order_snapshot_missing', 'warn', {
-            externalId: order.externalId,
-          })
           return
         }
 
@@ -178,12 +156,6 @@ export default function PixCheckout({
             qrCode: nextQrCode,
           }
         })
-        logPurchaseFlow('PixCheckout', 'order_snapshot_received', 'info', {
-          externalId: snapshot.id,
-          orderStatus,
-          hasCopyPaste: Boolean(snapshotCopyPaste),
-          hasQrCode: Boolean(snapshotQrCode),
-        })
 
         if (orderStatus === 'paid') {
           if (paidToastOrderRef.current !== snapshot.id) {
@@ -201,28 +173,18 @@ export default function PixCheckout({
 
           setStatus('paid')
           stopOrderListener()
-          logPurchaseFlow('PixCheckout', 'payment_paid_detected', 'info', {
-            externalId: snapshot.id,
-          })
           return
         }
 
         if (orderStatus === 'failed') {
           setStatus('failed')
           stopOrderListener()
-          logPurchaseFlow('PixCheckout', 'payment_failed_detected', 'warn', {
-            externalId: snapshot.id,
-          })
         }
       },
       (snapshotError) => {
         setLocalError(normalizeListenerError(snapshotError))
         setStatus('failed')
         stopOrderListener()
-        logPurchaseFlow('PixCheckout', 'order_listener_failed', 'error', {
-          externalId: order.externalId,
-          error: serializeError(snapshotError),
-        })
       },
     )
 
@@ -244,9 +206,6 @@ export default function PixCheckout({
       setLocalError('O gateway nao retornou QR Code/Copia e Cola em tempo habil. Gere um novo PIX.')
       setStatus('failed')
       stopOrderListener()
-      logPurchaseFlow('PixCheckout', 'pix_payload_timeout', 'warn', {
-        externalId: order?.externalId || null,
-      })
     }, 30000)
 
     return () => window.clearTimeout(timeoutId)
@@ -259,17 +218,10 @@ export default function PixCheckout({
     stopOrderListener()
     paidToastOrderRef.current = null
     setStatus('generating')
-    logPurchaseFlow('PixCheckout', 'create_pix_started', 'info', {
-      amount,
-      hasPayerName: Boolean(payerName.trim()),
-      hasPhone: Boolean(phone && phone.trim()),
-      couponCode,
-    })
 
     if (!payerName.trim()) {
       setLocalError('Informe o nome do pagador para gerar o PIX.')
       setStatus('failed')
-      logPurchaseFlow('PixCheckout', 'create_pix_rejected_missing_payer', 'warn')
       return
     }
 
@@ -280,29 +232,17 @@ export default function PixCheckout({
         couponCode,
       })
       setOrder(response)
-      logPurchaseFlow('PixCheckout', 'create_pix_succeeded', 'info', {
-        externalId: response.externalId,
-        status: response.status,
-        hasCopyPaste: Boolean(response.copyPaste),
-        hasQrCode: Boolean(response.qrCode),
-      })
 
       if (response.status === 'failed') {
         setStatus('failed')
-        logPurchaseFlow('PixCheckout', 'create_pix_gateway_failed', 'warn', {
-          externalId: response.externalId,
-        })
         return
       }
 
       setStatus('pending')
-    } catch (error) {
+    } catch {
       setStatus('failed')
-      logPurchaseFlow('PixCheckout', 'create_pix_failed', 'error', {
-        error: serializeError(error),
-      })
     }
-  }, [amount, clearError, couponCode, createDeposit, payerName, phone, stopOrderListener])
+  }, [clearError, couponCode, createDeposit, payerName, phone, stopOrderListener])
 
   const handleCopy = useCallback(async () => {
     if (!copyPasteCode) {
@@ -312,16 +252,10 @@ export default function PixCheckout({
     try {
       await navigator.clipboard.writeText(copyPasteCode)
       setCopyMessage('Codigo PIX copiado com sucesso.')
-      logPurchaseFlow('PixCheckout', 'copy_pix_succeeded', 'info', {
-        externalId: order?.externalId || null,
-      })
     } catch {
       setCopyMessage('Nao foi possivel copiar automaticamente.')
-      logPurchaseFlow('PixCheckout', 'copy_pix_failed', 'warn', {
-        externalId: order?.externalId || null,
-      })
     }
-  }, [copyPasteCode, order?.externalId])
+  }, [copyPasteCode])
 
   const isGenerating = loading || status === 'generating'
 

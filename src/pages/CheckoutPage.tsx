@@ -8,7 +8,6 @@ import Header from '../components/home/Header'
 import { db } from '../lib/firebase'
 import { useAuthStore } from '../stores/authStore'
 import { formatCurrency } from '../utils/purchaseNumbers'
-import { logPurchaseFlow } from '../utils/purchaseFlowLogger'
 import { formatTicketNumbers } from '../utils/ticketNumber'
 
 type CheckoutNavigationState = {
@@ -137,41 +136,16 @@ export default function CheckoutPage() {
   const selectedCount = navigationState.quantity || selectedNumbers.length || 0
   const selectedCouponCode = parseOptionalText(navigationState.couponCode) || null
 
-  useEffect(() => {
-    logPurchaseFlow('CheckoutPage', 'page_loaded', 'info', {
-      isLoggedIn,
-      isAuthReady,
-      routeOrderId,
-      routeAmount,
-      selectedCount,
-      selectedNumbersPreview: selectedNumbers.slice(0, 10),
-    })
-  }, [isAuthReady, isLoggedIn, routeAmount, routeOrderId, selectedCount, selectedNumbers])
-
   const handleBackToSelection = useCallback(async () => {
     if (isReturningToSelection) {
       return
     }
 
     setIsReturningToSelection(true)
-    logPurchaseFlow('CheckoutPage', 'back_to_selection_started', 'info', {
-      isLoggedIn,
-      selectedCount,
-      routeOrderId,
-    })
-
-    logPurchaseFlow('CheckoutPage', 'navigate_back_to_selection', 'info', {
-      routeOrderId,
-      reservationStrategy: 'keep_until_expiration',
-    })
     navigate('/#comprar-numeros')
-  }, [isLoggedIn, isReturningToSelection, navigate, routeOrderId, selectedCount])
+  }, [isReturningToSelection, navigate])
 
   const handlePaymentConfirmed = useCallback((paidOrderId: string) => {
-    logPurchaseFlow('CheckoutPage', 'payment_confirmed_redirect', 'info', {
-      paidOrderId,
-    })
-
     navigate('/minha-conta?section=comprovantes', {
       replace: true,
       state: { highlightOrderId: paidOrderId },
