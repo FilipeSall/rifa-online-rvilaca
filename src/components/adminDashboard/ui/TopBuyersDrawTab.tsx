@@ -38,7 +38,15 @@ function formatDrawDate(drawDate: string) {
 
 function buildWinnerCalculationLabel(result: {
   resolvedBy: 'federal_extraction' | 'redundancy'
-  attempts: Array<{ extractionIndex: number, extractionNumber: string, candidateCode: string, matchedPosition: number | null }>
+  attempts: Array<{
+    extractionIndex: number
+    extractionNumber: string
+    rawCandidateCode?: string
+    candidateCode: string
+    nearestDirection?: 'none' | 'below' | 'above'
+    nearestDistance?: number | null
+    matchedPosition: number | null
+  }>
   extractionNumbers: string[]
   comparisonDigits: number
   participantCount: number
@@ -50,24 +58,49 @@ function buildWinnerCalculationLabel(result: {
       return `Match direto na posição ${result.winningPosition}.`
     }
 
-    const winnerCode = winnerAttempt.candidateCode.padStart(result.comparisonDigits, '0')
-    return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${winnerCode} -> match na posição ${result.winningPosition}.`
+    const rawCode = (winnerAttempt.rawCandidateCode || winnerAttempt.candidateCode).padStart(result.comparisonDigits, '0')
+    const resolvedCode = winnerAttempt.candidateCode.padStart(result.comparisonDigits, '0')
+    const hasPath = rawCode !== resolvedCode
+
+    if (hasPath) {
+      const directionLabel = winnerAttempt.nearestDirection === 'below' ? 'abaixo' : 'acima'
+      return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${rawCode} -> aproximação: ${rawCode} -> ${resolvedCode} (${directionLabel}, dist ${winnerAttempt.nearestDistance ?? '?'}) -> match na posição ${result.winningPosition}.`
+    }
+
+    return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${resolvedCode} -> match na posição ${result.winningPosition}.`
   }
 
-  const seed = result.extractionNumbers
-    .map((value) => Number(value))
-    .reduce((sum, value, index) => sum + (value * (index + 1)), 0)
-  const modulo = result.participantCount > 0 ? seed % result.participantCount : 0
-  const normalizedPosition = modulo === 0 ? result.participantCount : modulo
+  return `Fallback de segurança: nenhuma extração encontrou código elegível e o sistema aplicou posição final de contingência.`
+}
 
-  return `Redundância: seed = Σ(extração × peso) = ${seed}; ${seed} mod ${result.participantCount} = ${modulo}; posição final = ${normalizedPosition}.`
+function formatNearestPath(attempt: {
+  rawCandidateCode?: string
+  candidateCode: string
+  nearestDirection?: 'none' | 'below' | 'above'
+  nearestDistance?: number | null
+}) {
+  const raw = (attempt.rawCandidateCode || '').trim()
+  if (!raw || raw === attempt.candidateCode) {
+    return null
+  }
+
+  const directionLabel = attempt.nearestDirection === 'below'
+    ? 'abaixo'
+    : attempt.nearestDirection === 'above'
+      ? 'acima'
+      : 'proximo'
+  const distanceLabel = Number.isFinite(Number(attempt.nearestDistance))
+    ? String(attempt.nearestDistance)
+    : '?'
+  return `${raw} -> ${attempt.candidateCode} (${directionLabel}, dist ${distanceLabel})`
 }
 
 function formatWinnerUserCode(result: {
-  winningCode: string
-  comparisonDigits: number
+  winningPosition: number
+  participantCount: number
 }) {
-  return String(result.winningCode || '').padStart(result.comparisonDigits, '0')
+  const digits = Math.max(2, String(result.participantCount || 0).length)
+  return String(result.winningPosition || 0).padStart(digits, '0')
 }
 
 function pickComparableWinnerTicket(result: {
@@ -160,7 +193,7 @@ export default function TopBuyersDrawTab() {
     if (!Number.isInteger(parsed) || parsed <= 0) {
       return 50
     }
-    return Math.max(1, Math.min(parsed, 50))
+    return parsed
   }, [rankingLimitInput])
 
   const ensureDrawPrizeInput = useMemo(() => {
@@ -185,9 +218,14 @@ export default function TopBuyersDrawTab() {
     }
   }, [drawPrizeInput, ensureDrawPrizeInput])
 
+  const hasAnyExtraction = useMemo(
+    () => extractionInputs.some((item) => item.length > 0),
+    [extractionInputs],
+  )
+
   const canPublish = useMemo(
-    () => ensureDrawPrizeInput.length > 0 && extractionInputs.every((item) => item.length > 0),
-    [ensureDrawPrizeInput, extractionInputs],
+    () => ensureDrawPrizeInput.length > 0 && hasAnyExtraction,
+    [ensureDrawPrizeInput, hasAnyExtraction],
   )
 
   const previewCodes = useMemo(() => {
@@ -203,15 +241,19 @@ export default function TopBuyersDrawTab() {
 
   const handlePublish = async () => {
     if (!canPublish) {
-      toast.warning('Selecione o premio e preencha as 5 extracoes da Loteria Federal.', {
+      toast.warning('Selecione o premio e preencha ao menos 1 extracao da Loteria Federal.', {
         toastId: 'top-buyers-draw-invalid-input',
       })
       return
     }
 
     try {
+      const selectedExtractions = extractionInputs
+        .filter((item) => item.length > 0)
+        .map((item) => item.padStart(6, '0'))
+
       const published = await publishResult({
-        extractionNumbers: extractionInputs.map((item) => item.padStart(6, '0')),
+        extractionNumbers: selectedExtractions,
         rankingLimit,
         drawPrize: ensureDrawPrizeInput,
       })
@@ -267,7 +309,7 @@ export default function TopBuyersDrawTab() {
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">Regras aplicadas</p>
             <div className="mt-3 rounded-xl border border-cyan-300/25 bg-cyan-500/10 p-4 text-xs text-cyan-100">
               <p>1) Escolha do premio vigente para a rodada</p>
-              <p>2) 5 extracoes da Federal</p>
+              <p>2) De 1 a 5 extracoes da Federal</p>
               <p>3) Digitos por quantidade de participantes (minimo 3)</p>
               <p>4) Sem match exato: codigo mais proximo (abaixo/acima)</p>
             </div>
@@ -307,7 +349,7 @@ export default function TopBuyersDrawTab() {
 
             <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
               <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="draw-ranking-limit">
-                Participantes do ranking (max 50)
+                Participantes do ranking
               </label>
               <input
                 id="draw-ranking-limit"
@@ -321,7 +363,7 @@ export default function TopBuyersDrawTab() {
             </div>
 
             <div className="rounded-xl border border-amber-300/20 bg-amber-500/5 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-amber-200">5 extracoes da Loteria Federal</p>
+              <p className="text-[10px] uppercase tracking-[0.16em] text-amber-200">Extracoes da Loteria Federal (1 a 5)</p>
               <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-5">
                 {extractionInputs.map((value, index) => (
                   <input
@@ -354,9 +396,12 @@ export default function TopBuyersDrawTab() {
               onClick={() => {
                 void refreshResult()
                 void refreshHistory()
+                toast.info('Dados recarregados.', {
+                  toastId: 'top-buyers-draw-refreshed',
+                })
               }}
             >
-              Atualizar
+              Recarregar dados
             </button>
           </div>
 
@@ -388,10 +433,10 @@ export default function TopBuyersDrawTab() {
                   Cálculo exato: <span className="font-semibold text-white">{buildWinnerCalculationLabel(result)}</span>
                 </p>
                 <p className="mt-1 text-xs text-gray-200">
-                  Código do ganhador premiado: <span className="font-bold text-gold">{formatWinnerUserCode(result)}</span>
+                  Posicao do jogador premiado: <span className="font-bold text-gold">{formatWinnerUserCode(result)}</span>
                 </p>
                 <p className="mt-1 text-xs text-gray-200">
-                  Cupom do ganhador para conferência:{' '}
+                  Numero premiado:{' '}
                   <span className="font-bold text-gold">{pickComparableWinnerTicket(result) || '-'}</span>
                 </p>
                 <p className="mt-1 text-xs text-gray-300">
@@ -404,10 +449,10 @@ export default function TopBuyersDrawTab() {
                   </div>
                   <div className="rounded-lg border border-white/10 bg-black/30 p-2">
                     <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Posicao</p>
-                    <p className="mt-1 font-black text-white">{result.winningPosition}</p>
+                    <p className="mt-1 font-black text-white">{formatWinnerUserCode(result)}</p>
                   </div>
                   <div className="rounded-lg border border-white/10 bg-black/30 p-2">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Codigo</p>
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Codigo comparado</p>
                     <p className="mt-1 font-black text-white">{result.winningCode}</p>
                   </div>
                 </div>
@@ -425,8 +470,8 @@ export default function TopBuyersDrawTab() {
                     <div key={`${attempt.extractionIndex}-${attempt.candidateCode}`} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-xs">
                       <span className="text-gray-300">
                         {attempt.extractionIndex > 5 || attempt.extractionNumber.includes('-')
-                          ? `Tentativa ${attempt.extractionIndex}: calculo de redundancia ➜ codigo ${attempt.candidateCode}`
-                          : `Tentativa ${attempt.extractionIndex}: ${attempt.extractionNumber} ➜ codigo ${attempt.candidateCode}`}
+                          ? `Tentativa ${attempt.extractionIndex}: fallback de seguranca ➜ codigo ${attempt.candidateCode}`
+                          : `Tentativa ${attempt.extractionIndex}: ${attempt.extractionNumber} ➜ codigo ${attempt.candidateCode}${formatNearestPath(attempt) ? ` | caminho ${formatNearestPath(attempt)}` : ''}`}
                       </span>
                       <span className="font-bold text-gold">
                         {attempt.matchedPosition ? `Pos ${attempt.matchedPosition}` : 'Sem match'}

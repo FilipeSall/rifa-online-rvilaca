@@ -6,7 +6,6 @@ import { asRecord, readString, readTimestampMillis, sanitizeString } from './sha
 
 const TOP_BUYERS_DRAW_HISTORY_COLLECTION = 'topBuyersDrawResults'
 const DEFAULT_RANKING_LIMIT = 50
-const MAX_RANKING_LIMIT = 50
 const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
 const EXTRACTION_COUNT = 5
 const EXTRACTION_DIGITS = 6
@@ -37,7 +36,10 @@ interface ExtractionAttempt {
   extractionIndex: number
   extractionNumber: string
   comparisonDigits: number
+  rawCandidateCode: string
   candidateCode: string
+  nearestDirection: 'none' | 'below' | 'above'
+  nearestDistance: number | null
   matchedPosition: number | null
 }
 
@@ -105,7 +107,7 @@ function sanitizeRankingLimit(value: unknown): number {
     return DEFAULT_RANKING_LIMIT
   }
 
-  return Math.max(1, Math.min(parsed, MAX_RANKING_LIMIT))
+  return parsed
 }
 
 function sanitizeExtractionNumber(value: unknown, index: number): string {
@@ -123,8 +125,8 @@ function sanitizeExtractionNumber(value: unknown, index: number): string {
 }
 
 function sanitizeExtractionNumbers(value: unknown): string[] {
-  if (!Array.isArray(value) || value.length !== EXTRACTION_COUNT) {
-    throw new HttpsError('invalid-argument', 'Informe exatamente 5 extracoes da Loteria Federal.')
+  if (!Array.isArray(value) || value.length < 1 || value.length > EXTRACTION_COUNT) {
+    throw new HttpsError('invalid-argument', 'Informe de 1 a 5 extracoes da Loteria Federal.')
   }
 
   return value.map((item, index) => sanitizeExtractionNumber(item, index))
@@ -462,12 +464,20 @@ function resolveWinnerByFederalRule(
     availableCodes.add(Number(code))
   }
 
-  function findNearestAvailableCode(targetCode: string): string | null {
+  function findNearestAvailableCode(targetCode: string): {
+    resolvedCode: string
+    nearestDirection: 'none' | 'below' | 'above'
+    nearestDistance: number
+  } | null {
     const targetNumber = Number(targetCode)
     const maxCode = (10 ** comparisonDigits) - 1
 
     if (availableCodes.has(targetNumber)) {
-      return targetCode
+      return {
+        resolvedCode: targetCode,
+        nearestDirection: 'none',
+        nearestDistance: 0,
+      }
     }
 
     for (let distance = 1; distance <= maxCode; distance += 1) {
@@ -485,19 +495,33 @@ function resolveWinnerByFederalRule(
 
         // Empate por distancia: prioriza quem comprou primeiro (menor timestamp).
         if (belowFirstPurchaseAt > 0 && aboveFirstPurchaseAt > 0 && belowFirstPurchaseAt !== aboveFirstPurchaseAt) {
-          return belowFirstPurchaseAt < aboveFirstPurchaseAt ? belowCode : aboveCode
+          return belowFirstPurchaseAt < aboveFirstPurchaseAt
+            ? { resolvedCode: belowCode, nearestDirection: 'below', nearestDistance: distance }
+            : { resolvedCode: aboveCode, nearestDirection: 'above', nearestDistance: distance }
         }
 
         // Fallback deterministico para empate absoluto.
-        return belowCode
+        return {
+          resolvedCode: belowCode,
+          nearestDirection: 'below',
+          nearestDistance: distance,
+        }
       }
 
       if (hasBelow) {
-        return String(below).padStart(comparisonDigits, '0')
+        return {
+          resolvedCode: String(below).padStart(comparisonDigits, '0'),
+          nearestDirection: 'below',
+          nearestDistance: distance,
+        }
       }
 
       if (hasAbove) {
-        return String(above).padStart(comparisonDigits, '0')
+        return {
+          resolvedCode: String(above).padStart(comparisonDigits, '0'),
+          nearestDirection: 'above',
+          nearestDistance: distance,
+        }
       }
     }
 
@@ -509,14 +533,18 @@ function resolveWinnerByFederalRule(
   for (let index = 0; index < extractionNumbers.length; index += 1) {
     const extractionNumber = extractionNumbers[index]
     const rawCandidateCode = extractionNumber.slice(-comparisonDigits).padStart(comparisonDigits, '0')
-    const resolvedCandidateCode = findNearestAvailableCode(rawCandidateCode) || rawCandidateCode
+    const nearestResolution = findNearestAvailableCode(rawCandidateCode)
+    const resolvedCandidateCode = nearestResolution?.resolvedCode || rawCandidateCode
     const matchedPosition = positionByCode.get(resolvedCandidateCode) || null
 
     attempts.push({
       extractionIndex: index + 1,
       extractionNumber,
       comparisonDigits,
+      rawCandidateCode,
       candidateCode: resolvedCandidateCode,
+      nearestDirection: (nearestResolution?.nearestDirection || 'none') as ExtractionAttempt['nearestDirection'],
+      nearestDistance: nearestResolution?.nearestDistance ?? null,
       matchedPosition,
     })
 
@@ -536,10 +564,13 @@ function resolveWinnerByFederalRule(
   const fallbackCode = String(fallbackPosition).padStart(comparisonDigits, '0')
 
   attempts.push({
-    extractionIndex: EXTRACTION_COUNT + 1,
+    extractionIndex: extractionNumbers.length + 1,
     extractionNumber: extractionNumbers.join('-'),
     comparisonDigits,
+    rawCandidateCode: '',
     candidateCode: fallbackCode,
+    nearestDirection: 'none',
+    nearestDistance: null,
     matchedPosition: fallbackPosition,
   })
 
@@ -689,7 +720,16 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
             extractionIndex: Number(item.extractionIndex),
             extractionNumber: sanitizeString(item.extractionNumber),
             comparisonDigits: Number(item.comparisonDigits),
+            rawCandidateCode: sanitizeString(item.rawCandidateCode),
             candidateCode: sanitizeString(item.candidateCode),
+            nearestDirection: (item.nearestDirection === 'below'
+              ? 'below'
+              : item.nearestDirection === 'above'
+                ? 'above'
+                : 'none') as ExtractionAttempt['nearestDirection'],
+            nearestDistance: Number.isFinite(Number(item.nearestDistance))
+              ? Number(item.nearestDistance)
+              : null,
             matchedPosition: Number.isInteger(Number(item.matchedPosition))
               ? Number(item.matchedPosition)
               : null,
@@ -834,7 +874,16 @@ export function createGetTopBuyersDrawHistoryHandler(db: Firestore) {
                 extractionIndex: Number(item.extractionIndex),
                 extractionNumber: sanitizeString(item.extractionNumber),
                 comparisonDigits: Number(item.comparisonDigits),
+                rawCandidateCode: sanitizeString(item.rawCandidateCode),
                 candidateCode: sanitizeString(item.candidateCode),
+                nearestDirection: (item.nearestDirection === 'below'
+                  ? 'below'
+                  : item.nearestDirection === 'above'
+                    ? 'above'
+                    : 'none') as ExtractionAttempt['nearestDirection'],
+                nearestDistance: Number.isFinite(Number(item.nearestDistance))
+                  ? Number(item.nearestDistance)
+                  : null,
                 matchedPosition: Number.isInteger(Number(item.matchedPosition))
                   ? Number(item.matchedPosition)
                   : null,
@@ -968,7 +1017,16 @@ export function createGetPublicTopBuyersDrawHistoryHandler(db: Firestore) {
                 extractionIndex: Number(item.extractionIndex),
                 extractionNumber: sanitizeString(item.extractionNumber),
                 comparisonDigits: Number(item.comparisonDigits),
+                rawCandidateCode: sanitizeString(item.rawCandidateCode),
                 candidateCode: sanitizeString(item.candidateCode),
+                nearestDirection: (item.nearestDirection === 'below'
+                  ? 'below'
+                  : item.nearestDirection === 'above'
+                    ? 'above'
+                    : 'none') as ExtractionAttempt['nearestDirection'],
+                nearestDistance: Number.isFinite(Number(item.nearestDistance))
+                  ? Number(item.nearestDistance)
+                  : null,
                 matchedPosition: Number.isInteger(Number(item.matchedPosition))
                   ? Number(item.matchedPosition)
                   : null,

@@ -23,7 +23,10 @@ type RawAttempt = {
   extractionIndex?: unknown
   extractionNumber?: unknown
   comparisonDigits?: unknown
+  rawCandidateCode?: unknown
   candidateCode?: unknown
+  nearestDirection?: unknown
+  nearestDistance?: unknown
   matchedPosition?: unknown
 }
 
@@ -85,7 +88,10 @@ export type TopBuyersDrawAttempt = {
   extractionIndex: number
   extractionNumber: string
   comparisonDigits: number
+  rawCandidateCode: string
   candidateCode: string
+  nearestDirection: 'none' | 'below' | 'above'
+  nearestDistance: number | null
   matchedPosition: number | null
 }
 
@@ -180,7 +186,16 @@ function normalizeAttempts(value: unknown): TopBuyersDrawAttempt[] {
       extractionIndex: sanitizeInteger(item.extractionIndex),
       extractionNumber: sanitizeString(item.extractionNumber),
       comparisonDigits: sanitizeInteger(item.comparisonDigits),
+      rawCandidateCode: sanitizeString(item.rawCandidateCode),
       candidateCode: sanitizeString(item.candidateCode),
+      nearestDirection: (item.nearestDirection === 'below'
+        ? 'below'
+        : item.nearestDirection === 'above'
+          ? 'above'
+          : 'none') as TopBuyersDrawAttempt['nearestDirection'],
+      nearestDistance: Number.isFinite(Number(item.nearestDistance))
+        ? Number(item.nearestDistance)
+        : null,
       matchedPosition: Number.isInteger(Number(item.matchedPosition))
         ? Number(item.matchedPosition)
         : null,

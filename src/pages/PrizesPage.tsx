@@ -35,7 +35,15 @@ function formatPublishedAt(timestampMs: number) {
 
 function buildWinnerCalculationLabel(item: {
   resolvedBy: 'federal_extraction' | 'redundancy'
-  attempts: Array<{ extractionIndex: number, extractionNumber: string, candidateCode: string, matchedPosition: number | null }>
+  attempts: Array<{
+    extractionIndex: number
+    extractionNumber: string
+    rawCandidateCode?: string
+    candidateCode: string
+    nearestDirection?: 'none' | 'below' | 'above'
+    nearestDistance?: number | null
+    matchedPosition: number | null
+  }>
   extractionNumbers: string[]
   comparisonDigits: number
   participantCount: number
@@ -47,24 +55,49 @@ function buildWinnerCalculationLabel(item: {
       return `Match direto na posição ${item.winningPosition}.`
     }
 
-    const winnerCode = winnerAttempt.candidateCode.padStart(item.comparisonDigits, '0')
-    return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${item.comparisonDigits} dígitos = ${winnerCode} -> match na posição ${item.winningPosition}.`
+    const rawCode = (winnerAttempt.rawCandidateCode || winnerAttempt.candidateCode).padStart(item.comparisonDigits, '0')
+    const resolvedCode = winnerAttempt.candidateCode.padStart(item.comparisonDigits, '0')
+    const hasPath = rawCode !== resolvedCode
+
+    if (hasPath) {
+      const directionLabel = winnerAttempt.nearestDirection === 'below' ? 'abaixo' : 'acima'
+      return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${item.comparisonDigits} dígitos = ${rawCode} -> aproximação: ${rawCode} -> ${resolvedCode} (${directionLabel}, dist ${winnerAttempt.nearestDistance ?? '?'}) -> match na posição ${item.winningPosition}.`
+    }
+
+    return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${item.comparisonDigits} dígitos = ${resolvedCode} -> match na posição ${item.winningPosition}.`
   }
 
-  const seed = item.extractionNumbers
-    .map((value) => Number(value))
-    .reduce((sum, value, index) => sum + (value * (index + 1)), 0)
-  const modulo = item.participantCount > 0 ? seed % item.participantCount : 0
-  const normalizedPosition = modulo === 0 ? item.participantCount : modulo
+  return 'Fallback de segurança: nenhuma extração encontrou código elegível e o sistema aplicou posição final de contingência.'
+}
 
-  return `Redundância: seed = Σ(extração × peso) = ${seed}; ${seed} mod ${item.participantCount} = ${modulo}; posição final = ${normalizedPosition}.`
+function formatNearestPath(attempt: {
+  rawCandidateCode?: string
+  candidateCode: string
+  nearestDirection?: 'none' | 'below' | 'above'
+  nearestDistance?: number | null
+}) {
+  const raw = (attempt.rawCandidateCode || '').trim()
+  if (!raw || raw === attempt.candidateCode) {
+    return null
+  }
+
+  const directionLabel = attempt.nearestDirection === 'below'
+    ? 'abaixo'
+    : attempt.nearestDirection === 'above'
+      ? 'acima'
+      : 'proximo'
+  const distanceLabel = Number.isFinite(Number(attempt.nearestDistance))
+    ? String(attempt.nearestDistance)
+    : '?'
+  return `${raw} -> ${attempt.candidateCode} (${directionLabel}, dist ${distanceLabel})`
 }
 
 function formatWinnerUserCode(item: {
-  winningCode: string
-  comparisonDigits: number
+  winningPosition: number
+  participantCount: number
 }) {
-  return String(item.winningCode || '').padStart(item.comparisonDigits, '0')
+  const digits = Math.max(2, String(item.participantCount || 0).length)
+  return String(item.winningPosition || 0).padStart(digits, '0')
 }
 
 function pickComparableWinnerTicket(item: {
@@ -218,10 +251,10 @@ export default function PrizesPage() {
                             Cálculo exato: <span className="font-semibold text-white">{buildWinnerCalculationLabel(item)}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-300">
-                            Código do ganhador premiado: <span className="font-bold text-gold">{formatWinnerUserCode(item)}</span>
+                            Posição do jogador premiado: <span className="font-bold text-gold">{formatWinnerUserCode(item)}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-300">
-                            Cupom do ganhador para conferência:{' '}
+                            Número premiado:{' '}
                             <span className="font-bold text-gold">{pickComparableWinnerTicket(item) || '-'}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-300">
@@ -257,11 +290,16 @@ export default function PrizesPage() {
                                 Tentativa {attempt.extractionIndex}
                               </p>
                               <p className="mt-1 font-mono text-gray-200">
-                                {isFallback ? 'Cálculo de redundância' : attempt.extractionNumber}
+                                {isFallback ? 'Fallback de segurança' : attempt.extractionNumber}
                               </p>
                               <p className="mt-1 text-gray-300">
                                 Código <span className="font-bold text-gold">{attempt.candidateCode}</span>
                               </p>
+                              {formatNearestPath(attempt) ? (
+                                <p className="mt-1 text-gray-300">
+                                  Caminho <span className="font-mono text-white">{formatNearestPath(attempt)}</span>
+                                </p>
+                              ) : null}
                             </div>
                           )
                         })}

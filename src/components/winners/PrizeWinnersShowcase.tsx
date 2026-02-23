@@ -35,21 +35,41 @@ function buildWinnerCalculationLabel(result: NonNullable<ReturnType<typeof useTo
       return `Match direto na posição ${result.winningPosition}.`
     }
 
-    const winnerCode = winnerAttempt.candidateCode.padStart(result.comparisonDigits, '0')
-    return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${winnerCode} -> match na posição ${result.winningPosition}.`
+    const rawCode = (winnerAttempt.rawCandidateCode || winnerAttempt.candidateCode).padStart(result.comparisonDigits, '0')
+    const resolvedCode = winnerAttempt.candidateCode.padStart(result.comparisonDigits, '0')
+    const hasPath = rawCode !== resolvedCode
+
+    if (hasPath) {
+      const directionLabel = winnerAttempt.nearestDirection === 'below' ? 'abaixo' : 'acima'
+      return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${rawCode} -> aproximação: ${rawCode} -> ${resolvedCode} (${directionLabel}, dist ${winnerAttempt.nearestDistance ?? '?'}) -> match na posição ${result.winningPosition}.`
+    }
+
+    return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${resolvedCode} -> match na posição ${result.winningPosition}.`
   }
 
-  const seed = result.extractionNumbers
-    .map((value) => Number(value))
-    .reduce((sum, value, index) => sum + (value * (index + 1)), 0)
-  const modulo = result.participantCount > 0 ? seed % result.participantCount : 0
-  const normalizedPosition = modulo === 0 ? result.participantCount : modulo
+  return 'Fallback de segurança: nenhuma extração encontrou código elegível e o sistema aplicou posição final de contingência.'
+}
 
-  return `Redundância: seed = Σ(extração × peso) = ${seed}; ${seed} mod ${result.participantCount} = ${modulo}; posição final = ${normalizedPosition}.`
+function formatNearestPath(attempt: NonNullable<ReturnType<typeof useTopBuyersDraw>['result']>['attempts'][number]) {
+  const raw = (attempt.rawCandidateCode || '').trim()
+  if (!raw || raw === attempt.candidateCode) {
+    return null
+  }
+
+  const directionLabel = attempt.nearestDirection === 'below'
+    ? 'abaixo'
+    : attempt.nearestDirection === 'above'
+      ? 'acima'
+      : 'proximo'
+  const distanceLabel = Number.isFinite(Number(attempt.nearestDistance))
+    ? String(attempt.nearestDistance)
+    : '?'
+  return `${raw} -> ${attempt.candidateCode} (${directionLabel}, dist ${distanceLabel})`
 }
 
 function formatWinnerUserCode(result: NonNullable<ReturnType<typeof useTopBuyersDraw>['result']>) {
-  return String(result.winningCode || '').padStart(result.comparisonDigits, '0')
+  const digits = Math.max(2, String(result.participantCount || 0).length)
+  return String(result.winningPosition || 0).padStart(digits, '0')
 }
 
 function pickComparableWinnerTicket(result: NonNullable<ReturnType<typeof useTopBuyersDraw>['result']>) {
@@ -152,10 +172,10 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                             Cálculo exato: <span className="font-semibold text-white">{buildWinnerCalculationLabel(result)}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-200">
-                            Código do ganhador premiado: <span className="font-bold text-gold">{formatWinnerUserCode(result)}</span>
+                            Posição do jogador premiado: <span className="font-bold text-gold">{formatWinnerUserCode(result)}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-200">
-                            Cupom do ganhador para conferência:{' '}
+                            Número premiado:{' '}
                             <span className="font-bold text-gold">{pickComparableWinnerTicket(result) || '-'}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-300">
@@ -184,8 +204,8 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                             >
                               <span className="text-gray-300">
                                 {isFallback
-                                  ? `Tentativa ${attempt.extractionIndex}: cálculo de redundância (seed das 5 extrações) ➜ código ${attempt.candidateCode}`
-                                  : `Tentativa ${attempt.extractionIndex}: extração ${attempt.extractionNumber} ➜ código ${formatAttemptLabel(attempt.extractionNumber, attempt.comparisonDigits)}`}
+                                  ? `Tentativa ${attempt.extractionIndex}: fallback de segurança ➜ código ${attempt.candidateCode}`
+                                  : `Tentativa ${attempt.extractionIndex}: extração ${attempt.extractionNumber} ➜ código ${formatAttemptLabel(attempt.extractionNumber, attempt.comparisonDigits)}${formatNearestPath(attempt) ? ` | caminho ${formatNearestPath(attempt)}` : ''}`}
                               </span>
                               <span className="font-bold text-gold">
                                 {attempt.matchedPosition ? `Match na posição ${attempt.matchedPosition}` : 'Sem match'}
