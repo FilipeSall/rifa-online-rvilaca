@@ -1,10 +1,14 @@
 import { getDownloadURL, ref as storageRef } from 'firebase/storage'
-import { type MouseEvent, useEffect, useMemo, useState } from 'react'
+import { type MouseEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
 import { FaWhatsapp } from 'react-icons/fa'
 import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 import { storage } from '../../lib/firebase'
 
 const BADGE_DISMISSED_STORAGE_KEY = 'rifa-online:featured-video-badge-dismissed'
+
+type FeaturedVideoFloatingButtonProps = {
+  topSlot?: ReactNode
+}
 
 function isHttpUrl(value: string) {
   try {
@@ -15,7 +19,7 @@ function isHttpUrl(value: string) {
   }
 }
 
-export default function FeaturedVideoFloatingButton() {
+export default function FeaturedVideoFloatingButton({ topSlot = null }: FeaturedVideoFloatingButtonProps) {
   const { campaign } = useCampaignSettings()
   const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -98,13 +102,15 @@ export default function FeaturedVideoFloatingButton() {
     event.stopPropagation()
   }
 
-  if (!resolvedVideoUrl && !whatsappLink) {
+  if (!resolvedVideoUrl && !whatsappLink && !topSlot) {
     return null
   }
 
   return (
     <>
       <div className="fixed bottom-4 left-4 z-[55] flex flex-col gap-3 sm:bottom-6 sm:left-6">
+        {topSlot}
+
         {resolvedVideoUrl ? (
           <div className="relative">
             {showNotificationBadge ? (

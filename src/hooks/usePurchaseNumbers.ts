@@ -3,7 +3,7 @@ import { httpsCallable } from 'firebase/functions'
 import { toast } from 'react-toastify'
 import { useNavigate } from 'react-router-dom'
 import { OPEN_AUTH_MODAL_EVENT } from '../const/auth'
-import { MAX_QUANTITY, MIN_QUANTITY } from '../const/purchaseNumbers'
+import { DEFAULT_INITIAL_QUANTITY, MAX_QUANTITY, MIN_QUANTITY } from '../const/purchaseNumbers'
 import { DEFAULT_TICKET_PRICE } from '../const/campaign'
 import { functions } from '../lib/firebase'
 import { useCampaignSettings } from './useCampaignSettings'
@@ -156,7 +156,9 @@ export function usePurchaseNumbers() {
   const [isAutoSelecting, setIsAutoSelecting] = useState(false)
   const [isManualAdding, setIsManualAdding] = useState(false)
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('automatico')
-  const [quantity, setQuantity] = useState(MIN_QUANTITY)
+  const [quantity, setQuantity] = useState(
+    getSafeQuantity(DEFAULT_INITIAL_QUANTITY, MAX_QUANTITY, MIN_QUANTITY),
+  )
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>([])
   const [couponCode, setCouponCode] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null)

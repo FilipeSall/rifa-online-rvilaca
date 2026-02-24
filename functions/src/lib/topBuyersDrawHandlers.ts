@@ -23,6 +23,7 @@ interface TopBuyersRankingItem {
   name: string
   cotas: number
   firstPurchaseAtMs: number
+  photoURL: string
 }
 
 interface TopBuyersDrawWinner {
@@ -30,6 +31,7 @@ interface TopBuyersDrawWinner {
   name: string
   cotas: number
   pos: number
+  photoURL: string
 }
 
 interface ExtractionAttempt {
@@ -422,6 +424,7 @@ async function buildRankingSnapshot(
       name: formatPublicName(rawName, uid),
       cotas: aggregate.cotas,
       firstPurchaseAtMs: aggregate.firstPurchaseAtMs,
+      photoURL: sanitizeString(userData.photoURL),
     }
   })
 
@@ -647,6 +650,7 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
           name: winner.name,
           cotas: winner.cotas,
           pos: winner.pos,
+          photoURL: winner.photoURL,
         },
         winnerTicketNumbers: rankingBuild.winnerTicketNumbersByUser.get(winner.userId) || [],
         rankingSnapshot,
@@ -774,6 +778,7 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
         name: sanitizeString(winnerRecord.name) || 'Participante',
         cotas: Number(winnerRecord.cotas) || 0,
         pos: Number(winnerRecord.pos) || winningPosition,
+        photoURL: sanitizeString(winnerRecord.photoURL),
       }
 
       if (winnerTicketNumbers.length === 0 && winner.userId) {
@@ -794,6 +799,7 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
             name: sanitizeString(item.name),
             cotas: Number(item.cotas),
             firstPurchaseAtMs: Number(item.firstPurchaseAtMs),
+            photoURL: sanitizeString(item.photoURL),
           }))
           .filter((item) => Number.isInteger(item.pos) && item.pos > 0 && item.userId && Number.isInteger(item.cotas) && item.cotas > 0)
         : []
@@ -900,6 +906,7 @@ export function createGetTopBuyersDrawHistoryHandler(db: Firestore) {
             name: sanitizeString(winnerRecord.name) || 'Participante',
             cotas: Number(winnerRecord.cotas) || 0,
             pos: Number(winnerRecord.pos) || winningPosition,
+            photoURL: sanitizeString(winnerRecord.photoURL),
           }
 
           if (winnerTicketNumbers.length === 0 && winner.userId) {
@@ -919,6 +926,7 @@ export function createGetTopBuyersDrawHistoryHandler(db: Firestore) {
                 name: sanitizeString(item.name),
                 cotas: Number(item.cotas),
                 firstPurchaseAtMs: Number(item.firstPurchaseAtMs),
+                photoURL: sanitizeString(item.photoURL),
               }))
               .filter((item) => Number.isInteger(item.pos) && item.pos > 0 && item.userId && Number.isInteger(item.cotas) && item.cotas > 0)
             : []
@@ -1043,6 +1051,7 @@ export function createGetPublicTopBuyersDrawHistoryHandler(db: Firestore) {
             name: sanitizeString(winnerRecord.name) || 'Participante',
             cotas: Number(winnerRecord.cotas) || 0,
             pos: Number(winnerRecord.pos) || winningPosition,
+            photoURL: sanitizeString(winnerRecord.photoURL),
           }
 
           if (winnerTicketNumbers.length === 0 && winner.userId) {
@@ -1062,6 +1071,7 @@ export function createGetPublicTopBuyersDrawHistoryHandler(db: Firestore) {
                 name: sanitizeString(item.name),
                 cotas: Number(item.cotas),
                 firstPurchaseAtMs: Number(item.firstPurchaseAtMs),
+                photoURL: sanitizeString(item.photoURL),
               }))
               .filter((item) => Number.isInteger(item.pos) && item.pos > 0 && item.userId && Number.isInteger(item.cotas) && item.cotas > 0)
             : []

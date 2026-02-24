@@ -3,7 +3,10 @@ import { Route, Routes, useLocation } from 'react-router-dom'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import FeaturedVideoFloatingButton from './components/home/FeaturedVideoFloatingButton'
+import WinnersFloatingButton from './components/winnersNotification/WinnersFloatingButton'
+import WinnersModal from './components/winnersNotification/WinnersModal'
 import { PLACEHOLDER_ROUTES } from './const/app'
+import { useWinnersNotification } from './hooks/useWinnersNotification'
 import AdminDashboardPage from './pages/AdminDashboardPage'
 import CheckoutPage from './pages/CheckoutPage'
 import HomePage from './pages/HomePage'
@@ -24,6 +27,8 @@ function ScrollToTop() {
 export default function App() {
   const { pathname } = useLocation()
   const shouldRenderFeaturedVideoFloatingButton = !pathname.startsWith('/dashboard')
+  const shouldRenderWinnersNotifications = !pathname.startsWith('/dashboard')
+  const winnersNotification = useWinnersNotification(shouldRenderWinnersNotifications)
 
   return (
     <>
@@ -47,7 +52,21 @@ export default function App() {
         <Route path="/regulamento" element={<RegulationPage />} />
         <Route path="*" element={<PlaceholderPage title={PLACEHOLDER_ROUTES.notFound.title} />} />
       </Routes>
-      {shouldRenderFeaturedVideoFloatingButton ? <FeaturedVideoFloatingButton /> : null}
+      <WinnersModal
+        isOpen={winnersNotification.isModalOpen}
+        winners={winnersNotification.winners}
+        isLoading={winnersNotification.isLoading}
+        errorMessage={winnersNotification.errorMessage}
+        onClose={winnersNotification.closeModal}
+        onRetry={winnersNotification.refreshWinners}
+      />
+      {shouldRenderFeaturedVideoFloatingButton ? (
+        <FeaturedVideoFloatingButton
+          topSlot={winnersNotification.isFabVisible
+            ? <WinnersFloatingButton onClick={winnersNotification.openModal} />
+            : null}
+        />
+      ) : null}
     </>
   )
 }

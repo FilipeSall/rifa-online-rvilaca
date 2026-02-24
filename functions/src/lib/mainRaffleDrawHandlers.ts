@@ -19,6 +19,7 @@ interface PublishMainRaffleDrawInput {
 interface MainRaffleWinner {
   userId: string
   name: string
+  photoURL?: string
 }
 
 interface MainRaffleDrawResult {
@@ -405,6 +406,7 @@ function parseMainRaffleResult(raw: Record<string, unknown> | null | undefined):
     winner: {
       userId: sanitizeString(winnerRaw.userId),
       name: sanitizeString(winnerRaw.name) || 'Participante',
+      photoURL: sanitizeString(winnerRaw.photoURL),
     },
     publishedAtMs: Number(raw.publishedAtMs),
   }
@@ -502,6 +504,7 @@ export function createPublishMainRaffleDrawHandler(db: Firestore) {
           sanitizeString(winnerUserData.name) || sanitizeString(winnerUserData.displayName),
           candidate.ownerUid,
         )
+        const winnerPhotoURL = sanitizeString(winnerUserData.photoURL)
         const winningNumberFormatted = String(candidate.number).padStart(7, '0')
 
         result = {
@@ -524,6 +527,7 @@ export function createPublishMainRaffleDrawHandler(db: Firestore) {
           winner: {
             userId: candidate.ownerUid,
             name: winnerName,
+            photoURL: winnerPhotoURL,
           },
           publishedAtMs,
         }

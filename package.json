@@ -21,7 +21,8 @@
     "reset:draws": "bun run scripts/reset-draws.ts",
     "reset:draws:dry": "bun run scripts/reset-draws.ts",
     "reset:draws:apply": "bun run scripts/reset-draws.ts --confirm",
-    "reset:draws:apply:legacy": "bun run scripts/reset-draws.ts --confirm --include-legacy"
+    "reset:draws:apply:legacy": "bun run scripts/reset-draws.ts --confirm --include-legacy",
+    "reset:campaign": "bun run scripts/reset-campaign.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
