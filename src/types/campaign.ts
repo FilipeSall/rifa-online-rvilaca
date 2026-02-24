@@ -17,6 +17,7 @@ export type CampaignSettings = {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  totalNumbers: number
   additionalPrizes: string[]
   supportWhatsappNumber: string
   status: CampaignStatus
@@ -32,6 +33,7 @@ export type UpsertCampaignSettingsInput = {
   mainPrize?: string
   secondPrize?: string
   bonusPrize?: string
+  totalNumbers?: number
   additionalPrizes?: string[]
   supportWhatsappNumber?: string
   status?: CampaignStatus
@@ -48,6 +50,7 @@ export type UpsertCampaignSettingsOutput = {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  totalNumbers: number
   additionalPrizes: string[]
   supportWhatsappNumber: string
   status: CampaignStatus

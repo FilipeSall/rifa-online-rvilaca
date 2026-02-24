@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useHeroSection } from '../../hooks/useHeroSection'
 import { useCampaignSettings } from '../../hooks/useCampaignSettings'
-import { CAMPAIGN_SOLD_COTAS, CAMPAIGN_TOTAL_COTAS } from '../../const/home'
 import { DEFAULT_BONUS_PRIZE, DEFAULT_CAMPAIGN_TITLE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../const/campaign'
 import { usePublicSalesSnapshot } from '../../hooks/usePublicSalesSnapshot'
 import slideOne from '../../assets/IMG_9379.webp'
@@ -9,8 +8,9 @@ import slideTwo from '../../assets/IMG_9400.webp'
 import slideThree from '../../assets/IMG_9390.webp'
 import Skeleton from 'react-loading-skeleton'
 import { Swiper, SwiperSlide } from 'swiper/react'
-import { Autoplay } from 'swiper/modules'
+import { Autoplay, Pagination } from 'swiper/modules'
 import 'swiper/css'
+import 'swiper/css/pagination'
 import 'react-loading-skeleton/dist/skeleton.css'
 
 const HERO_CAROUSEL_IMAGES = [slideTwo, slideOne, slideThree]
@@ -60,7 +60,6 @@ export default function HeroSection() {
     soldNumbers: soldNumbersRaw,
     totalNumbers: totalNumbersRaw,
     soldPercentage,
-    isLoading: isSalesLoading,
   } = usePublicSalesSnapshot()
   const { animatedSoldPercentage, countdownItems, handleOpenBuyModal } = useHeroSection(soldPercentage)
   const { campaign } = useCampaignSettings()
@@ -73,8 +72,10 @@ export default function HeroSection() {
   const campaignTitlePrefix =
     campaignTitleParts.length > 2 ? campaignTitleParts.slice(0, -2).join(' ') : campaignTitleParts.join(' ')
   const campaignTitleHighlight = campaignTitleParts.length > 2 ? campaignTitleParts.slice(-2).join(' ') : ''
-  const soldNumbers = isSalesLoading ? CAMPAIGN_SOLD_COTAS : soldNumbersRaw
-  const totalNumbers = isSalesLoading ? CAMPAIGN_TOTAL_COTAS : totalNumbersRaw
+  const soldNumbers = soldNumbersRaw
+  const totalNumbers = Number.isInteger(campaign.totalNumbers) && campaign.totalNumbers > 0
+    ? campaign.totalNumbers
+    : totalNumbersRaw
   const soldCotasFormatted = soldNumbers.toLocaleString('pt-BR')
   const totalCotasFormatted = totalNumbers.toLocaleString('pt-BR')
   const demandMessaging = getDemandMessaging(soldPercentage)
@@ -124,36 +125,25 @@ export default function HeroSection() {
             </p>
 
             {/* Progress bar */}
-            <div className="bg-luxury-card/50 backdrop-blur border border-white/10 p-5 rounded-xl max-w-lg mt-2">
-              <div className="flex justify-between items-center mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-orange-400">🔥 {demandMessaging.badge}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-black text-red-500 font-mono">{animatedSoldPercentage}% VENDIDO</span>
-                  <span className="bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
-                    {demandMessaging.chip}
-                  </span>
-                </div>
+            <div className="hero-sales-card max-w-lg mt-2">
+              <span className="hero-edge-badge hero-edge-badge-left">🔥 {demandMessaging.badge}</span>
+              <span className="hero-edge-badge hero-edge-badge-right">{demandMessaging.chip}</span>
+              <div className="hero-sales-header">
+                <span className="hero-demand-percentage">{animatedSoldPercentage}% vendido</span>
               </div>
-              <div className="h-3 w-full rounded-full bg-gray-800 overflow-hidden relative">
+              <div className="hero-progress-track">
                 <div
-                  className="h-full bg-gradient-to-r from-orange-500 to-red-500 relative z-10 rounded-full shadow-[0_0_12px_rgba(239,68,68,0.6)]"
+                  className="hero-progress-fill"
                   style={{ width: `${animatedSoldPercentage}%` }}
                 >
-                  <div
-                    className="absolute inset-0 bg-white/20 animate-shimmer rounded-full"
-                    style={{
-                      backgroundImage:
-                        'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)',
-                    }}
-                  />
+                  <span className="hero-progress-spark" aria-hidden="true" />
+                  <span className="hero-progress-sheen" aria-hidden="true" />
                 </div>
               </div>
-              <p className="text-[10px] text-orange-400/80 mt-2 text-center uppercase tracking-wider font-semibold">
+              <p className="hero-demand-helper">
                 {demandMessaging.helper}
               </p>
-              <p className="text-[11px] text-gray-300 mt-2 text-center">
+              <p className="hero-demand-footnote">
                 {soldCotasFormatted} de {totalCotasFormatted} cotas já vendidas
               </p>
             </div>
@@ -161,9 +151,9 @@ export default function HeroSection() {
             {/* Countdown */}
             <div className="grid grid-cols-4 gap-4 max-w-md mt-2">
               {countdownItems.map(({ value, label }) => (
-                <div key={label} className="text-center">
-                  <span className="block text-2xl font-black text-white font-mono">{value}</span>
-                  <span className="text-[10px] uppercase text-gray-500 tracking-wider">{label}</span>
+                <div key={label} className="hero-countdown-card text-center">
+                  <span className="hero-countdown-value">{value}</span>
+                  <span className="hero-countdown-label">{label}</span>
                 </div>
               ))}
             </div>
@@ -190,7 +180,7 @@ export default function HeroSection() {
             <div className="absolute inset-0 bg-gold/20 blur-[100px] rounded-full opacity-20" />
             <div className="relative z-10 w-full max-w-[680px] mx-auto aspect-square hero-carousel-frame">
               <Swiper
-                modules={[Autoplay]}
+                modules={[Autoplay, Pagination]}
                 autoplay={{
                   delay: 5000,
                   disableOnInteraction: false,
@@ -198,11 +188,15 @@ export default function HeroSection() {
                 }}
                 className="hero-carousel-swiper"
                 loop
+                pagination={{
+                  clickable: true,
+                }}
                 slidesPerView={1}
                 speed={700}
               >
                 {HERO_CAROUSEL_IMAGES.map((imageSrc, index) => (
                   <SwiperSlide key={imageSrc} className="relative h-full">
+                    <div className="hero-carousel-slide-overlay" aria-hidden="true" />
                     {!loadedImages[imageSrc] ? (
                       <div className="absolute inset-0 z-10">
                         <Skeleton
@@ -214,7 +208,7 @@ export default function HeroSection() {
                     ) : null}
                     <img
                       alt={`BMW R1200 GS slide ${index + 1}`}
-                      className={`h-full w-full object-cover transition-opacity duration-500 ${
+                      className={`hero-carousel-image transition-opacity duration-500 ${
                         loadedImages[imageSrc] ? 'opacity-100' : 'opacity-0'
                       }`}
                       loading={index === 0 ? 'eager' : 'lazy'}

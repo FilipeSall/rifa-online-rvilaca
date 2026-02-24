@@ -41,6 +41,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     canProceed,
     isReserving,
     isAutoSelecting,
+    shouldHighlightSelectedNumbers,
     handleSetQuantity,
     handleClearSelectedNumbers,
     handleToggleNumber,
@@ -106,6 +107,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
             canProceed={canProceed}
             isReserving={isReserving}
             isAutoSelecting={isAutoSelecting}
+            shouldHighlightSelectedNumbers={shouldHighlightSelectedNumbers}
             selectedNumbers={selectedNumbers}
             onCouponCodeChange={setCouponCode}
             onApplyCoupon={handleApplyCoupon}

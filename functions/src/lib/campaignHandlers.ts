@@ -13,6 +13,7 @@ import {
   DEFAULT_PRICE_PER_COTA,
   DEFAULT_SECOND_PRIZE,
   DEFAULT_SUPPORT_WHATSAPP_NUMBER,
+  DEFAULT_TOTAL_NUMBERS,
   MAX_PURCHASE_QUANTITY,
   type CampaignStatus,
 } from './constants.js'
@@ -36,6 +37,7 @@ interface UpsertCampaignSettingsInput {
   mainPrize?: string
   secondPrize?: string
   bonusPrize?: string
+  totalNumbers?: number
   additionalPrizes?: string[]
   supportWhatsappNumber?: string
   status?: CampaignStatus
@@ -52,6 +54,7 @@ interface UpsertCampaignSettingsOutput {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  totalNumbers: number
   additionalPrizes: string[]
   supportWhatsappNumber: string
   status: CampaignStatus
@@ -135,6 +138,19 @@ function sanitizeCampaignPrize(value: unknown, fieldName: string): string | null
   }
 
   return normalized.slice(0, 160)
+}
+
+function sanitizeTotalNumbers(value: unknown): number | null {
+  if (value === undefined || value === null) {
+    return null
+  }
+
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 50_000_000) {
+    throw new HttpsError('invalid-argument', 'totalNumbers deve ser inteiro entre 1 e 50.000.000.')
+  }
+
+  return parsed
 }
 
 function sanitizeCampaignAdditionalPrizes(value: unknown): string[] | null {
@@ -344,6 +360,10 @@ function readCampaignBonusPrize(data: DocumentData | undefined): string {
   return value || DEFAULT_BONUS_PRIZE
 }
 
+function readCampaignTotalNumbers(data: DocumentData | undefined): number {
+  return readCampaignNumberRange(data, CAMPAIGN_DOC_ID).total || DEFAULT_TOTAL_NUMBERS
+}
+
 function readCampaignAdditionalPrizes(data: DocumentData | undefined): string[] {
   const raw = data?.additionalPrizes
   if (!Array.isArray(raw)) return DEFAULT_ADDITIONAL_PRIZES
@@ -396,6 +416,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       const nextMainPrize = sanitizeCampaignPrize(payload.mainPrize, 'mainPrize')
       const nextSecondPrize = sanitizeCampaignPrize(payload.secondPrize, 'secondPrize')
       const nextBonusPrize = sanitizeCampaignPrize(payload.bonusPrize, 'bonusPrize')
+      const nextTotalNumbers = sanitizeTotalNumbers(payload.totalNumbers)
       const nextAdditionalPrizes = sanitizeCampaignAdditionalPrizes(payload.additionalPrizes)
       const nextSupportWhatsappNumber = sanitizeSupportWhatsappNumber(payload.supportWhatsappNumber)
       const nextStatus = sanitizeCampaignStatus(payload.status)
@@ -434,6 +455,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
 
       if (nextBonusPrize !== null) {
         updateData.bonusPrize = nextBonusPrize
+      }
+
+      if (nextTotalNumbers !== null) {
+        updateData.totalNumbers = nextTotalNumbers
       }
 
       if (nextAdditionalPrizes !== null) {
@@ -494,6 +519,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
           updateData.bonusPrize = DEFAULT_BONUS_PRIZE
         }
 
+        if (!updateData.totalNumbers) {
+          updateData.totalNumbers = DEFAULT_TOTAL_NUMBERS
+        }
+
         if (!updateData.supportWhatsappNumber) {
           updateData.supportWhatsappNumber = DEFAULT_SUPPORT_WHATSAPP_NUMBER
         }
@@ -514,6 +543,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         nextMainPrize === null &&
         nextSecondPrize === null &&
         nextBonusPrize === null &&
+        nextTotalNumbers === null &&
         nextAdditionalPrizes === null &&
         nextSupportWhatsappNumber === null &&
         nextStatus === null &&
@@ -544,6 +574,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         mainPrize: readCampaignMainPrize(campaignData),
         secondPrize: readCampaignSecondPrize(campaignData),
         bonusPrize: readCampaignBonusPrize(campaignData),
+        totalNumbers: readCampaignTotalNumbers(campaignData),
         additionalPrizes: readCampaignAdditionalPrizes(campaignData),
         supportWhatsappNumber: readCampaignSupportWhatsappNumber(campaignData),
         status: readCampaignStatus(campaignData),

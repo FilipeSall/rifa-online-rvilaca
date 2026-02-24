@@ -78,6 +78,10 @@ export default function NumberSelectionCard({
     () => `${formatTicketNumber(pageStart ?? 0)} - ${formatTicketNumber(pageEnd ?? 0)}`,
     [pageEnd, pageStart],
   )
+  const manualNumberMaxDigits = useMemo(
+    () => String(Math.max(rangeStart, rangeEnd, 1)).length,
+    [rangeEnd, rangeStart],
+  )
 
   const handleSubmitPage = () => {
     const parsed = Number(pageInput)
@@ -152,8 +156,8 @@ export default function NumberSelectionCard({
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-3 rounded-2xl border border-white/10 bg-gradient-to-r from-black/35 via-black/20 to-black/35 p-4 lg:grid-cols-3">
-          <div className="space-y-2">
+        <div className="mt-5 grid grid-cols-1 gap-3 rounded-2xl border border-white/10 bg-gradient-to-r from-black/35 via-black/20 to-black/35 p-4 lg:grid-cols-12">
+          <div className="space-y-2 lg:col-span-3">
             <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Navegacao</p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -175,7 +179,7 @@ export default function NumberSelectionCard({
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 lg:col-span-2">
             <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Ir para pagina</p>
             <div className="flex gap-2">
               <input
@@ -196,16 +200,17 @@ export default function NumberSelectionCard({
             </div>
           </div>
 
-          <div className="min-w-0 space-y-2">
+          <div className="min-w-0 space-y-2 lg:col-span-7">
             <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Selecao manual rapida</p>
-            <div className="grid min-w-0 max-w-full grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="flex min-w-0 max-w-full flex-col gap-2 sm:max-w-[26rem] sm:flex-row sm:items-center sm:gap-1.5">
               <input
-                className="h-10 min-w-0 flex-1 rounded-lg border border-white/15 bg-black/25 px-3 text-sm font-semibold text-white outline-none transition focus:border-gold"
+                className="h-10 min-w-0 w-full rounded-lg border border-white/15 bg-black/25 px-3 text-sm font-semibold text-white outline-none transition focus:border-gold sm:max-w-[18rem]"
                 inputMode="numeric"
+                maxLength={manualNumberMaxDigits}
                 placeholder={`Numero (${formatTicketNumber(rangeStart)} a ${formatTicketNumber(rangeEnd)})`}
                 type="text"
                 value={manualNumberInput}
-                onChange={(event) => setManualNumberInput(event.target.value.replace(/[^0-9]/g, ''))}
+                onChange={(event) => setManualNumberInput(event.target.value.replace(/[^0-9]/g, '').slice(0, manualNumberMaxDigits))}
               />
               <button
                 className="h-10 w-full shrink-0 whitespace-nowrap rounded-lg border border-cyan-300/30 bg-cyan-500/10 px-4 text-[11px] font-bold uppercase tracking-wider text-cyan-100 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
@@ -261,7 +266,7 @@ export default function NumberSelectionCard({
                 } ${isBlocked ? 'cursor-not-allowed opacity-65' : ''}`}
                 type="button"
                 onClick={() => onToggleNumber(slot)}
-                disabled={isPageLoading || selectionMode !== 'manual' || isBlocked}
+                disabled={isPageLoading || isBlocked}
               >
                 {formatTicketNumber(slot.number)}
               </button>

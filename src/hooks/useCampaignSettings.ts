@@ -13,6 +13,7 @@ import {
   DEFAULT_SECOND_PRIZE,
   DEFAULT_SUPPORT_WHATSAPP_NUMBER,
   DEFAULT_TICKET_PRICE,
+  DEFAULT_TOTAL_NUMBERS,
 } from '../const/campaign'
 import { db, functions } from '../lib/firebase'
 import type {
@@ -113,6 +114,15 @@ function sanitizeSupportWhatsappNumber(value: unknown) {
   return normalized || DEFAULT_SUPPORT_WHATSAPP_NUMBER
 }
 
+function sanitizeTotalNumbers(value: unknown) {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return DEFAULT_TOTAL_NUMBERS
+  }
+
+  return parsed
+}
+
 function sanitizeCouponDiscountType(value: unknown): CampaignCouponDiscountType {
   return value === 'fixed' ? 'fixed' : 'percent'
 }
@@ -195,6 +205,7 @@ function mapSnapshotToSettings(raw: unknown): CampaignSettings {
     mainPrize: sanitizePrizeText(payload.mainPrize, DEFAULT_MAIN_PRIZE),
     secondPrize: sanitizePrizeText(payload.secondPrize, DEFAULT_SECOND_PRIZE),
     bonusPrize: sanitizePrizeText(payload.bonusPrize, DEFAULT_BONUS_PRIZE),
+    totalNumbers: sanitizeTotalNumbers(payload.totalNumbers ?? payload.totalCotas),
     additionalPrizes: Array.isArray(payload.additionalPrizes)
       ? payload.additionalPrizes.map((p) => (typeof p === 'string' ? p.trim() : '')).filter(Boolean)
       : DEFAULT_ADDITIONAL_PRIZES,
@@ -215,6 +226,7 @@ export function useCampaignSettings() {
     mainPrize: DEFAULT_MAIN_PRIZE,
     secondPrize: DEFAULT_SECOND_PRIZE,
     bonusPrize: DEFAULT_BONUS_PRIZE,
+    totalNumbers: DEFAULT_TOTAL_NUMBERS,
     additionalPrizes: DEFAULT_ADDITIONAL_PRIZES,
     supportWhatsappNumber: DEFAULT_SUPPORT_WHATSAPP_NUMBER,
     status: DEFAULT_CAMPAIGN_STATUS,
@@ -249,6 +261,7 @@ export function useCampaignSettings() {
             mainPrize: DEFAULT_MAIN_PRIZE,
             secondPrize: DEFAULT_SECOND_PRIZE,
             bonusPrize: DEFAULT_BONUS_PRIZE,
+            totalNumbers: DEFAULT_TOTAL_NUMBERS,
             additionalPrizes: DEFAULT_ADDITIONAL_PRIZES,
             supportWhatsappNumber: DEFAULT_SUPPORT_WHATSAPP_NUMBER,
             status: DEFAULT_CAMPAIGN_STATUS,
@@ -285,9 +298,10 @@ export function useCampaignSettings() {
           mainPrize: sanitizePrizeText(payload.mainPrize, DEFAULT_MAIN_PRIZE),
           secondPrize: sanitizePrizeText(payload.secondPrize, DEFAULT_SECOND_PRIZE),
           bonusPrize: sanitizePrizeText(payload.bonusPrize, DEFAULT_BONUS_PRIZE),
+          totalNumbers: sanitizeTotalNumbers(payload.totalNumbers),
           additionalPrizes: Array.isArray(payload.additionalPrizes)
-      ? payload.additionalPrizes.map((p) => (typeof p === 'string' ? p.trim() : '')).filter(Boolean)
-      : DEFAULT_ADDITIONAL_PRIZES,
+            ? payload.additionalPrizes.map((p) => (typeof p === 'string' ? p.trim() : '')).filter(Boolean)
+            : DEFAULT_ADDITIONAL_PRIZES,
           supportWhatsappNumber: sanitizeSupportWhatsappNumber(payload.supportWhatsappNumber),
           status: sanitizeCampaignStatus(payload.status),
           startsAt: sanitizeCampaignDate(payload.startsAt),
@@ -317,6 +331,7 @@ export function useCampaignSettings() {
         mainPrize: DEFAULT_MAIN_PRIZE,
         secondPrize: DEFAULT_SECOND_PRIZE,
         bonusPrize: DEFAULT_BONUS_PRIZE,
+        totalNumbers: DEFAULT_TOTAL_NUMBERS,
         additionalPrizes: DEFAULT_ADDITIONAL_PRIZES,
         supportWhatsappNumber: DEFAULT_SUPPORT_WHATSAPP_NUMBER,
         status: DEFAULT_CAMPAIGN_STATUS,

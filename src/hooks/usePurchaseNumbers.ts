@@ -166,6 +166,7 @@ export function usePurchaseNumbers() {
   const [reservationSeconds, setReservationSeconds] = useState<number | null>(null)
   const [hasExpiredReservation, setHasExpiredReservation] = useState(false)
   const [isReserving, setIsReserving] = useState(false)
+  const [shouldHighlightSelectedNumbers, setShouldHighlightSelectedNumbers] = useState(false)
   const pageRequestIdRef = useRef(0)
   const autoSelectRequestIdRef = useRef(0)
   const selectedNumbersRef = useRef<number[]>(selectedNumbers)
@@ -416,6 +417,22 @@ export function usePurchaseNumbers() {
     setHasExpiredReservation(false)
   }, [])
 
+  const triggerSelectedNumbersHighlight = useCallback(() => {
+    setShouldHighlightSelectedNumbers(true)
+  }, [])
+
+  useEffect(() => {
+    if (!shouldHighlightSelectedNumbers) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setShouldHighlightSelectedNumbers(false)
+    }, 2000)
+
+    return () => window.clearTimeout(timer)
+  }, [shouldHighlightSelectedNumbers])
+
   const handleSelectionModeChange = useCallback(
     (mode: SelectionMode) => {
       if (mode === 'manual') {
@@ -446,7 +463,18 @@ export function usePurchaseNumbers() {
 
   const handleToggleNumber = useCallback(
     (slot: NumberSlot) => {
-      if (selectionMode !== 'manual' || slot.status !== 'disponivel') {
+      if (slot.status !== 'disponivel') {
+        return
+      }
+
+      if (selectionMode === 'automatico') {
+        if (selectedNumbers.length >= quantity) {
+          triggerSelectedNumbersHighlight()
+          toast.warning('Limite de numeros atingido. Limpe os selecionados para continuar.', {
+            position: 'bottom-right',
+            toastId: 'selection-max-reached',
+          })
+        }
         return
       }
 
@@ -458,6 +486,11 @@ export function usePurchaseNumbers() {
         }
 
         if (currentSelection.length >= quantity) {
+          triggerSelectedNumbersHighlight()
+          toast.warning('Limite de numeros atingido. Limpe os selecionados para continuar.', {
+            position: 'bottom-right',
+            toastId: 'selection-max-reached',
+          })
           return currentSelection
         }
 
@@ -465,7 +498,7 @@ export function usePurchaseNumbers() {
       })
       clearReservationState()
     },
-    [clearReservationState, quantity, selectionMode],
+    [clearReservationState, quantity, selectedNumbers.length, selectionMode, triggerSelectedNumbersHighlight],
   )
 
   const totalPages = useMemo(() => {
@@ -742,6 +775,7 @@ export function usePurchaseNumbers() {
     totalAmount,
     canProceed,
     isReserving,
+    shouldHighlightSelectedNumbers,
     handleSetQuantity,
     handleClearSelectedNumbers,
     handleToggleNumber,

@@ -6,6 +6,7 @@ import {
   DEFAULT_MAIN_PRIZE,
   DEFAULT_SECOND_PRIZE,
   DEFAULT_SUPPORT_WHATSAPP_NUMBER,
+  DEFAULT_TOTAL_NUMBERS,
 } from '../../../const/campaign'
 import type { CampaignCoupon, CampaignStatus, UpsertCampaignSettingsInput } from '../../../types/campaign'
 
@@ -16,6 +17,7 @@ export type CampaignFormState = {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  totalNumbersInput: string
   additionalPrizes: string[]
   supportWhatsappNumber: string
   status: CampaignStatus
@@ -35,6 +37,7 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
   const normalizedMainPrize = formState.mainPrize.trim() || DEFAULT_MAIN_PRIZE
   const normalizedSecondPrize = formState.secondPrize.trim() || DEFAULT_SECOND_PRIZE
   const normalizedBonusPrize = formState.bonusPrize.trim() || DEFAULT_BONUS_PRIZE
+  const normalizedTotalNumbers = Number(formState.totalNumbersInput.replace(/[^0-9]/g, ''))
   const normalizedAdditionalPrizes = formState.additionalPrizes
     .map((p) => p.trim())
     .filter(Boolean)
@@ -60,6 +63,14 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
     }
   }
 
+  if (!Number.isInteger(normalizedTotalNumbers) || normalizedTotalNumbers <= 0 || normalizedTotalNumbers > 50000000) {
+    return {
+      errorToastId: 'campaign-invalid-total-numbers',
+      errorMessage: 'Informe um total de numeros valido (1 a 50.000.000).',
+      payload: null,
+    }
+  }
+
   if (formState.startsAt && formState.endsAt && formState.startsAt > formState.endsAt) {
     return {
       errorToastId: 'campaign-invalid-date-range',
@@ -78,6 +89,7 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
       mainPrize: normalizedMainPrize,
       secondPrize: normalizedSecondPrize,
       bonusPrize: normalizedBonusPrize,
+      totalNumbers: Math.max(1, normalizedTotalNumbers || DEFAULT_TOTAL_NUMBERS),
       additionalPrizes: normalizedAdditionalPrizes,
       supportWhatsappNumber: normalizedSupportWhatsappNumber,
       status: formState.status,

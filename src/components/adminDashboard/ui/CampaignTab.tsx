@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react'
-import { CAMPAIGN_STATUS_OPTIONS, DEFAULT_BONUS_PRIZE, DEFAULT_CAMPAIGN_TITLE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../../const/campaign'
+import {
+  CAMPAIGN_STATUS_OPTIONS,
+  DEFAULT_BONUS_PRIZE,
+  DEFAULT_CAMPAIGN_TITLE,
+  DEFAULT_MAIN_PRIZE,
+  DEFAULT_SECOND_PRIZE,
+  DEFAULT_TOTAL_NUMBERS,
+} from '../../../const/campaign'
 import type { CampaignCoupon, CampaignCouponDiscountType, CampaignStatus } from '../../../types/campaign'
 import { CustomSelect } from '../../ui/CustomSelect'
 import { useCampaignForm } from '../hooks/useCampaignForm'
@@ -40,6 +47,7 @@ export default function CampaignTab() {
     mainPrize,
     secondPrize,
     bonusPrize,
+    totalNumbersInput,
     additionalPrizes,
     supportWhatsappNumber,
     status,
@@ -52,6 +60,7 @@ export default function CampaignTab() {
     setMainPrize,
     setSecondPrize,
     setBonusPrize,
+    setTotalNumbersInput,
     setAdditionalPrizes,
     setSupportWhatsappNumber,
     setStatus,
@@ -66,6 +75,7 @@ export default function CampaignTab() {
   const [couponCodeInput, setCouponCodeInput] = useState(generateCouponCode())
   const [couponDiscountType, setCouponDiscountType] = useState<CampaignCouponDiscountType>('percent')
   const [couponValueInput, setCouponValueInput] = useState('10')
+  const [couponAction, setCouponAction] = useState<{ code: string; type: 'toggle' | 'remove' } | null>(null)
 
   const activeCoupons = useMemo(() => coupons.filter((item) => item.active).length, [coupons])
 
@@ -121,20 +131,30 @@ export default function CampaignTab() {
   }
 
   const handleToggleCoupon = async (code: string) => {
-    const nextCoupons = coupons.map((item) => (
-      item.code === code
-        ? {
-            ...item,
-            active: !item.active,
-          }
-        : item
-    ))
-    await persistCoupons(nextCoupons)
+    setCouponAction({ code, type: 'toggle' })
+    try {
+      const nextCoupons = coupons.map((item) => (
+        item.code === code
+          ? {
+              ...item,
+              active: !item.active,
+            }
+          : item
+      ))
+      await persistCoupons(nextCoupons)
+    } finally {
+      setCouponAction(null)
+    }
   }
 
   const handleRemoveCoupon = async (code: string) => {
-    const nextCoupons = coupons.filter((item) => item.code !== code)
-    await persistCoupons(nextCoupons)
+    setCouponAction({ code, type: 'remove' })
+    try {
+      const nextCoupons = coupons.filter((item) => item.code !== code)
+      await persistCoupons(nextCoupons)
+    } finally {
+      setCouponAction(null)
+    }
   }
 
   return (
@@ -150,7 +170,7 @@ export default function CampaignTab() {
               Configure preço, compra mínima e cupons da campanha em tempo real.
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             <div className="rounded-xl border border-gold/20 bg-black/40 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Preço atual</p>
               <p className="mt-1 text-lg font-black text-gold">{formatCurrency(campaign.pricePerCota)}</p>
@@ -167,6 +187,10 @@ export default function CampaignTab() {
               <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200">Cupons ativos</p>
               <p className="mt-1 text-lg font-black text-cyan-100">{activeCoupons}</p>
             </div>
+            <div className="rounded-xl border border-amber-300/25 bg-amber-500/10 px-4 py-3 lg:col-span-2">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-amber-200">Total de numeros</p>
+              <p className="mt-1 text-lg font-black text-amber-100">{campaign.totalNumbers.toLocaleString('pt-BR')}</p>
+            </div>
           </div>
         </div>
       </article>
@@ -181,6 +205,12 @@ export default function CampaignTab() {
               Visual de como a comunicação principal da campanha fica após o salvamento.
             </p>
             <div className="mt-5 space-y-3">
+              <div className="rounded-xl border border-amber-300/25 bg-amber-500/10 px-4 py-3">
+                <p className="text-[10px] uppercase tracking-[0.15em] text-amber-200">Total de numeros</p>
+                <p className="mt-1 text-sm font-semibold text-white">
+                  {(Number(totalNumbersInput.replace(/[^0-9]/g, '')) || DEFAULT_TOTAL_NUMBERS).toLocaleString('pt-BR')}
+                </p>
+              </div>
               <div className="rounded-xl border border-gold/25 bg-black/40 px-4 py-3">
                 <p className="text-[10px] uppercase tracking-[0.15em] text-gold">1º prêmio</p>
                 <p className="mt-1 text-sm font-semibold text-white">{mainPrize.trim() || DEFAULT_MAIN_PRIZE}</p>
@@ -205,183 +235,210 @@ export default function CampaignTab() {
 
         <article className="rounded-3xl border border-white/10 bg-luxury-card p-5 xl:col-span-7">
           <div className="grid grid-cols-1 gap-4">
-            <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-              <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-title">
-                Nome da campanha
-              </label>
-              <input
-                id="campaign-title"
-                className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
-                type="text"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-                <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-main-prize">
-                  1º prêmio
-                </label>
-                <input
-                  id="campaign-main-prize"
-                  className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
-                  type="text"
-                  value={mainPrize}
-                  onChange={(event) => setMainPrize(event.target.value)}
-                />
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-                <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-second-prize">
-                  2º prêmio
-                </label>
-                <input
-                  id="campaign-second-prize"
-                  className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
-                  type="text"
-                  value={secondPrize}
-                  onChange={(event) => setSecondPrize(event.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 px-4 py-3">
-              <label className="text-[10px] uppercase tracking-[0.16em] text-emerald-300" htmlFor="campaign-bonus-prize">
-                Prêmio extra
-              </label>
-              <input
-                id="campaign-bonus-prize"
-                className="mt-2 h-11 w-full rounded-md border border-emerald-300/25 bg-black/30 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-emerald-300/60"
-                type="text"
-                value={bonusPrize}
-                onChange={(event) => setBonusPrize(event.target.value)}
-              />
-            </div>
-
-            <div className="rounded-xl border border-purple-400/20 bg-purple-500/5 px-4 py-3">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-purple-300">
-                  Prêmios adicionais <span className="normal-case tracking-normal text-purple-400/60">(opcional)</span>
-                </p>
-                <button
-                  type="button"
-                  className="inline-flex h-7 items-center gap-1 rounded-md border border-purple-300/30 bg-purple-500/15 px-2.5 text-[11px] font-bold text-purple-200 transition hover:bg-purple-500/25"
-                  onClick={() => setAdditionalPrizes([...additionalPrizes, ''])}
-                >
-                  + Adicionar
-                </button>
-              </div>
-              {additionalPrizes.length === 0 ? (
-                <p className="mt-2 text-xs text-purple-400/50">Nenhum prêmio adicional cadastrado.</p>
-              ) : (
-                <div className="mt-3 space-y-2">
-                  {additionalPrizes.map((prize, index) => (
-                    <div key={index} className="flex gap-2">
-                      <input
-                        className="h-10 w-full rounded-md border border-purple-300/25 bg-black/30 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-purple-300/60"
-                        type="text"
-                        value={prize}
-                        placeholder="Ex: iPhone 15 Pro, Viagem..."
-                        onChange={(event) => {
-                          const next = [...additionalPrizes]
-                          next[index] = event.target.value
-                          setAdditionalPrizes(next)
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md border border-red-400/30 bg-red-500/10 text-base font-bold text-red-300 transition hover:bg-red-500/20"
-                        onClick={() => setAdditionalPrizes(additionalPrizes.filter((_, i) => i !== index))}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+            <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-gold">1. Informacoes gerais</p>
+              <div className="mt-3 grid grid-cols-1 gap-4">
+                <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                  <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-title">
+                    Nome da campanha
+                  </label>
+                  <input
+                    id="campaign-title"
+                    className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                    type="text"
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                  />
                 </div>
-              )}
-            </div>
 
-            <div className="rounded-xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-3">
-              <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-support-whatsapp">
-                WhatsApp da equipe (suporte/premiação)
-              </label>
-              <input
-                id="campaign-support-whatsapp"
-                className="mt-2 h-11 w-full rounded-md border border-cyan-200/30 bg-black/25 px-3 text-sm font-semibold text-cyan-50 outline-none transition-colors focus:border-cyan-200/80"
-                type="text"
-                value={supportWhatsappNumber}
-                onChange={(event) => setSupportWhatsappNumber(applyPhoneMask(event.target.value))}
-                placeholder="+55(62)98507-4477"
-              />
-            </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                    <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-status">
+                      Status da campanha
+                    </label>
+                    <CustomSelect
+                      id="campaign-status"
+                      value={status}
+                      onChange={(v) => setStatus(v as CampaignStatus)}
+                      options={CAMPAIGN_STATUS_OPTIONS}
+                    />
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                    <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-starts-at">
+                      Inicio
+                    </label>
+                    <input
+                      id="campaign-starts-at"
+                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                      type="date"
+                      value={startsAt}
+                      onChange={(event) => setStartsAt(event.target.value)}
+                    />
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                    <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-ends-at">
+                      Fim
+                    </label>
+                    <input
+                      id="campaign-ends-at"
+                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                      type="date"
+                      value={endsAt}
+                      onChange={(event) => setEndsAt(event.target.value)}
+                    />
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-                <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-status">
-                  Status da campanha
-                </label>
-                <CustomSelect
-                  id="campaign-status"
-                  value={status}
-                  onChange={(v) => setStatus(v as CampaignStatus)}
-                  options={CAMPAIGN_STATUS_OPTIONS}
-                />
+                <div className="rounded-xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-3">
+                  <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-support-whatsapp">
+                    WhatsApp da equipe (suporte/premiacao)
+                  </label>
+                  <input
+                    id="campaign-support-whatsapp"
+                    className="mt-2 h-11 w-full rounded-md border border-cyan-200/30 bg-black/25 px-3 text-sm font-semibold text-cyan-50 outline-none transition-colors focus:border-cyan-200/80"
+                    type="text"
+                    value={supportWhatsappNumber}
+                    onChange={(event) => setSupportWhatsappNumber(applyPhoneMask(event.target.value))}
+                    placeholder="+55(62)98507-4477"
+                  />
+                </div>
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-                <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-starts-at">
-                  Inicio
-                </label>
-                <input
-                  id="campaign-starts-at"
-                  className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
-                  type="date"
-                  value={startsAt}
-                  onChange={(event) => setStartsAt(event.target.value)}
-                />
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-                <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-ends-at">
-                  Fim
-                </label>
-                <input
-                  id="campaign-ends-at"
-                  className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
-                  type="date"
-                  value={endsAt}
-                  onChange={(event) => setEndsAt(event.target.value)}
-                />
-              </div>
-            </div>
+            </section>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-                <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-ticket-price">
-                  Preço por cota (R$)
-                </label>
-                <input
-                  id="campaign-ticket-price"
-                  className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-gold outline-none transition-colors focus:border-gold/60"
-                  inputMode="decimal"
-                  type="text"
-                  value={pricePerCotaInput}
-                  onChange={(event) => setPricePerCotaInput(event.target.value)}
-                />
-              </div>
+            <section className="rounded-2xl border border-amber-300/25 bg-amber-500/5 p-4">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-amber-200">2. Premiacao</p>
+              <div className="mt-3 space-y-4">
+                <div className="rounded-xl border border-amber-300/25 bg-black/30 px-4 py-3">
+                  <label className="text-[10px] uppercase tracking-[0.16em] text-amber-100" htmlFor="campaign-total-numbers">
+                    Total de numeros da campanha
+                  </label>
+                  <input
+                    id="campaign-total-numbers"
+                    className="mt-2 h-11 w-full rounded-md border border-amber-300/30 bg-black/35 px-3 text-sm font-semibold text-amber-50 outline-none transition-colors focus:border-amber-200/80"
+                    type="text"
+                    value={totalNumbersInput}
+                    onChange={(event) => setTotalNumbersInput(event.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="Ex: 3450000"
+                  />
+                </div>
 
-              <div className="rounded-xl border border-cyan-300/25 bg-cyan-500/10 px-4 py-3">
-                <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-min-purchase">
-                  Compra mínima (cotas)
-                </label>
-                <input
-                  id="campaign-min-purchase"
-                  className="mt-2 h-11 w-full rounded-md border border-cyan-200/30 bg-black/25 px-3 text-sm font-semibold text-cyan-50 outline-none transition-colors focus:border-cyan-200/80"
-                  inputMode="numeric"
-                  type="text"
-                  value={minPurchaseQuantityInput}
-                  onChange={(event) => setMinPurchaseQuantityInput(event.target.value.replace(/[^0-9]/g, ''))}
-                />
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                    <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-main-prize">
+                      1º premio
+                    </label>
+                    <input
+                      id="campaign-main-prize"
+                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                      type="text"
+                      value={mainPrize}
+                      onChange={(event) => setMainPrize(event.target.value)}
+                    />
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                    <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-second-prize">
+                      2º premio
+                    </label>
+                    <input
+                      id="campaign-second-prize"
+                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                      type="text"
+                      value={secondPrize}
+                      onChange={(event) => setSecondPrize(event.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 px-4 py-3">
+                  <label className="text-[10px] uppercase tracking-[0.16em] text-emerald-300" htmlFor="campaign-bonus-prize">
+                    Premio extra
+                  </label>
+                  <input
+                    id="campaign-bonus-prize"
+                    className="mt-2 h-11 w-full rounded-md border border-emerald-300/25 bg-black/30 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-emerald-300/60"
+                    type="text"
+                    value={bonusPrize}
+                    onChange={(event) => setBonusPrize(event.target.value)}
+                  />
+                </div>
+
+                <div className="rounded-xl border border-purple-400/20 bg-purple-500/5 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-purple-300">
+                      Premios adicionais <span className="normal-case tracking-normal text-purple-400/60">(opcional)</span>
+                    </p>
+                    <button
+                      type="button"
+                      className="inline-flex h-7 items-center gap-1 rounded-md border border-purple-300/30 bg-purple-500/15 px-2.5 text-[11px] font-bold text-purple-200 transition hover:bg-purple-500/25"
+                      onClick={() => setAdditionalPrizes([...additionalPrizes, ''])}
+                    >
+                      + Adicionar
+                    </button>
+                  </div>
+                  {additionalPrizes.length === 0 ? (
+                    <p className="mt-2 text-xs text-purple-400/50">Nenhum premio adicional cadastrado.</p>
+                  ) : (
+                    <div className="mt-3 space-y-2">
+                      {additionalPrizes.map((prize, index) => (
+                        <div key={index} className="flex gap-2">
+                          <input
+                            className="h-10 w-full rounded-md border border-purple-300/25 bg-black/30 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-purple-300/60"
+                            type="text"
+                            value={prize}
+                            placeholder="Ex: iPhone 15 Pro, Viagem..."
+                            onChange={(event) => {
+                              const next = [...additionalPrizes]
+                              next[index] = event.target.value
+                              setAdditionalPrizes(next)
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md border border-red-400/30 bg-red-500/10 text-base font-bold text-red-300 transition hover:bg-red-500/20"
+                            onClick={() => setAdditionalPrizes(additionalPrizes.filter((_, i) => i !== index))}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-100">3. Regras comerciais</p>
+              <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                  <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-ticket-price">
+                    Preco por cota (R$)
+                  </label>
+                  <input
+                    id="campaign-ticket-price"
+                    className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-gold outline-none transition-colors focus:border-gold/60"
+                    inputMode="decimal"
+                    type="text"
+                    value={pricePerCotaInput}
+                    onChange={(event) => setPricePerCotaInput(event.target.value)}
+                  />
+                </div>
+
+                <div className="rounded-xl border border-cyan-300/25 bg-cyan-500/10 px-4 py-3">
+                  <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-min-purchase">
+                    Compra minima (cotas)
+                  </label>
+                  <input
+                    id="campaign-min-purchase"
+                    className="mt-2 h-11 w-full rounded-md border border-cyan-200/30 bg-black/25 px-3 text-sm font-semibold text-cyan-50 outline-none transition-colors focus:border-cyan-200/80"
+                    inputMode="numeric"
+                    type="text"
+                    value={minPurchaseQuantityInput}
+                    onChange={(event) => setMinPurchaseQuantityInput(event.target.value.replace(/[^0-9]/g, ''))}
+                  />
+                </div>
+              </div>
+            </section>
           </div>
 
           <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -537,34 +594,51 @@ export default function CampaignTab() {
 
             {coupons.map((coupon) => (
               <div key={coupon.code} className="rounded-xl border border-white/10 bg-black/30 px-4 py-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Codigo</p>
-                    <p className="mt-1 font-mono text-sm font-bold tracking-wider text-white">{coupon.code}</p>
-                  </div>
-                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${coupon.active ? 'border border-emerald-400/30 bg-emerald-500/15 text-emerald-200' : 'border border-gray-500/40 bg-gray-600/15 text-gray-300'}`}>
-                    {coupon.active ? 'Ativo' : 'Inativo'}
-                  </span>
-                </div>
-                <p className="mt-3 text-sm text-gray-300">
-                  Desconto: <span className="font-black text-cyan-100">{formatCouponValue(coupon)}</span>
-                </p>
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    className="h-9 rounded-md border border-emerald-400/35 bg-emerald-500/10 px-3 text-[11px] font-bold uppercase tracking-wider text-emerald-200"
-                    onClick={() => handleToggleCoupon(coupon.code)}
-                  >
-                    {coupon.active ? 'Desativar' : 'Ativar'}
-                  </button>
-                  <button
-                    type="button"
-                    className="h-9 rounded-md border border-red-400/35 bg-red-500/10 px-3 text-[11px] font-bold uppercase tracking-wider text-red-200"
-                    onClick={() => handleRemoveCoupon(coupon.code)}
-                  >
-                    Remover
-                  </button>
-                </div>
+                {(() => {
+                  const isToggleLoading = couponAction?.code === coupon.code && couponAction.type === 'toggle'
+                  const isRemoveLoading = couponAction?.code === coupon.code && couponAction.type === 'remove'
+
+                  return (
+                    <>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Codigo</p>
+                          <p className="mt-1 font-mono text-sm font-bold tracking-wider text-white">{coupon.code}</p>
+                        </div>
+                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${coupon.active ? 'border border-emerald-400/30 bg-emerald-500/15 text-emerald-200' : 'border border-gray-500/40 bg-gray-600/15 text-gray-300'}`}>
+                          {coupon.active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </div>
+                      <p className="mt-3 text-sm text-gray-300">
+                        Desconto: <span className="font-black text-cyan-100">{formatCouponValue(coupon)}</span>
+                      </p>
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          className="inline-flex h-9 items-center gap-2 rounded-md border border-emerald-400/35 bg-emerald-500/10 px-3 text-[11px] font-bold uppercase tracking-wider text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={() => handleToggleCoupon(coupon.code)}
+                          disabled={couponAction !== null}
+                        >
+                          {isToggleLoading ? (
+                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />
+                          ) : null}
+                          {isToggleLoading ? 'Processando...' : coupon.active ? 'Desativar' : 'Ativar'}
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex h-9 items-center gap-2 rounded-md border border-red-400/35 bg-red-500/10 px-3 text-[11px] font-bold uppercase tracking-wider text-red-200 disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={() => handleRemoveCoupon(coupon.code)}
+                          disabled={couponAction !== null}
+                        >
+                          {isRemoveLoading ? (
+                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />
+                          ) : null}
+                          {isRemoveLoading ? 'Removendo...' : 'Remover'}
+                        </button>
+                      </div>
+                    </>
+                  )
+                })()}
               </div>
             ))}
           </div>

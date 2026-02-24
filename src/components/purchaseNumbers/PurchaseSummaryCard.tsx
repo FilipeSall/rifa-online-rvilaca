@@ -16,6 +16,7 @@ type PurchaseSummaryCardProps = {
   canProceed: boolean
   isReserving: boolean
   isAutoSelecting: boolean
+  shouldHighlightSelectedNumbers: boolean
   selectedNumbers: number[]
   onCouponCodeChange: (value: string) => void
   onApplyCoupon: () => void
@@ -36,6 +37,7 @@ export default function PurchaseSummaryCard({
   canProceed,
   isReserving,
   isAutoSelecting,
+  shouldHighlightSelectedNumbers,
   selectedNumbers,
   onCouponCodeChange,
   onApplyCoupon,
@@ -125,7 +127,11 @@ export default function PurchaseSummaryCard({
 
       <div className="mt-6 border-t border-white/10 pt-4">
         <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Numeros selecionados</p>
-        <p className="mt-2 break-all text-sm text-gray-300">
+        <p
+          className={`mt-2 break-all text-sm text-gray-300 ${
+            shouldHighlightSelectedNumbers ? 'selected-numbers-limit-flash' : ''
+          }`}
+        >
           {formattedSelectedNumbers.slice(0, 20).join(', ') || 'Nenhum numero selecionado.'}
           {selectedNumbers.length > 20 ? ` ... +${selectedNumbers.length - 20}` : ''}
         </p>
