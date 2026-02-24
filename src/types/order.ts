@@ -21,6 +21,8 @@ export type OrderDocument = {
   pixCopyPaste?: string | null
   pixQrCode?: string | null
   payerName?: string | null
+  payerPhone?: string | null
+  payerCpf?: string | null
   clientReferenceId?: string
   attempt?: number
   failureReason?: string

@@ -264,6 +264,8 @@ export function useUserDashboard() {
           const amount = typeof data.amount === 'number' && Number.isFinite(data.amount)
             ? Number(data.amount)
             : null
+          const payerPhone = typeof data.payerPhone === 'string' ? data.payerPhone : null
+          const payerCpf = typeof data.payerCpf === 'string' ? data.payerCpf : null
           const rawStatus = String(data.status || 'pending')
           const status = isOrderReservationExpired(rawStatus, reservationExpiresAtMs)
             ? 'expirado'
@@ -274,6 +276,8 @@ export function useUserDashboard() {
             cotas: numbers.length,
             numbers,
             amount,
+            payerPhone,
+            payerCpf,
             totalBrl: formatCurrencyBrl(amount),
             date: formatDashboardDate(createdAtMs),
             status,

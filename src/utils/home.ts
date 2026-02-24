@@ -55,8 +55,16 @@ export function getRankingPositionClass(position: number): string {
 }
 
 export function getGoogleAuthErrorMessage(code: string): string | null {
-  if (code === 'auth/popup-closed-by-user') {
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
     return null
+  }
+
+  if (code === 'auth/popup-blocked') {
+    return 'Seu navegador bloqueou a janela de login. Libere pop-ups e tente novamente.'
+  }
+
+  if (code === 'auth/operation-not-supported-in-this-environment') {
+    return 'Este navegador nao suporta login com popup. Tente novamente.'
   }
 
   return 'Não foi possível entrar com Google agora. Tente novamente.'

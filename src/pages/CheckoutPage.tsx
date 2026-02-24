@@ -7,6 +7,7 @@ import Footer from '../components/home/Footer'
 import Header from '../components/home/Header'
 import { db } from '../lib/firebase'
 import { useAuthStore } from '../stores/authStore'
+import { formatCpfInput } from '../utils/cpf'
 import { formatCurrency } from '../utils/purchaseNumbers'
 import { formatTicketNumbers } from '../utils/ticketNumber'
 
@@ -40,8 +41,37 @@ function parseOptionalPhone(value: unknown) {
     return null
   }
 
-  const phone = value.trim()
+  const phone = value.replace(/\D/g, '').slice(0, 11)
   return phone || null
+}
+
+function parseOptionalCpf(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const cpf = value.replace(/\D/g, '').slice(0, 11)
+  return cpf || null
+}
+
+function formatPhoneInput(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  if (digits.length <= 10) {
+    const parts = []
+    parts.push(digits.slice(0, 2))
+    if (digits.length > 2) parts.push(digits.slice(2, 6))
+    if (digits.length > 6) parts.push(digits.slice(6, 10))
+    const [ddd, first, second] = parts
+    let formatted = ddd ? `(${ddd})` : ''
+    if (first) formatted += ` ${first}`
+    if (second) formatted += `-${second}`
+    return formatted.trim()
+  }
+
+  const ddd = digits.slice(0, 2)
+  const first = digits.slice(2, 7)
+  const second = digits.slice(7, 11)
+  return `(${ddd}) ${first}-${second}`
 }
 
 export default function CheckoutPage() {
@@ -51,6 +81,9 @@ export default function CheckoutPage() {
   const navigationState = (location.state || {}) as CheckoutNavigationState
   const [accountName, setAccountName] = useState('')
   const [accountPhone, setAccountPhone] = useState<string | null>(null)
+  const [accountCpf, setAccountCpf] = useState<string | null>(null)
+  const [payerPhone, setPayerPhone] = useState('')
+  const [payerCpf, setPayerCpf] = useState('')
   const [isReturningToSelection, setIsReturningToSelection] = useState(false)
   const routeOrderId = useMemo(() => {
     const queryOrderId = new URLSearchParams(location.search).get('orderId')
@@ -74,12 +107,12 @@ export default function CheckoutPage() {
   }, [location.search, navigationState.amount])
 
   const [payerName, setPayerName] = useState(user?.displayName?.trim() || '')
-  const [amountInput, setAmountInput] = useState(routeAmount > 0 ? routeAmount.toFixed(2) : '')
 
   useEffect(() => {
     if (!isAuthReady || !user?.uid) {
       setAccountName('')
       setAccountPhone(null)
+      setAccountCpf(null)
       return
     }
 
@@ -90,18 +123,22 @@ export default function CheckoutPage() {
         if (!snapshot.exists()) {
           setAccountName(parseOptionalText(user.displayName))
           setAccountPhone(parseOptionalPhone(user.phoneNumber))
+          setAccountCpf(null)
           return
         }
 
         const data = snapshot.data()
         const firestoreName = parseOptionalText(data.name)
         const firestorePhone = parseOptionalPhone(data.phone)
+        const firestoreCpf = parseOptionalCpf(data.cpf)
         setAccountName(firestoreName || parseOptionalText(user.displayName))
         setAccountPhone(firestorePhone || parseOptionalPhone(user.phoneNumber))
+        setAccountCpf(firestoreCpf)
       },
       () => {
         setAccountName(parseOptionalText(user.displayName))
         setAccountPhone(parseOptionalPhone(user.phoneNumber))
+        setAccountCpf(null)
       },
     )
 
@@ -122,14 +159,18 @@ export default function CheckoutPage() {
   }, [accountName, payerName, user?.displayName])
 
   useEffect(() => {
-    if (routeAmount <= 0) {
-      return
+    if (!payerPhone && accountPhone) {
+      setPayerPhone(accountPhone)
     }
+  }, [accountPhone, payerPhone])
 
-    setAmountInput(routeAmount.toFixed(2))
-  }, [routeAmount])
+  useEffect(() => {
+    if (!payerCpf && accountCpf) {
+      setPayerCpf(accountCpf)
+    }
+  }, [accountCpf, payerCpf])
 
-  const amount = useMemo(() => parsePositiveAmount(amountInput.replace(',', '.')), [amountInput])
+  const amount = routeAmount
 
   const selectedNumbers = navigationState.selectedNumbers || []
   const formattedSelectedNumbers = useMemo(() => formatTicketNumbers(selectedNumbers), [selectedNumbers])
@@ -218,24 +259,37 @@ export default function CheckoutPage() {
                       <p className="text-[11px] text-gray-500">Preenchido automaticamente com os dados da conta.</p>
                     ) : null}
 
+                    <label className="block text-[10px] uppercase tracking-[0.18em] text-gray-500" htmlFor="payer-phone">
+                      Numero do pagador
+                    </label>
+                    <input
+                      id="payer-phone"
+                      className="h-11 w-full rounded-lg border border-white/15 bg-luxury-bg px-3 text-sm text-white outline-none focus:border-gold"
+                      inputMode="tel"
+                      placeholder="(00) 00000-0000"
+                      type="tel"
+                      value={formatPhoneInput(payerPhone)}
+                      onChange={(event) => setPayerPhone(event.target.value.replace(/\D/g, '').slice(0, 11))}
+                    />
                     {accountPhone ? (
                       <p className="text-[11px] text-gray-500">
-                        Telefone do pagador: {accountPhone}
+                        Numero sugerido a partir dos dados da conta.
                       </p>
                     ) : null}
 
-                    <label className="block text-[10px] uppercase tracking-[0.18em] text-gray-500" htmlFor="order-amount">
-                      Valor do pagamento
+                    <label className="block text-[10px] uppercase tracking-[0.18em] text-gray-500" htmlFor="payer-cpf">
+                      CPF do pagador
                     </label>
                     <input
-                      id="order-amount"
+                      id="payer-cpf"
                       className="h-11 w-full rounded-lg border border-white/15 bg-luxury-bg px-3 text-sm text-white outline-none focus:border-gold"
-                      inputMode="decimal"
-                      placeholder="0,00"
+                      inputMode="numeric"
+                      placeholder="000.000.000-00"
                       type="text"
-                      value={amountInput}
-                      onChange={(event) => setAmountInput(event.target.value)}
+                      value={formatCpfInput(payerCpf)}
+                      onChange={(event) => setPayerCpf(event.target.value.replace(/\D/g, '').slice(0, 11))}
                     />
+                    {accountCpf ? <p className="text-[11px] text-gray-500">CPF sugerido a partir da sua conta.</p> : null}
                   </div>
 
                   {selectedNumbers.length > 0 ? (
@@ -286,7 +340,8 @@ export default function CheckoutPage() {
                   <PixCheckout
                     amount={amount}
                     payerName={payerName}
-                    phone={accountPhone}
+                    phone={payerPhone}
+                    cpf={payerCpf}
                     existingOrderId={routeOrderId || null}
                     couponCode={selectedCouponCode}
                     onPaymentConfirmed={handlePaymentConfirmed}

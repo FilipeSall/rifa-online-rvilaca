@@ -4,14 +4,16 @@ import {
   createUserWithEmailAndPassword,
   deleteUser,
   fetchSignInMethodsForEmail,
+  getRedirectResult,
   sendEmailVerification,
   signOut,
+  signInWithRedirect,
   signInWithEmailAndPassword,
   signInWithPopup,
   type AuthError,
   type User,
 } from 'firebase/auth'
-import { doc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore'
+import { doc, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -22,6 +24,48 @@ import { getEmailAuthErrorMessage, getGoogleAuthErrorMessage } from '../utils/ho
 
 const googleProvider = new GoogleAuthProvider()
 googleProvider.setCustomParameters({ prompt: 'select_account' })
+const GOOGLE_POPUP_FALLBACK_CODES = new Set([
+  'auth/popup-blocked',
+  'auth/cancelled-popup-request',
+  'auth/operation-not-supported-in-this-environment',
+])
+const MOBILE_USER_AGENT_REGEX = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i
+const GOOGLE_AUTH_FLOW = `${import.meta.env.VITE_FIREBASE_GOOGLE_AUTH_FLOW ?? 'redirect'}`.toLowerCase()
+
+function shouldPreferGoogleRedirectFlow() {
+  if (GOOGLE_AUTH_FLOW === 'popup') {
+    return false
+  }
+
+  if (GOOGLE_AUTH_FLOW === 'redirect') {
+    return true
+  }
+
+  if (import.meta.env.PROD) {
+    return true
+  }
+
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return MOBILE_USER_AGENT_REGEX.test(window.navigator.userAgent)
+}
+
+function shouldFallbackToGoogleRedirect(error: unknown) {
+  const authError = error as AuthError
+  const errorMessage = `${authError?.message ?? ''}`.toLowerCase()
+
+  if (authError?.code === 'auth/popup-closed-by-user') {
+    return false
+  }
+
+  if (GOOGLE_POPUP_FALLBACK_CODES.has(authError?.code)) {
+    return true
+  }
+
+  return errorMessage.includes('cross-origin-opener-policy') || errorMessage.includes('window.closed')
+}
 
 function getVerificationActionSettings() {
   const origin = window.location.origin.replace(/\/+$/, '')
@@ -157,6 +201,29 @@ export function useHeaderAuth() {
     }
   }, [isLoggedIn, openAuthModal])
 
+  useEffect(() => {
+    let isMounted = true
+
+    const resolveGoogleRedirect = async () => {
+      try {
+        await getRedirectResult(auth)
+      } catch (error) {
+        if (!isMounted) {
+          return
+        }
+
+        const redirectAuthError = error as AuthError
+        setGoogleAuthError(getGoogleAuthErrorMessage(redirectAuthError.code))
+      }
+    }
+
+    void resolveGoogleRedirect()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   const handleAuthButtonClick = useCallback(() => {
     if (isLoggedIn) {
       navigate(userRole === 'admin' ? '/dashboard' : '/minha-conta')
@@ -177,15 +244,40 @@ export function useHeaderAuth() {
     setEmailAuthError(null)
 
     try {
+      if (shouldPreferGoogleRedirectFlow()) {
+        closeAuthModal()
+        await signInWithRedirect(auth, googleProvider)
+        return
+      }
+
       await signInWithPopup(auth, googleProvider)
       closeAuthModal()
     } catch (error) {
       const currentAuthError = error as AuthError
+
+      if (shouldFallbackToGoogleRedirect(currentAuthError)) {
+        try {
+          closeAuthModal()
+          await signInWithRedirect(auth, googleProvider)
+          return
+        } catch (redirectError) {
+          const redirectAuthError = redirectError as AuthError
+          setGoogleAuthError(getGoogleAuthErrorMessage(redirectAuthError.code))
+          return
+        }
+      }
+
       setGoogleAuthError(getGoogleAuthErrorMessage(currentAuthError.code))
     } finally {
       setIsSigningIn(false)
     }
   }, [closeAuthModal])
+
+  const handleSignOut = useCallback(async () => {
+    closeAuthModal()
+    await signOut(auth)
+    navigate('/')
+  }, [closeAuthModal, navigate])
 
   const handleEmailOptionClick = useCallback(() => {
     setIsEmailFormOpen(true)
@@ -361,6 +453,7 @@ export function useHeaderAuth() {
     authMenuRef,
     handleAuthButtonClick,
     handleGoogleSignIn,
+    handleSignOut,
     handleEmailOptionClick,
     handleCreateAccountClick,
     handleEmailAuthSubmit,

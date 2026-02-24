@@ -11,7 +11,15 @@ import 'swiper/css'
 import 'swiper/css/pagination'
 import 'react-loading-skeleton/dist/skeleton.css'
 
-function getDemandMessaging(soldPercentage: number) {
+function getDemandMessaging(soldPercentage: number, isCampaignNotStarted: boolean) {
+  if (isCampaignNotStarted) {
+    return {
+      badge: 'Campanha em preparacao',
+      chip: 'Lançamento em breve',
+      helper: 'Em breve iremos comecar uma campanha. Fique atento para garantir seus numeros na abertura oficial.',
+    }
+  }
+
   if (soldPercentage >= 85) {
     return {
       badge: 'Reta final de cotas',
@@ -83,7 +91,8 @@ export default function HeroSection() {
     : totalNumbersRaw
   const soldCotasFormatted = soldNumbers.toLocaleString('pt-BR')
   const totalCotasFormatted = totalNumbers.toLocaleString('pt-BR')
-  const demandMessaging = getDemandMessaging(soldPercentage)
+  const isCampaignNotStarted = countdownDisplayState.mode === 'start' || campaign.status === 'scheduled'
+  const demandMessaging = getDemandMessaging(soldPercentage, isCampaignNotStarted)
   const shouldShowAdminCampaignHint = userRole === 'admin'
     && countdownDisplayState.mode === 'hidden'
     && !campaign.startsAt
@@ -125,7 +134,7 @@ export default function HeroSection() {
             </div>
 
             {/* Title */}
-            <h1 className="text-5xl lg:text-6xl font-luxury font-black leading-tight text-white">
+            <h1 className="w-full text-5xl lg:text-6xl font-luxury font-black leading-tight text-white">
               {campaignTitleHighlight ? (
                 <>
                   {campaignTitlePrefix} <span className="text-gold">{campaignTitleHighlight}</span>
@@ -136,7 +145,7 @@ export default function HeroSection() {
             </h1>
 
             {/* Subtitle */}
-            <p className="text-base text-gray-300 font-light leading-relaxed max-w-xl">
+            <p className="w-full max-w-none text-base font-light leading-relaxed text-gray-300">
               Além de <span className="text-gold font-semibold">{mainPrize}</span>, você também concorre a{' '}
               <span className="text-gold font-semibold">{secondPrize}</span> e{' '}
               <span className="text-gold font-semibold">{bonusPrize}</span>. Sorteio com transparência total:
@@ -144,7 +153,7 @@ export default function HeroSection() {
             </p>
 
             {/* Progress bar */}
-            <div className="hero-sales-card max-w-lg mt-2">
+            <div className="hero-sales-card mt-2 w-full lg:max-w-lg">
               <span className="hero-edge-badge hero-edge-badge-left">🔥 {demandMessaging.badge}</span>
               <span className="hero-edge-badge hero-edge-badge-right">{demandMessaging.chip}</span>
               <div className="hero-sales-header">
@@ -168,7 +177,7 @@ export default function HeroSection() {
             </div>
 
             {/* Countdown */}
-            <div className="max-w-md mt-2">
+            <div className="mt-2 w-full lg:max-w-lg">
               <p className="text-[11px] uppercase tracking-[0.2em] text-gold">{countdownDisplayState.title}</p>
               <p className="mt-1 text-xs text-gray-400">{countdownDisplayState.helper}</p>
               {countdownDisplayState.mode !== 'hidden' ? (
@@ -198,7 +207,7 @@ export default function HeroSection() {
             </div>
 
             {/* CTA button + secure payment */}
-            <div className="mt-2 flex flex-col gap-3 max-w-lg">
+            <div className="mt-2 flex w-full flex-col gap-3 lg:max-w-lg">
               <button
                 className="inline-flex w-full h-16 items-center justify-center rounded-xl bg-gold px-8 text-base font-black text-black transition-all hover:bg-yellow-400 hover:scale-[1.02] shadow-[0_0_30px_rgba(245,168,0,0.4)] uppercase tracking-widest gap-3"
                 type="button"
@@ -260,9 +269,10 @@ export default function HeroSection() {
                   ))}
                 </Swiper>
               ) : (
-                <div className="flex h-full w-full items-center justify-center rounded-[28px] border border-white/10 bg-black/35 px-6 text-center text-sm text-gray-400">
-                  Nenhum slide ativo na campanha.
-                </div>
+                <div
+                  aria-hidden="true"
+                  className="h-full w-full rounded-[28px] border border-white/10 bg-black/35"
+                />
               )}
 
               {/* Stars + moto name overlay — bottom of the image */}

@@ -26,8 +26,9 @@ function ScrollToTop() {
 
 export default function App() {
   const { pathname } = useLocation()
-  const shouldRenderFeaturedVideoFloatingButton = !pathname.startsWith('/dashboard')
-  const shouldRenderWinnersNotifications = !pathname.startsWith('/dashboard')
+  const isDashboardOrAccountRoute = pathname.startsWith('/dashboard') || pathname.startsWith('/minha-conta')
+  const shouldRenderFeaturedVideoFloatingButton = !isDashboardOrAccountRoute
+  const shouldRenderWinnersNotifications = !isDashboardOrAccountRoute
   const winnersNotification = useWinnersNotification(shouldRenderWinnersNotifications)
 
   return (

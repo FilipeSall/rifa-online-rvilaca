@@ -38,7 +38,7 @@ function resolveCountdownDisplayState(
       mode: 'start',
       targetTimeMs: startsAtMs,
       title: 'A campanha comeca em',
-      helper: 'As vendas serao liberadas na abertura oficial.',
+      helper: 'Em breve iremos comecar uma campanha. As vendas serao liberadas na abertura oficial.',
     }
   }
 

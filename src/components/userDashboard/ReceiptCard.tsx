@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { exportOrderReceiptPdf } from '../../utils/receiptPdf'
+import { formatCpf } from '../../utils/cpf'
 import { formatTicketNumbers } from '../../utils/ticketNumber'
 import type { UserOrder } from '../../types/userDashboard'
 import { OrderStatusBadge } from './StatusBadges'
@@ -22,6 +23,7 @@ function openWhatsAppShare(order: UserOrder, supportWhatsappNumber: string) {
     `Pedido: ${order.id}`,
     `Status: ${statusLabel}`,
     `Data: ${order.date}`,
+    `CPF do pagador: ${order.payerCpf ? formatCpf(order.payerCpf) : '-'}`,
     `Cotas: ${order.cotas}`,
     `Valor total: ${order.totalBrl}`,
     `Numeros: ${formatTicketNumbers(order.numbers).join(', ') || '-'}`,

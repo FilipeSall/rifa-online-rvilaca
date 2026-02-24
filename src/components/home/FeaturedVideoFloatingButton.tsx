@@ -108,7 +108,7 @@ export default function FeaturedVideoFloatingButton({ topSlot = null }: Featured
 
   return (
     <>
-      <div className="fixed bottom-4 left-4 z-[55] flex flex-col gap-3 sm:bottom-6 sm:left-6">
+      <div className="fixed bottom-4 left-4 z-[70] flex flex-col gap-3 sm:bottom-6 sm:left-6">
         {topSlot}
 
         {resolvedVideoUrl ? (
@@ -120,10 +120,12 @@ export default function FeaturedVideoFloatingButton({ topSlot = null }: Featured
             ) : null}
             <button
               aria-label="Abrir video em destaque"
-              className="group relative flex h-16 w-16 items-center justify-center rounded-full border border-gold/45 bg-black/75 text-gold shadow-[0_15px_35px_rgba(0,0,0,0.45)] transition-transform hover:scale-[1.03]"
+              className="group relative isolate flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-gold/50 bg-black text-gold shadow-[0_15px_35px_rgba(0,0,0,0.6)] transition-transform hover:scale-[1.03]"
               type="button"
               onClick={handleOpenModal}
             >
+              <span className="pointer-events-none absolute -inset-2 rounded-full bg-black/85 blur-md" />
+              <span className="absolute inset-0 rounded-full bg-black/85" />
               <span className="absolute inset-0 rounded-full border border-gold/35 animate-ping opacity-35" />
               <span className="material-symbols-outlined relative z-10 text-3xl">play_circle</span>
             </button>
@@ -146,7 +148,7 @@ export default function FeaturedVideoFloatingButton({ topSlot = null }: Featured
       {isModalOpen ? (
         <div
           aria-modal="true"
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/85 p-4"
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-4"
           role="dialog"
           onClick={handleCloseModal}
         >

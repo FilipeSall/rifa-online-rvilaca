@@ -49,6 +49,7 @@ interface CreatePixDepositInput {
   amount?: number
   payerName: string
   phone?: string
+  cpf?: string
   couponCode?: string
 }
 
@@ -194,6 +195,19 @@ function sanitizePixType(value: unknown): PixType {
   }
 
   return pixType
+}
+
+function sanitizeCpf(value: unknown): string | null {
+  const digits = sanitizeString(value).replace(/\D/g, '')
+  if (!digits) {
+    return null
+  }
+
+  if (digits.length !== 11) {
+    throw new HttpsError('invalid-argument', 'cpf deve conter 11 digitos')
+  }
+
+  return digits
 }
 
 function inferOrderStatus(payload: unknown): OrderStatus {
@@ -609,11 +623,16 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
       const requestedAmount = sanitizeOptionalAmount(payload.amount)
       const payerName = sanitizeString(payload.payerName)
       const phone = sanitizePhone(payload.phone)
+      const cpf = sanitizeCpf(payload.cpf)
       const reservationRef = db.collection('numberReservations').doc(uid)
       const reservationSnapshot = await reservationRef.get()
 
       if (!payerName) {
         throw new HttpsError('invalid-argument', 'payerName e obrigatorio')
+      }
+
+      if (!cpf) {
+        throw new HttpsError('invalid-argument', 'cpf e obrigatorio')
       }
 
       if (!reservationSnapshot.exists) {
@@ -693,6 +712,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         payerNameMasked: maskName(payerName),
         phoneMasked: maskPhoneNumber(phone),
         hasPhone: Boolean(phone),
+        hasCpf: Boolean(cpf),
         clientReferenceBase,
         hasCallbackUrl: Boolean(callbackUrl),
         maxAttempts: MAX_DEPOSIT_ORDER_ATTEMPTS,
@@ -805,6 +825,9 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
               expectedAmount,
               subtotalAmount,
               discountAmount,
+              payerName,
+              payerPhone: phone,
+              payerCpf: cpf,
               requestedAmount,
               unitPriceAtCheckout,
               minPurchaseQuantity,
@@ -848,6 +871,9 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
           amount: expectedAmount,
           subtotalAmount,
           discountAmount,
+          payerName,
+          payerPhone: phone,
+          payerCpf: cpf,
           expectedAmount,
           requestedAmount,
           unitPriceAtCheckout,

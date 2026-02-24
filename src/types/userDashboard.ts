@@ -15,6 +15,8 @@ export type UserOrder = {
   cotas: number
   numbers: number[]
   amount: number | null
+  payerPhone: string | null
+  payerCpf: string | null
   totalBrl: string
   date: string
   status: TicketStatus

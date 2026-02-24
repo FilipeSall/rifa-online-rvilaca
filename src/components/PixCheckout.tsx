@@ -8,6 +8,7 @@ interface PixCheckoutProps {
   amount: number
   payerName: string
   phone?: string | null
+  cpf?: string | null
   existingOrderId?: string | null
   couponCode?: string | null
   onPaymentConfirmed?: (orderId: string) => void
@@ -65,6 +66,7 @@ export default function PixCheckout({
   amount,
   payerName,
   phone,
+  cpf,
   existingOrderId = null,
   couponCode = null,
   onPaymentConfirmed,
@@ -225,10 +227,18 @@ export default function PixCheckout({
       return
     }
 
+    const sanitizedCpf = typeof cpf === 'string' ? cpf.replace(/\D/g, '') : ''
+    if (sanitizedCpf.length !== 11) {
+      setLocalError('Informe um CPF valido com 11 digitos para gerar o PIX.')
+      setStatus('failed')
+      return
+    }
+
     try {
       const response = await createDeposit({
         payerName: payerName.trim(),
         phone: typeof phone === 'string' && phone.trim() ? phone.trim() : undefined,
+        cpf: sanitizedCpf,
         couponCode,
       })
       setOrder(response)
@@ -242,7 +252,7 @@ export default function PixCheckout({
     } catch {
       setStatus('failed')
     }
-  }, [clearError, couponCode, createDeposit, payerName, phone, stopOrderListener])
+  }, [clearError, couponCode, cpf, createDeposit, payerName, phone, stopOrderListener])
 
   const handleCopy = useCallback(async () => {
     if (!copyPasteCode) {

@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf'
 import type { UserOrder } from '../types/userDashboard'
+import { formatCpf } from './cpf'
 import { formatTicketNumbers } from './ticketNumber'
 
 function formatAmount(value: number | null) {
@@ -30,6 +31,23 @@ function chunkNumbers(numbers: number[]) {
   return rows
 }
 
+function formatPhone(value: string | null) {
+  if (!value) {
+    return '-'
+  }
+
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  if (digits.length === 11) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`
+  }
+
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6, 10)}`
+  }
+
+  return value
+}
+
 export function exportOrderReceiptPdf(order: UserOrder) {
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -51,6 +69,8 @@ export function exportOrderReceiptPdf(order: UserOrder) {
     ['Pedido', order.id],
     ['Status', order.status === 'pago' ? 'Pago' : order.status === 'aguardando' ? 'Pendente' : 'Cancelado'],
     ['Data', order.date],
+    ['CPF do pagador', order.payerCpf ? formatCpf(order.payerCpf) : '-'],
+    ['Numero do pagador', formatPhone(order.payerPhone)],
     ['Quantidade de cotas', String(order.cotas)],
     ['Valor total', formatAmount(order.amount)],
     ['Campanha', order.campaignId || 'padrao'],

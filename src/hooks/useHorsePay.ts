@@ -8,6 +8,7 @@ export type PixType = 'CPF' | 'CNPJ' | 'EMAIL' | 'PHONE' | 'RANDOM'
 export interface CreateDepositInput {
   payerName: string
   phone?: string | null
+  cpf?: string | null
   couponCode?: string | null
 }
 
@@ -97,7 +98,7 @@ export function useHorsePay() {
   )
 
   const createDeposit = useCallback(
-    async ({ payerName, phone, couponCode }: CreateDepositInput) =>
+    async ({ payerName, phone, cpf, couponCode }: CreateDepositInput) =>
       runCallable('createPixDeposit', () => {
         const payload: CreateDepositInput = {
           payerName,
@@ -105,6 +106,10 @@ export function useHorsePay() {
 
         if (typeof phone === 'string' && phone.trim()) {
           payload.phone = phone.trim()
+        }
+
+        if (typeof cpf === 'string' && cpf.trim()) {
+          payload.cpf = cpf.trim()
         }
 
         if (typeof couponCode === 'string' && couponCode.trim()) {

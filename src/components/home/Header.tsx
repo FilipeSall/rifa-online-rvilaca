@@ -27,6 +27,7 @@ export default function Header() {
     authMenuRef,
     handleAuthButtonClick,
     handleGoogleSignIn,
+    handleSignOut,
     handleEmailOptionClick,
     handleCreateAccountClick,
     handleEmailAuthSubmit,
@@ -242,18 +243,28 @@ export default function Header() {
               </div>
             ) : null}
             <button
-              className="lg:hidden text-white"
+              className="lg:hidden text-white transition-transform duration-200"
               type="button"
-              aria-label="Abrir menu"
+              aria-label={isMobileMenuOpen ? 'Fechar menu' : 'Abrir menu'}
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="mobile-nav-menu"
               onClick={() => setIsMobileMenuOpen((currentState) => !currentState)}
             >
-              <span className="material-symbols-outlined">menu</span>
+              <span className="material-symbols-outlined">{isMobileMenuOpen ? 'close' : 'menu'}</span>
             </button>
           </div>
         </div>
 
-        {isMobileMenuOpen ? (
-          <div className="lg:hidden border-t border-white/10 py-4 space-y-3">
+        <div
+          id="mobile-nav-menu"
+          className={`lg:hidden overflow-hidden transition-all duration-300 ease-out ${
+            isMobileMenuOpen
+              ? 'max-h-[420px] translate-y-0 border-t border-white/10 py-4 opacity-100'
+              : 'max-h-0 -translate-y-2 border-t-0 py-0 opacity-0 pointer-events-none'
+          }`}
+          aria-hidden={!isMobileMenuOpen}
+        >
+          <div className="space-y-3">
             <nav className="space-y-2">
               {HEADER_NAV_ITEMS.map(({ label, href }) => (
                 <Link
@@ -271,12 +282,27 @@ export default function Header() {
             <button
               className="h-10 w-full rounded bg-gold px-4 text-xs font-black uppercase tracking-widest text-black"
               type="button"
-              onClick={handleAuthButtonClick}
+              onClick={() => {
+                void handleAuthButtonClick()
+                setIsMobileMenuOpen(false)
+              }}
             >
               {isLoggedIn ? (userRole === 'admin' ? 'Dashboard' : 'Minha conta') : 'Entrar'}
             </button>
+            {isLoggedIn ? (
+              <button
+                className="h-10 w-full rounded border border-red-400/45 bg-red-500/12 px-4 text-xs font-black uppercase tracking-widest text-red-300 transition-colors hover:bg-red-500/20"
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false)
+                  void handleSignOut()
+                }}
+              >
+                Sair
+              </button>
+            ) : null}
           </div>
-        ) : null}
+        </div>
       </div>
     </header>
   )

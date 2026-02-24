@@ -24,7 +24,7 @@ export default function PurchaseHeroSection({ unitPrice, minQuantity }: Purchase
             </p>
           </div>
 
-          <div className="grid w-full max-w-sm grid-cols-2 gap-3 lg:gap-4">
+          <div className="grid w-full grid-cols-2 gap-3 lg:flex-1 lg:gap-4">
             <div className="rounded-xl border border-white/10 bg-luxury-card p-4">
               <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Valor da cota</p>
               <p className="mt-2 text-2xl font-black text-gold">{formatCurrency(unitPrice)}</p>
