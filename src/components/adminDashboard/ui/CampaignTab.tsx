@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import {
   CAMPAIGN_STATUS_OPTIONS,
@@ -17,6 +17,7 @@ import type {
 import { CustomSelect } from '../../ui/CustomSelect'
 import { useCampaignForm } from '../hooks/useCampaignForm'
 import { deleteCampaignHeroCarouselImage, uploadCampaignHeroCarouselImage } from '../services/campaignMediaStorageService'
+import { buildCampaignSettingsInput } from '../services/campaignSettingsFormService'
 import { formatCurrency, getCampaignStatusLabel } from '../utils/formatters'
 
 function applyPhoneMask(value: string): string {
@@ -116,10 +117,98 @@ export default function CampaignTab() {
     () => normalizeHeroCarouselOrder(midias.heroCarousel),
     [midias.heroCarousel],
   )
+  const currentPrizeAlt = useMemo(
+    () => (mainPrize.trim() || DEFAULT_MAIN_PRIZE).slice(0, 140),
+    [mainPrize],
+  )
   const activeHeroSlides = useMemo(
     () => heroCarouselItems.filter((item) => item.active).length,
     [heroCarouselItems],
   )
+  const normalizedCurrentCampaignPayload = useMemo(() => (
+    buildCampaignSettingsInput({
+      title,
+      pricePerCotaInput,
+      minPurchaseQuantityInput,
+      mainPrize,
+      secondPrize,
+      bonusPrize,
+      totalNumbersInput,
+      additionalPrizes,
+      supportWhatsappNumber,
+      status,
+      startsAt,
+      endsAt,
+      coupons,
+      midias,
+    }).payload
+  ), [
+    additionalPrizes,
+    bonusPrize,
+    coupons,
+    endsAt,
+    mainPrize,
+    midias,
+    minPurchaseQuantityInput,
+    pricePerCotaInput,
+    secondPrize,
+    startsAt,
+    status,
+    supportWhatsappNumber,
+    title,
+    totalNumbersInput,
+  ])
+  const normalizedBaseCampaignPayload = useMemo(() => (
+    buildCampaignSettingsInput({
+      title: campaign.title,
+      pricePerCotaInput: campaign.pricePerCota.toFixed(2),
+      minPurchaseQuantityInput: String(campaign.minPurchaseQuantity),
+      mainPrize: campaign.mainPrize,
+      secondPrize: campaign.secondPrize,
+      bonusPrize: campaign.bonusPrize,
+      totalNumbersInput: String(campaign.totalNumbers),
+      additionalPrizes: campaign.additionalPrizes,
+      supportWhatsappNumber: campaign.supportWhatsappNumber,
+      status: campaign.status,
+      startsAt: campaign.startsAt ?? '',
+      endsAt: campaign.endsAt ?? '',
+      coupons: campaign.coupons,
+      midias: campaign.midias,
+    }).payload
+  ), [
+    campaign.additionalPrizes,
+    campaign.bonusPrize,
+    campaign.coupons,
+    campaign.endsAt,
+    campaign.mainPrize,
+    campaign.midias,
+    campaign.minPurchaseQuantity,
+    campaign.pricePerCota,
+    campaign.secondPrize,
+    campaign.startsAt,
+    campaign.status,
+    campaign.supportWhatsappNumber,
+    campaign.title,
+    campaign.totalNumbers,
+  ])
+  const hasCampaignChanges = useMemo(() => {
+    if (!normalizedCurrentCampaignPayload || !normalizedBaseCampaignPayload) {
+      return true
+    }
+
+    return JSON.stringify(normalizedCurrentCampaignPayload) !== JSON.stringify(normalizedBaseCampaignPayload)
+  }, [normalizedBaseCampaignPayload, normalizedCurrentCampaignPayload])
+  const saveButtonLabel = isSaving
+    ? 'Salvando...'
+    : hasCampaignChanges
+      ? 'Salvar campanha'
+      : 'Sem alteracoes'
+
+  useEffect(() => {
+    if (!heroAltInput.trim()) {
+      setHeroAltInput(currentPrizeAlt)
+    }
+  }, [currentPrizeAlt, heroAltInput])
 
   const canAddCoupon = useMemo(() => {
     const normalizedCode = couponCodeInput.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 24)
@@ -348,6 +437,23 @@ export default function CampaignTab() {
     }
   }
 
+  const handleCopyHeroMediaUrl = async (url: string, mediaId: string) => {
+    try {
+      if (!window.isSecureContext || !navigator.clipboard?.writeText) {
+        throw new Error('Copiar link exige contexto seguro (HTTPS ou localhost).')
+      }
+
+      await navigator.clipboard.writeText(url)
+      toast.success('Link copiado.', {
+        toastId: `campaign-media-link-copied-${mediaId}`,
+      })
+    } catch (error) {
+      toast.error(parseErrorMessage(error, 'Nao foi possivel copiar o link.'), {
+        toastId: `campaign-media-link-copy-error-${mediaId}`,
+      })
+    }
+  }
+
   const handleRemoveHeroMedia = async (media: CampaignHeroCarouselMedia) => {
     setHeroMediaActionId(media.id)
     try {
@@ -366,17 +472,34 @@ export default function CampaignTab() {
       try {
         await deleteCampaignHeroCarouselImage(media.storagePath)
       } catch (error) {
-        toast.warning(parseErrorMessage(error, 'Slide removido, mas nao foi possivel remover o arquivo do Storage.'), {
-          toastId: `campaign-media-delete-storage-error-${media.id}`,
-        })
+        const restored = await persistMidias(midias)
+        if (restored) {
+          setMidias(midias)
+          toast.error(parseErrorMessage(error, 'Falha ao remover no Storage. O slide foi restaurado.'), {
+            toastId: `campaign-media-delete-storage-error-${media.id}`,
+          })
+          return
+        }
+
+        toast.error(
+          'Falha ao remover no Storage e nao foi possivel restaurar o slide automaticamente. Recarregue e tente novamente.',
+          {
+            toastId: `campaign-media-delete-storage-restore-failed-${media.id}`,
+          },
+        )
+        return
       }
+
+      toast.success('Slide removido com sucesso (painel + storage).', {
+        toastId: `campaign-media-removed-${media.id}`,
+      })
     } finally {
       setHeroMediaActionId(null)
     }
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-6 pb-28">
       <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-luxury-card p-6">
         <div className="pointer-events-none absolute -left-12 top-0 h-44 w-44 rounded-full bg-gold/15 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-12 right-0 h-44 w-44 rounded-full bg-cyan-400/10 blur-3xl" />
@@ -414,42 +537,79 @@ export default function CampaignTab() {
       </article>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-luxury-card p-5 xl:col-span-5">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(245,168,0,0.16),transparent_48%)]" />
-          <div className="relative z-10">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold">Preview ao vivo</p>
-            <h4 className="mt-3 font-luxury text-2xl font-bold text-white">{title.trim() || DEFAULT_CAMPAIGN_TITLE}</h4>
-            <p className="mt-2 text-sm text-gray-300">
-              Visual de como a comunicação principal da campanha fica após o salvamento.
-            </p>
-            <div className="mt-5 space-y-3">
-              <div className="rounded-xl border border-amber-300/25 bg-amber-500/10 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-amber-200">Total de numeros</p>
-                <p className="mt-1 text-sm font-semibold text-white">
-                  {(Number(totalNumbersInput.replace(/[^0-9]/g, '')) || DEFAULT_TOTAL_NUMBERS).toLocaleString('pt-BR')}
-                </p>
-              </div>
-              <div className="rounded-xl border border-gold/25 bg-black/40 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-gold">1º prêmio</p>
-                <p className="mt-1 text-sm font-semibold text-white">{mainPrize.trim() || DEFAULT_MAIN_PRIZE}</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/35 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-gray-400">2º prêmio</p>
-                <p className="mt-1 text-sm font-semibold text-white">{secondPrize.trim() || DEFAULT_SECOND_PRIZE}</p>
-              </div>
-              <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-emerald-300">Prêmio extra</p>
-                <p className="mt-1 text-sm font-semibold text-white">{bonusPrize.trim() || DEFAULT_BONUS_PRIZE}</p>
-              </div>
-              {additionalPrizes.map((prize, index) => (
-                <div key={index} className="rounded-xl border border-purple-400/20 bg-purple-500/5 px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-purple-300">Prêmio adicional {index + 1}</p>
-                  <p className="mt-1 text-sm font-semibold text-white">{prize}</p>
+        <div className="space-y-5 xl:col-span-5 xl:flex xl:h-full xl:flex-col xl:gap-5 xl:space-y-0">
+          <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-luxury-card p-5 xl:flex-1">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(245,168,0,0.16),transparent_48%)]" />
+            <div className="relative z-10 xl:flex xl:h-full xl:flex-col">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold">Preview ao vivo</p>
+              <h4 className="mt-3 font-luxury text-2xl font-bold text-white">{title.trim() || DEFAULT_CAMPAIGN_TITLE}</h4>
+              <p className="mt-2 text-sm text-gray-300">
+                Visual de como a comunicação principal da campanha fica após o salvamento.
+              </p>
+              <div className="mt-5 space-y-3">
+                <div className="rounded-xl border border-amber-300/25 bg-amber-500/10 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.15em] text-amber-200">Total de numeros</p>
+                  <p className="mt-1 text-sm font-semibold text-white">
+                    {(Number(totalNumbersInput.replace(/[^0-9]/g, '')) || DEFAULT_TOTAL_NUMBERS).toLocaleString('pt-BR')}
+                  </p>
                 </div>
-              ))}
+                <div className="rounded-xl border border-gold/25 bg-black/40 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.15em] text-gold">1º prêmio</p>
+                  <p className="mt-1 text-sm font-semibold text-white">{mainPrize.trim() || DEFAULT_MAIN_PRIZE}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/35 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.15em] text-gray-400">2º prêmio</p>
+                  <p className="mt-1 text-sm font-semibold text-white">{secondPrize.trim() || DEFAULT_SECOND_PRIZE}</p>
+                </div>
+                <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.15em] text-emerald-300">Prêmio extra</p>
+                  <p className="mt-1 text-sm font-semibold text-white">{bonusPrize.trim() || DEFAULT_BONUS_PRIZE}</p>
+                </div>
+                {additionalPrizes.map((prize, index) => (
+                  <div key={index} className="rounded-xl border border-purple-400/20 bg-purple-500/5 px-4 py-3">
+                    <p className="text-[10px] uppercase tracking-[0.15em] text-purple-300">Prêmio adicional {index + 1}</p>
+                    <p className="mt-1 text-sm font-semibold text-white">{prize}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </article>
+          </article>
+
+          <article className="rounded-3xl border border-white/10 bg-luxury-card p-5">
+            <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-100">3. Regras comerciais</p>
+              <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                  <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-ticket-price">
+                    Preco por cota (R$)
+                  </label>
+                  <input
+                    id="campaign-ticket-price"
+                    className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-gold outline-none transition-colors focus:border-gold/60"
+                    inputMode="decimal"
+                    type="text"
+                    value={pricePerCotaInput}
+                    onChange={(event) => setPricePerCotaInput(event.target.value)}
+                  />
+                </div>
+
+                <div className="rounded-xl border border-cyan-300/25 bg-cyan-500/10 px-4 py-3">
+                  <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-min-purchase">
+                    Compra minima (cotas)
+                  </label>
+                  <input
+                    id="campaign-min-purchase"
+                    className="mt-2 h-11 w-full rounded-md border border-cyan-200/30 bg-black/25 px-3 text-sm font-semibold text-cyan-50 outline-none transition-colors focus:border-cyan-200/80"
+                    inputMode="numeric"
+                    type="text"
+                    value={minPurchaseQuantityInput}
+                    onChange={(event) => setMinPurchaseQuantityInput(event.target.value.replace(/[^0-9]/g, ''))}
+                  />
+                </div>
+              </div>
+            </section>
+          </article>
+        </div>
 
         <article className="rounded-3xl border border-white/10 bg-luxury-card p-5 xl:col-span-7">
           <div className="grid grid-cols-1 gap-4">
@@ -625,209 +785,185 @@ export default function CampaignTab() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-100">3. Regras comerciais</p>
-              <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-                  <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-ticket-price">
-                    Preco por cota (R$)
-                  </label>
-                  <input
-                    id="campaign-ticket-price"
-                    className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-gold outline-none transition-colors focus:border-gold/60"
-                    inputMode="decimal"
-                    type="text"
-                    value={pricePerCotaInput}
-                    onChange={(event) => setPricePerCotaInput(event.target.value)}
-                  />
-                </div>
+          </div>
 
-                <div className="rounded-xl border border-cyan-300/25 bg-cyan-500/10 px-4 py-3">
-                  <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-min-purchase">
-                    Compra minima (cotas)
-                  </label>
-                  <input
-                    id="campaign-min-purchase"
-                    className="mt-2 h-11 w-full rounded-md border border-cyan-200/30 bg-black/25 px-3 text-sm font-semibold text-cyan-50 outline-none transition-colors focus:border-cyan-200/80"
-                    inputMode="numeric"
-                    type="text"
-                    value={minPurchaseQuantityInput}
-                    onChange={(event) => setMinPurchaseQuantityInput(event.target.value.replace(/[^0-9]/g, ''))}
-                  />
-                </div>
-              </div>
-            </section>
+        </article>
+      </div>
 
-            <section className="rounded-2xl border border-emerald-300/20 bg-emerald-500/5 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-200">4. Midias</p>
-                  <p className="mt-1 text-xs text-emerald-100/80">
-                    Gerencie as imagens do carrossel da home (maximo 12).
-                  </p>
-                </div>
-                <div className="rounded-lg border border-emerald-300/25 bg-black/25 px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-emerald-200">Slides ativos</p>
-                  <p className="mt-1 text-sm font-black text-white">{activeHeroSlides}</p>
-                </div>
-              </div>
+      <article className="rounded-3xl border border-emerald-300/20 bg-emerald-500/5 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-200">4. Midias</p>
+            <p className="mt-1 text-xs text-emerald-100/80">
+              Gerencie as imagens do carrossel da home (maximo 12).
+            </p>
+          </div>
+          <div className="rounded-lg border border-emerald-300/25 bg-black/25 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.15em] text-emerald-200">Slides ativos</p>
+            <p className="mt-1 text-sm font-black text-white">{activeHeroSlides}</p>
+          </div>
+        </div>
 
-              <div className="mt-4 rounded-xl border border-emerald-300/20 bg-black/25 p-4">
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr_auto]">
-                  <div>
-                    <label className="text-[10px] uppercase tracking-[0.15em] text-emerald-100" htmlFor="campaign-hero-file">
-                      Arquivo de imagem
-                    </label>
-                    <input
-                      id="campaign-hero-file"
-                      accept="image/*"
-                      className="mt-2 block h-11 w-full cursor-pointer rounded-md border border-emerald-200/30 bg-black/40 px-3 py-2 text-xs text-emerald-50 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-emerald-300/25 file:px-3 file:py-1.5 file:text-[11px] file:font-bold file:text-emerald-100"
-                      type="file"
-                      onChange={(event) => setSelectedHeroFile(event.target.files?.[0] ?? null)}
+        <div className="mt-4 rounded-xl border border-emerald-300/20 bg-black/25 p-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr_auto]">
+            <div>
+              <label className="text-[10px] uppercase tracking-[0.15em] text-emerald-100" htmlFor="campaign-hero-file">
+                Arquivo de imagem
+              </label>
+              <input
+                id="campaign-hero-file"
+                accept="image/*"
+                className="mt-2 block h-11 w-full cursor-pointer rounded-md border border-emerald-200/30 bg-black/40 px-3 py-2 text-xs text-emerald-50 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-emerald-300/25 file:px-3 file:py-1.5 file:text-[11px] file:font-bold file:text-emerald-100"
+                type="file"
+                onChange={(event) => setSelectedHeroFile(event.target.files?.[0] ?? null)}
+              />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-[0.15em] text-emerald-100" htmlFor="campaign-hero-alt">
+                Texto alternativo (opcional)
+              </label>
+              <input
+                id="campaign-hero-alt"
+                className="mt-2 h-11 w-full rounded-md border border-emerald-200/30 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-emerald-200/75"
+                type="text"
+                value={heroAltInput}
+                onChange={(event) => setHeroAltInput(event.target.value)}
+                placeholder="Ex: BMW R1200 GS em destaque"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                className="inline-flex h-11 items-center rounded-lg bg-emerald-300 px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={handleUploadHeroMedia}
+                disabled={
+                  isUploadingHeroMedia
+                  || heroCarouselItems.length >= 12
+                  || !selectedHeroFile
+                  || heroMediaActionId !== null
+                }
+              >
+                {isUploadingHeroMedia ? 'Enviando...' : 'Adicionar slide'}
+              </button>
+            </div>
+          </div>
+
+          {selectedHeroFile ? (
+            <p className="mt-2 text-[11px] text-emerald-100/80">
+              Arquivo selecionado: <span className="font-semibold text-emerald-50">{selectedHeroFile.name}</span>
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3">
+          {heroCarouselItems.length === 0 ? (
+            <p className="rounded-xl border border-white/10 bg-black/30 px-4 py-4 text-sm text-gray-300">
+              Nenhuma imagem cadastrada. A home continua usando as imagens padrao ate voce adicionar slides.
+            </p>
+          ) : null}
+
+          {heroCarouselItems.map((media, index) => {
+            const isProcessing = heroMediaActionId === media.id || isUploadingHeroMedia
+
+            return (
+              <div key={media.id} className="rounded-xl border border-white/10 bg-black/30 p-3">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[160px_minmax(0,1fr)_auto] md:items-center">
+                  <div className="relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-black/60">
+                    <img
+                      alt={media.alt || `Slide ${index + 1}`}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      src={media.url}
                     />
                   </div>
-                  <div>
-                    <label className="text-[10px] uppercase tracking-[0.15em] text-emerald-100" htmlFor="campaign-hero-alt">
-                      Texto alternativo (opcional)
-                    </label>
-                    <input
-                      id="campaign-hero-alt"
-                      className="mt-2 h-11 w-full rounded-md border border-emerald-200/30 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-emerald-200/75"
-                      type="text"
-                      value={heroAltInput}
-                      onChange={(event) => setHeroAltInput(event.target.value)}
-                      placeholder="Ex: BMW R1200 GS em destaque"
-                    />
+
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-white/15 bg-black/35 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-gray-300">
+                        Ordem {index + 1}
+                      </span>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${
+                          media.active
+                            ? 'border border-emerald-300/35 bg-emerald-500/15 text-emerald-200'
+                            : 'border border-gray-500/40 bg-gray-500/10 text-gray-300'
+                        }`}
+                      >
+                        {media.active ? 'Ativo' : 'Inativo'}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-gray-300">
+                      Alt:{' '}
+                      <span
+                        className="inline-block max-w-full truncate align-bottom font-semibold text-white"
+                        title={media.alt || 'Sem descricao'}
+                      >
+                        {media.alt || 'Sem descricao'}
+                      </span>
+                    </p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <p className="min-w-0 flex-1 truncate text-[11px] text-gray-500" title={media.url}>
+                        {media.url}
+                      </p>
+                      <button
+                        type="button"
+                        className="inline-flex h-7 items-center rounded-md border border-white/15 bg-black/40 px-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-200 transition hover:bg-black/60"
+                        onClick={() => handleCopyHeroMediaUrl(media.url, media.id)}
+                        disabled={isProcessing}
+                      >
+                        Copiar link
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-end">
+
+                  <div className="flex flex-wrap items-center gap-2 md:justify-end">
                     <button
-                      className="inline-flex h-11 items-center rounded-lg bg-emerald-300 px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
                       type="button"
-                      onClick={handleUploadHeroMedia}
-                      disabled={
-                        isUploadingHeroMedia
-                        || heroCarouselItems.length >= 12
-                        || !selectedHeroFile
-                        || heroMediaActionId !== null
-                      }
+                      className="inline-flex h-8 items-center rounded-md border border-white/15 bg-black/40 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-gray-200 disabled:cursor-not-allowed disabled:opacity-55"
+                      onClick={() => handleMoveHeroMedia(media.id, -1)}
+                      disabled={isProcessing || index === 0}
                     >
-                      {isUploadingHeroMedia ? 'Enviando...' : 'Adicionar slide'}
+                      Subir
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center rounded-md border border-white/15 bg-black/40 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-gray-200 disabled:cursor-not-allowed disabled:opacity-55"
+                      onClick={() => handleMoveHeroMedia(media.id, 1)}
+                      disabled={isProcessing || index === heroCarouselItems.length - 1}
+                    >
+                      Descer
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center rounded-md border border-amber-300/30 bg-amber-500/10 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-100 disabled:cursor-not-allowed disabled:opacity-55"
+                      onClick={() => handleEditHeroMediaAlt(media)}
+                      disabled={isProcessing}
+                    >
+                      Editar alt
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center rounded-md border border-cyan-300/30 bg-cyan-500/10 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-100 disabled:cursor-not-allowed disabled:opacity-55"
+                      onClick={() => handleToggleHeroMedia(media.id)}
+                      disabled={isProcessing}
+                    >
+                      {media.active ? 'Desativar' : 'Ativar'}
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center rounded-md border border-red-400/35 bg-red-500/10 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-red-200 disabled:cursor-not-allowed disabled:opacity-55"
+                      onClick={() => handleRemoveHeroMedia(media)}
+                      disabled={isProcessing}
+                    >
+                      Remover
                     </button>
                   </div>
                 </div>
-
-                {selectedHeroFile ? (
-                  <p className="mt-2 text-[11px] text-emerald-100/80">
-                    Arquivo selecionado: <span className="font-semibold text-emerald-50">{selectedHeroFile.name}</span>
-                  </p>
-                ) : null}
               </div>
-
-              <div className="mt-4 grid grid-cols-1 gap-3">
-                {heroCarouselItems.length === 0 ? (
-                  <p className="rounded-xl border border-white/10 bg-black/30 px-4 py-4 text-sm text-gray-300">
-                    Nenhuma imagem cadastrada. A home continua usando as imagens padrao ate voce adicionar slides.
-                  </p>
-                ) : null}
-
-                {heroCarouselItems.map((media, index) => {
-                  const isProcessing = heroMediaActionId === media.id || isUploadingHeroMedia
-
-                  return (
-                    <div key={media.id} className="rounded-xl border border-white/10 bg-black/30 p-3">
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-[160px_1fr_auto] md:items-center">
-                        <div className="relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-black/60">
-                          <img
-                            alt={media.alt || `Slide ${index + 1}`}
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                            src={media.url}
-                          />
-                        </div>
-
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-full border border-white/15 bg-black/35 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-gray-300">
-                              Ordem {index + 1}
-                            </span>
-                            <span
-                              className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${
-                                media.active
-                                  ? 'border border-emerald-300/35 bg-emerald-500/15 text-emerald-200'
-                                  : 'border border-gray-500/40 bg-gray-500/10 text-gray-300'
-                              }`}
-                            >
-                              {media.active ? 'Ativo' : 'Inativo'}
-                            </span>
-                          </div>
-                          <p className="mt-2 text-xs text-gray-300">
-                            Alt: <span className="font-semibold text-white">{media.alt || 'Sem descricao'}</span>
-                          </p>
-                          <p className="mt-1 truncate text-[11px] text-gray-500">{media.url}</p>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                          <button
-                            type="button"
-                            className="inline-flex h-8 items-center rounded-md border border-white/15 bg-black/40 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-gray-200 disabled:cursor-not-allowed disabled:opacity-55"
-                            onClick={() => handleMoveHeroMedia(media.id, -1)}
-                            disabled={isProcessing || index === 0}
-                          >
-                            Subir
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex h-8 items-center rounded-md border border-white/15 bg-black/40 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-gray-200 disabled:cursor-not-allowed disabled:opacity-55"
-                            onClick={() => handleMoveHeroMedia(media.id, 1)}
-                            disabled={isProcessing || index === heroCarouselItems.length - 1}
-                          >
-                            Descer
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex h-8 items-center rounded-md border border-amber-300/30 bg-amber-500/10 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-100 disabled:cursor-not-allowed disabled:opacity-55"
-                            onClick={() => handleEditHeroMediaAlt(media)}
-                            disabled={isProcessing}
-                          >
-                            Editar alt
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex h-8 items-center rounded-md border border-cyan-300/30 bg-cyan-500/10 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-100 disabled:cursor-not-allowed disabled:opacity-55"
-                            onClick={() => handleToggleHeroMedia(media.id)}
-                            disabled={isProcessing}
-                          >
-                            {media.active ? 'Desativar' : 'Ativar'}
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex h-8 items-center rounded-md border border-red-400/35 bg-red-500/10 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-red-200 disabled:cursor-not-allowed disabled:opacity-55"
-                            onClick={() => handleRemoveHeroMedia(media)}
-                            disabled={isProcessing}
-                          >
-                            Remover
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-          </div>
-
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <button
-              className="inline-flex h-11 items-center rounded-lg bg-gold px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition-colors hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-70"
-              type="button"
-              disabled={isLoading || isSaving}
-              onClick={handleSaveCampaignSettings}
-            >
-              {isSaving ? 'Salvando...' : 'Salvar campanha'}
-            </button>
-          </div>
-        </article>
-      </div>
+            )
+          })}
+        </div>
+      </article>
 
       <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-luxury-card p-5">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(34,211,238,0.18),transparent_38%)]" />
@@ -1019,6 +1155,24 @@ export default function CampaignTab() {
           </div>
         </div>
       </article>
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-black/70 backdrop-blur-md">
+        <div className="container mx-auto flex items-center justify-between gap-3 px-4 py-3 lg:px-8">
+          <p className={`text-[11px] font-semibold uppercase tracking-[0.13em] ${
+            hasCampaignChanges ? 'text-amber-200' : 'text-emerald-200'
+          }`}>
+            {hasCampaignChanges ? 'Alteracoes pendentes para salvar.' : 'Nenhuma alteracao pendente.'}
+          </p>
+          <button
+            className="inline-flex h-11 items-center rounded-lg bg-gold px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition-colors hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-70"
+            type="button"
+            disabled={isLoading || isSaving || !hasCampaignChanges}
+            onClick={handleSaveCampaignSettings}
+          >
+            {saveButtonLabel}
+          </button>
+        </div>
+      </div>
     </section>
   )
 }

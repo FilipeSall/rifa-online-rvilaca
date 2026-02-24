@@ -60,6 +60,7 @@ export const ANNOUNCEMENT_URGENCY_TEXT =
 export const HEADER_NAV_ITEMS: NavItem[] = [
   { label: 'Início', href: '#', isActive: true },
   { label: 'Prêmios', href: '/premios', isActive: false },
+  { label: 'Ranking', href: '#ganhadores', isActive: false },
   { label: 'Ganhadores', href: '/resultado', isActive: false },
   { label: 'FAQ', href: '#faq', isActive: false },
 ]
@@ -143,6 +144,10 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     q: 'Se não houver correspondência direta na primeira tentativa, o que acontece?',
     a: 'É aplicada a regra de redundância: a apuração avança pelas extrações seguintes e, se necessário, utiliza o critério de fallback previsto no regulamento para garantir ganhador na rodada.',
+  },
+  {
+    q: 'Como funciona a reserva dos meus números?',
+    a: 'Ao avançar para a tela de pagamento, seus números ficam reservados exclusivamente para você por 5 minutos — tempo suficiente para concluir o PIX. Caso o pagamento não seja confirmado nesse período, a reserva é liberada automaticamente e os números voltam a ficar disponíveis para outros participantes.',
   },
   {
     q: 'Como recebo meu prêmio?',

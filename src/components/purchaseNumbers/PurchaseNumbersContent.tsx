@@ -42,6 +42,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     isReserving,
     isAutoSelecting,
     shouldHighlightSelectedNumbers,
+    shouldHighlightAutoButton,
     handleSetQuantity,
     handleClearSelectedNumbers,
     handleToggleNumber,
@@ -82,6 +83,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
             totalPages={totalPages}
             isPageLoading={isPageLoading}
             isManualAdding={isManualAdding}
+            shouldHighlightAutoButton={shouldHighlightAutoButton}
             onSelectionModeChange={setSelectionMode}
             onToggleNumber={handleToggleNumber}
             onLoadPreviousPage={handleLoadPreviousPage}

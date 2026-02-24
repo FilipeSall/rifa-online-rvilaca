@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { NumberSlot, SelectionMode } from '../../types/purchaseNumbers'
 import { formatTicketNumber } from '../../utils/ticketNumber'
 
@@ -20,6 +20,7 @@ type NumberSelectionCardProps = {
   totalPages: number
   isPageLoading: boolean
   isManualAdding: boolean
+  shouldHighlightAutoButton: boolean
   onSelectionModeChange: (mode: SelectionMode) => void
   onToggleNumber: (slot: NumberSlot) => void
   onLoadPreviousPage: () => void
@@ -59,6 +60,7 @@ export default function NumberSelectionCard({
   totalPages,
   isPageLoading,
   isManualAdding,
+  shouldHighlightAutoButton,
   onSelectionModeChange,
   onToggleNumber,
   onLoadPreviousPage,
@@ -69,10 +71,17 @@ export default function NumberSelectionCard({
 }: NumberSelectionCardProps) {
   const [pageInput, setPageInput] = useState(String(currentPage))
   const [manualNumberInput, setManualNumberInput] = useState('')
+  const autoButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     setPageInput(String(currentPage))
   }, [currentPage])
+
+  useEffect(() => {
+    if (shouldHighlightAutoButton) {
+      autoButtonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [shouldHighlightAutoButton])
 
   const displayedRange = useMemo(
     () => `${formatTicketNumber(pageStart ?? 0)} - ${formatTicketNumber(pageEnd ?? 0)}`,
@@ -83,14 +92,21 @@ export default function NumberSelectionCard({
     [rangeEnd, rangeStart],
   )
 
-  const handleSubmitPage = () => {
+  const onGoToPageRef = useRef(onGoToPage)
+  onGoToPageRef.current = onGoToPage
+
+  useEffect(() => {
     const parsed = Number(pageInput)
-    if (!Number.isInteger(parsed)) {
+    if (!pageInput || !Number.isInteger(parsed) || parsed === currentPage) {
       return
     }
 
-    onGoToPage(parsed)
-  }
+    const timer = window.setTimeout(() => {
+      onGoToPageRef.current(parsed)
+    }, 600)
+
+    return () => window.clearTimeout(timer)
+  }, [pageInput, currentPage])
 
   const handleSubmitManualNumber = () => {
     const parsed = Number(manualNumberInput)
@@ -113,9 +129,10 @@ export default function NumberSelectionCard({
           <h2 className="text-xl font-bold text-white">Escolha seus numeros com controle total</h2>
           <div className="inline-flex rounded-xl border border-white/10 bg-luxury-bg p-1">
             <button
-              className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-widest transition-colors ${
+              ref={autoButtonRef}
+              className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-widest transition-all ${
                 selectionMode === 'automatico' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'
-              }`}
+              } ${shouldHighlightAutoButton ? 'ring-2 ring-white ring-offset-1 ring-offset-luxury-bg scale-105' : ''}`}
               type="button"
               onClick={() => onSelectionModeChange('automatico')}
             >
@@ -157,7 +174,7 @@ export default function NumberSelectionCard({
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-3 rounded-2xl border border-white/10 bg-gradient-to-r from-black/35 via-black/20 to-black/35 p-4 lg:grid-cols-12">
-          <div className="space-y-2 lg:col-span-3">
+          <div className="space-y-2 lg:col-span-5">
             <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Navegacao</p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -176,27 +193,13 @@ export default function NumberSelectionCard({
               >
                 Proxima pagina
               </button>
-            </div>
-          </div>
-
-          <div className="space-y-2 lg:col-span-2">
-            <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Ir para pagina</p>
-            <div className="flex gap-2">
               <input
-                className="h-10 w-24 rounded-lg border border-white/15 bg-black/25 px-3 text-sm font-semibold text-white outline-none transition focus:border-gold"
+                className="h-10 w-20 rounded-lg border border-white/15 bg-black/25 px-3 text-sm font-semibold text-white outline-none transition focus:border-gold"
                 inputMode="numeric"
                 type="text"
                 value={pageInput}
                 onChange={(event) => setPageInput(event.target.value.replace(/[^0-9]/g, ''))}
               />
-              <button
-                className="h-10 rounded-lg border border-gold/30 bg-gold/10 px-4 text-[11px] font-bold uppercase tracking-wider text-gold transition hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-40"
-                type="button"
-                onClick={handleSubmitPage}
-                disabled={isPageLoading}
-              >
-                Ir
-              </button>
             </div>
           </div>
 

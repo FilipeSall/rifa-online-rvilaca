@@ -167,6 +167,7 @@ export function usePurchaseNumbers() {
   const [hasExpiredReservation, setHasExpiredReservation] = useState(false)
   const [isReserving, setIsReserving] = useState(false)
   const [shouldHighlightSelectedNumbers, setShouldHighlightSelectedNumbers] = useState(false)
+  const [shouldHighlightAutoButton, setShouldHighlightAutoButton] = useState(false)
   const pageRequestIdRef = useRef(0)
   const autoSelectRequestIdRef = useRef(0)
   const selectedNumbersRef = useRef<number[]>(selectedNumbers)
@@ -429,6 +430,10 @@ export function usePurchaseNumbers() {
     setShouldHighlightSelectedNumbers(true)
   }, [])
 
+  const triggerAutoButtonHighlight = useCallback(() => {
+    setShouldHighlightAutoButton(true)
+  }, [])
+
   useEffect(() => {
     if (!shouldHighlightSelectedNumbers) {
       return
@@ -440,6 +445,18 @@ export function usePurchaseNumbers() {
 
     return () => window.clearTimeout(timer)
   }, [shouldHighlightSelectedNumbers])
+
+  useEffect(() => {
+    if (!shouldHighlightAutoButton) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setShouldHighlightAutoButton(false)
+    }, 2000)
+
+    return () => window.clearTimeout(timer)
+  }, [shouldHighlightAutoButton])
 
   const handleSelectionModeChange = useCallback(
     (mode: SelectionMode) => {
@@ -478,7 +495,8 @@ export function usePurchaseNumbers() {
       if (selectionMode === 'automatico') {
         if (selectedNumbers.length >= quantity) {
           triggerSelectedNumbersHighlight()
-          toast.warning('Limite de numeros atingido. Limpe os selecionados para continuar.', {
+          triggerAutoButtonHighlight()
+          toast.warning('Numeros ja pre-selecionados! Quer escolher os seus? Mude para Manual ou limpe a selecao.', {
             position: 'bottom-right',
             toastId: 'selection-max-reached',
           })
@@ -495,7 +513,8 @@ export function usePurchaseNumbers() {
 
         if (currentSelection.length >= quantity) {
           triggerSelectedNumbersHighlight()
-          toast.warning('Limite de numeros atingido. Limpe os selecionados para continuar.', {
+          triggerAutoButtonHighlight()
+          toast.warning('Numeros ja pre-selecionados! Quer escolher os seus? Mude para Manual ou limpe a selecao.', {
             position: 'bottom-right',
             toastId: 'selection-max-reached',
           })
@@ -506,7 +525,7 @@ export function usePurchaseNumbers() {
       })
       clearReservationState()
     },
-    [clearReservationState, quantity, selectedNumbers.length, selectionMode, triggerSelectedNumbersHighlight],
+    [clearReservationState, quantity, selectedNumbers.length, selectionMode, triggerSelectedNumbersHighlight, triggerAutoButtonHighlight],
   )
 
   const totalPages = useMemo(() => {
@@ -784,6 +803,7 @@ export function usePurchaseNumbers() {
     canProceed,
     isReserving,
     shouldHighlightSelectedNumbers,
+    shouldHighlightAutoButton,
     handleSetQuantity,
     handleClearSelectedNumbers,
     handleToggleNumber,

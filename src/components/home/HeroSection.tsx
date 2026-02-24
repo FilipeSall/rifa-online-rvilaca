@@ -3,21 +3,12 @@ import { useHeroSection } from '../../hooks/useHeroSection'
 import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 import { DEFAULT_BONUS_PRIZE, DEFAULT_CAMPAIGN_TITLE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../const/campaign'
 import { usePublicSalesSnapshot } from '../../hooks/usePublicSalesSnapshot'
-import slideOne from '../../assets/IMG_9379.webp'
-import slideTwo from '../../assets/IMG_9400.webp'
-import slideThree from '../../assets/IMG_9390.webp'
 import Skeleton from 'react-loading-skeleton'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import { Autoplay, Pagination } from 'swiper/modules'
 import 'swiper/css'
 import 'swiper/css/pagination'
 import 'react-loading-skeleton/dist/skeleton.css'
-
-const HERO_CAROUSEL_FALLBACK_IMAGES = [
-  { src: slideTwo, alt: 'Imagem principal da campanha' },
-  { src: slideOne, alt: 'Detalhe do premio principal' },
-  { src: slideThree, alt: 'Visual lateral do premio principal' },
-]
 
 function getDemandMessaging(soldPercentage: number) {
   if (soldPercentage >= 85) {
@@ -84,19 +75,13 @@ export default function HeroSection() {
   const totalCotasFormatted = totalNumbers.toLocaleString('pt-BR')
   const demandMessaging = getDemandMessaging(soldPercentage)
   const heroCarouselImages = useMemo(() => {
-    const fromCampaign = campaign.midias.heroCarousel
+    return campaign.midias.heroCarousel
       .filter((item) => item.active && !!item.url)
       .sort((a, b) => a.order - b.order)
       .map((item, index) => ({
         src: item.url,
         alt: item.alt || `Slide da campanha ${index + 1}`,
       }))
-
-    if (fromCampaign.length > 0) {
-      return fromCampaign
-    }
-
-    return HERO_CAROUSEL_FALLBACK_IMAGES
   }, [campaign.midias.heroCarousel])
 
   const handleImageLoaded = useCallback((imageSrc: string) => {
@@ -199,46 +184,52 @@ export default function HeroSection() {
           <div className="lg:col-span-6 relative order-1 lg:order-2">
             <div className="absolute inset-0 bg-gold/20 blur-[100px] rounded-full opacity-20" />
             <div className="relative z-10 w-full max-w-[680px] mx-auto aspect-square hero-carousel-frame">
-              <Swiper
-                modules={[Autoplay, Pagination]}
-                autoplay={{
-                  delay: 5000,
-                  disableOnInteraction: false,
-                  pauseOnMouseEnter: true,
-                }}
-                className="hero-carousel-swiper"
-                loop
-                pagination={{
-                  clickable: true,
-                }}
-                slidesPerView={1}
-                speed={700}
-              >
-                {heroCarouselImages.map((image, index) => (
-                  <SwiperSlide key={`${image.src}-${index}`} className="relative h-full">
-                    <div className="hero-carousel-slide-overlay" aria-hidden="true" />
-                    {!loadedImages[image.src] ? (
-                      <div className="absolute inset-0 z-10">
-                        <Skeleton
-                          baseColor="rgba(17, 24, 39, 0.95)"
-                          className="block h-full w-full"
-                          highlightColor="rgba(55, 65, 81, 0.75)"
-                        />
-                      </div>
-                    ) : null}
-                    <img
-                      alt={image.alt}
-                      className={`hero-carousel-image transition-opacity duration-500 ${
-                        loadedImages[image.src] ? 'opacity-100' : 'opacity-0'
-                      }`}
-                      loading={index === 0 ? 'eager' : 'lazy'}
-                      onError={() => handleImageLoaded(image.src)}
-                      onLoad={() => handleImageLoaded(image.src)}
-                      src={image.src}
-                    />
-                  </SwiperSlide>
-                ))}
-              </Swiper>
+              {heroCarouselImages.length > 0 ? (
+                <Swiper
+                  modules={[Autoplay, Pagination]}
+                  autoplay={heroCarouselImages.length > 1 ? {
+                    delay: 5000,
+                    disableOnInteraction: false,
+                    pauseOnMouseEnter: true,
+                  } : false}
+                  className="hero-carousel-swiper"
+                  loop={heroCarouselImages.length > 1}
+                  pagination={{
+                    clickable: true,
+                  }}
+                  slidesPerView={1}
+                  speed={700}
+                >
+                  {heroCarouselImages.map((image, index) => (
+                    <SwiperSlide key={`${image.src}-${index}`} className="relative h-full">
+                      <div className="hero-carousel-slide-overlay" aria-hidden="true" />
+                      {!loadedImages[image.src] ? (
+                        <div className="absolute inset-0 z-10">
+                          <Skeleton
+                            baseColor="rgba(17, 24, 39, 0.95)"
+                            className="block h-full w-full"
+                            highlightColor="rgba(55, 65, 81, 0.75)"
+                          />
+                        </div>
+                      ) : null}
+                      <img
+                        alt={image.alt}
+                        className={`hero-carousel-image transition-opacity duration-500 ${
+                          loadedImages[image.src] ? 'opacity-100' : 'opacity-0'
+                        }`}
+                        loading={index === 0 ? 'eager' : 'lazy'}
+                        onError={() => handleImageLoaded(image.src)}
+                        onLoad={() => handleImageLoaded(image.src)}
+                        src={image.src}
+                      />
+                    </SwiperSlide>
+                  ))}
+                </Swiper>
+              ) : (
+                <div className="flex h-full w-full items-center justify-center rounded-[28px] border border-white/10 bg-black/35 px-6 text-center text-sm text-gray-400">
+                  Nenhum slide ativo na campanha.
+                </div>
+              )}
 
               {/* Stars + moto name overlay — bottom of the image */}
               <div className="absolute z-20 bottom-0 left-0 right-0 px-6 pb-4 flex flex-col gap-2 pointer-events-none">
