@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useScrollToHash } from '../hooks/useScrollToHash'
 import AnnouncementBar from '../components/home/AnnouncementBar'
 import Footer from '../components/home/Footer'
@@ -7,10 +8,27 @@ import TrustBadgesSection from '../components/home/TrustBadgesSection'
 import WinnersFaqSection from '../components/home/WinnersFaqSection'
 import { PurchaseHeroSection, PurchaseNumbersContent } from '../components/purchaseNumbers'
 import { usePurchaseNumbers } from '../hooks/usePurchaseNumbers'
+import { applyCampaignShareMeta, buildCampaignShareMeta } from '../utils/shareMeta'
 
 export default function HomePage() {
   useScrollToHash()
   const purchaseState = usePurchaseNumbers()
+
+  useEffect(() => {
+    const shareMeta = buildCampaignShareMeta({
+      campaignTitle: purchaseState.campaign.title,
+      mainPrize: purchaseState.campaign.mainPrize,
+      secondPrize: purchaseState.campaign.secondPrize,
+      bonusPrize: purchaseState.campaign.bonusPrize,
+    })
+
+    applyCampaignShareMeta(shareMeta)
+  }, [
+    purchaseState.campaign.bonusPrize,
+    purchaseState.campaign.mainPrize,
+    purchaseState.campaign.secondPrize,
+    purchaseState.campaign.title,
+  ])
 
   return (
     <div className="bg-luxury-bg font-display text-text-main overflow-x-hidden selection:bg-gold selection:text-black">

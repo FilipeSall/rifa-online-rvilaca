@@ -5,6 +5,7 @@ import {
   deleteUser,
   fetchSignInMethodsForEmail,
   getRedirectResult,
+  sendPasswordResetEmail,
   sendEmailVerification,
   signOut,
   signInWithRedirect,
@@ -20,7 +21,8 @@ import { toast } from 'react-toastify'
 import { OPEN_AUTH_MODAL_EVENT } from '../const/auth'
 import { auth, db } from '../lib/firebase'
 import { useAuthStore } from '../stores/authStore'
-import { getEmailAuthErrorMessage, getGoogleAuthErrorMessage } from '../utils/home'
+import { getEmailAuthErrorMessage, getGoogleAuthErrorMessage, getPasswordResetAuthErrorMessage } from '../utils/home'
+import { buildUserSearchFields } from '../utils/userSearch'
 
 const googleProvider = new GoogleAuthProvider()
 googleProvider.setCustomParameters({ prompt: 'select_account' })
@@ -30,7 +32,7 @@ const GOOGLE_POPUP_FALLBACK_CODES = new Set([
   'auth/operation-not-supported-in-this-environment',
 ])
 const MOBILE_USER_AGENT_REGEX = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i
-const GOOGLE_AUTH_FLOW = `${import.meta.env.VITE_FIREBASE_GOOGLE_AUTH_FLOW ?? 'redirect'}`.toLowerCase()
+const GOOGLE_AUTH_FLOW = `${import.meta.env.VITE_FIREBASE_GOOGLE_AUTH_FLOW ?? 'auto'}`.toLowerCase()
 
 function shouldPreferGoogleRedirectFlow() {
   if (GOOGLE_AUTH_FLOW === 'popup') {
@@ -71,6 +73,14 @@ function getVerificationActionSettings() {
   const origin = window.location.origin.replace(/\/+$/, '')
   return {
     url: `${origin}/?email_verified=1`,
+    handleCodeInApp: false,
+  }
+}
+
+function getPasswordResetActionSettings() {
+  const origin = window.location.origin.replace(/\/+$/, '')
+  return {
+    url: `${origin}/?password_reset=1`,
     handleCodeInApp: false,
   }
 }
@@ -142,6 +152,41 @@ async function sendVerificationEmailWithFallback(user: User) {
   }
 }
 
+async function sendPasswordResetEmailWithFallback(email: string) {
+  const actionSettings = getPasswordResetActionSettings()
+
+  try {
+    await sendPasswordResetEmail(auth, email, actionSettings)
+    console.info('[auth:password-reset] sent_with_action_settings', {
+      email,
+      actionUrl: actionSettings.url,
+    })
+    return { sent: true, usedFallback: false, error: null as unknown }
+  } catch (error) {
+    console.error('[auth:password-reset] send_failed_with_action_settings', {
+      email,
+      actionUrl: actionSettings.url,
+      ...getAuthErrorDebugData(error),
+    })
+
+    if (!isContinueUriError(error)) {
+      return { sent: false, usedFallback: false, error }
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, email)
+      console.info('[auth:password-reset] sent_with_default_fallback', { email })
+      return { sent: true, usedFallback: true, error: null as unknown }
+    } catch (fallbackError) {
+      console.error('[auth:password-reset] fallback_send_failed', {
+        email,
+        ...getAuthErrorDebugData(fallbackError),
+      })
+      return { sent: false, usedFallback: true, error: fallbackError }
+    }
+  }
+}
+
 function isPasswordProviderUser(user: User) {
   return user.providerData.some((provider) => provider.providerId === 'password')
 }
@@ -165,8 +210,9 @@ async function sendPasswordSignupVerificationEmail(user: User) {
 
 export function useHeaderAuth() {
   const navigate = useNavigate()
-  const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
+  const storeIsLoggedIn = useAuthStore((state) => state.isLoggedIn)
   const userRole = useAuthStore((state) => state.userRole)
+  const setAuthUser = useAuthStore((state) => state.setAuthUser)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [isSigningIn, setIsSigningIn] = useState(false)
   const [isEmailFormOpen, setIsEmailFormOpen] = useState(false)
@@ -176,6 +222,7 @@ export function useHeaderAuth() {
   const [cpfValue, setCpfValue] = useState('')
   const [phoneValue, setPhoneValue] = useState('')
   const [isEmailSubmitting, setIsEmailSubmitting] = useState(false)
+  const [isPasswordResetSubmitting, setIsPasswordResetSubmitting] = useState(false)
   const [googleAuthError, setGoogleAuthError] = useState<string | null>(null)
   const [emailAuthError, setEmailAuthError] = useState<string | null>(null)
   const authMenuRef = useRef<HTMLDivElement>(null)
@@ -190,6 +237,7 @@ export function useHeaderAuth() {
     setCpfValue('')
     setPhoneValue('')
     setIsEmailSubmitting(false)
+    setIsPasswordResetSubmitting(false)
     setGoogleAuthError(null)
     setEmailAuthError(null)
   }, [])
@@ -200,6 +248,17 @@ export function useHeaderAuth() {
     setIsSigningIn(false)
     setIsAuthModalOpen(true)
   }, [])
+
+  const isLoggedIn = storeIsLoggedIn || Boolean(auth.currentUser)
+
+  useEffect(() => {
+    const currentAuthUser = auth.currentUser
+    if (storeIsLoggedIn || !currentAuthUser) {
+      return
+    }
+
+    setAuthUser(currentAuthUser)
+  }, [setAuthUser, storeIsLoggedIn])
 
   useEffect(() => {
     if (isLoggedIn && !isEmailSubmitting) {
@@ -254,7 +313,11 @@ export function useHeaderAuth() {
 
     const resolveGoogleRedirect = async () => {
       try {
-        await getRedirectResult(auth)
+        const redirectResult = await getRedirectResult(auth)
+
+        if (redirectResult?.user) {
+          setAuthUser(redirectResult.user)
+        }
       } catch (error) {
         if (!isMounted) {
           return
@@ -270,7 +333,7 @@ export function useHeaderAuth() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [setAuthUser])
 
   const handleAuthButtonClick = useCallback(() => {
     if (isLoggedIn) {
@@ -292,7 +355,9 @@ export function useHeaderAuth() {
     setEmailAuthError(null)
 
     try {
-      if (shouldPreferGoogleRedirectFlow()) {
+      const useRedirectFlow = shouldPreferGoogleRedirectFlow()
+
+      if (useRedirectFlow) {
         closeAuthModal()
         await signInWithRedirect(auth, googleProvider)
         return
@@ -344,6 +409,54 @@ export function useHeaderAuth() {
     setEmailAuthError(null)
     setGoogleAuthError(null)
   }, [])
+
+  const handlePasswordResetRequest = useCallback(async () => {
+    const normalizedEmail = emailValue.trim().toLowerCase()
+    if (!normalizedEmail) {
+      setEmailAuthError('Informe seu email para recuperar a senha.')
+      return
+    }
+
+    setIsPasswordResetSubmitting(true)
+    setEmailAuthError(null)
+    setGoogleAuthError(null)
+
+    try {
+      const resetResult = await sendPasswordResetEmailWithFallback(normalizedEmail)
+      if (resetResult.sent) {
+        const successMessage = resetResult.usedFallback
+          ? 'Se existir conta para este email, enviamos o link de recuperação usando o fluxo padrão do Firebase.'
+          : 'Se existir conta para este email, enviamos um link de recuperação de senha.'
+
+        toast.success(successMessage, {
+          position: 'bottom-right',
+        })
+        return
+      }
+
+      const currentAuthError = resetResult.error as AuthError
+      if (currentAuthError?.code === 'auth/user-not-found') {
+        toast.success('Se existir conta para este email, enviamos um link de recuperação de senha.', {
+          position: 'bottom-right',
+        })
+        return
+      }
+
+      setEmailAuthError(getPasswordResetAuthErrorMessage(currentAuthError?.code))
+    } catch (error) {
+      const currentAuthError = error as AuthError
+      if (currentAuthError?.code === 'auth/user-not-found') {
+        toast.success('Se existir conta para este email, enviamos um link de recuperação de senha.', {
+          position: 'bottom-right',
+        })
+        return
+      }
+
+      setEmailAuthError(getPasswordResetAuthErrorMessage(currentAuthError?.code))
+    } finally {
+      setIsPasswordResetSubmitting(false)
+    }
+  }, [emailValue])
 
   const handleEmailAuthSubmit = useCallback(
     async (event: SyntheticEvent<HTMLFormElement>) => {
@@ -402,6 +515,12 @@ export function useHeaderAuth() {
               email: normalizedEmail,
               cpf: sanitizedCpf,
               phone: sanitizedPhone,
+              ...buildUserSearchFields({
+                name: profileName,
+                email: normalizedEmail,
+                cpf: sanitizedCpf,
+                phone: sanitizedPhone,
+              }),
               role: 'user',
               providerIds: ['password'],
               lastLoginAt: serverTimestamp(),
@@ -496,6 +615,7 @@ export function useHeaderAuth() {
     cpfValue,
     phoneValue,
     isEmailSubmitting,
+    isPasswordResetSubmitting,
     googleAuthError,
     emailAuthError,
     authMenuRef,
@@ -504,6 +624,7 @@ export function useHeaderAuth() {
     handleSignOut,
     handleEmailOptionClick,
     handleCreateAccountClick,
+    handlePasswordResetRequest,
     handleEmailAuthSubmit,
     setEmailValue,
     setPasswordValue,

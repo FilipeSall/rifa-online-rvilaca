@@ -40,6 +40,13 @@ import {
   createReleaseReservationHandler,
   createReserveNumbersHandler,
 } from './lib/reservationHandlers.js'
+import {
+  createClearOrderHistoryAdminHandler,
+  createCleanupLegacyUserOrdersFieldHandler,
+  createGetAdminUserDetailsHandler,
+  createSearchAdminUsersHandler,
+  createUpdateAdminUserRoleHandler,
+} from './lib/userAdminHandlers.js'
 
 initializeApp()
 
@@ -119,6 +126,11 @@ export const getPublicMainRaffleDrawHistory = onCall(
   callableOptions,
   createGetPublicMainRaffleDrawHistoryHandler(db),
 )
+export const searchAdminUsers = onCall(callableOptions, createSearchAdminUsersHandler(db))
+export const getAdminUserDetails = onCall(callableOptions, createGetAdminUserDetailsHandler(db))
+export const updateAdminUserRole = onCall(callableOptions, createUpdateAdminUserRoleHandler(db))
+export const cleanupLegacyUserOrdersField = onCall(callableOptions, createCleanupLegacyUserOrdersFieldHandler(db))
+export const clearOrderHistoryAdmin = onCall(callableOptions, createClearOrderHistoryAdminHandler(db))
 
 export const pixWebhook = onRequest(
   { region: REGION, secrets: [HORSEPAY_WEBHOOK_TOKEN] },

@@ -1,6 +1,7 @@
 import type { User } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
+import { buildUserSearchFields } from '../../utils/userSearch'
 
 export async function upsertUserProfile(user: User) {
   const userRef = doc(db, 'users', user.uid)
@@ -13,12 +14,18 @@ export async function upsertUserProfile(user: User) {
   } catch {
     existingRole = null
   }
+  const normalizedRole = existingRole === 'admin' ? 'admin' : 'user'
   const profilePayload = {
     uid: user.uid,
     name: user.displayName || fallbackName,
     email: user.email || null,
+    ...buildUserSearchFields({
+      name: user.displayName || fallbackName,
+      email: user.email || null,
+    }),
     ...(user.phoneNumber ? { phone: user.phoneNumber } : {}),
-    ...(existingRole ? { role: existingRole } : { role: 'user' }),
+    ...(user.phoneNumber ? buildUserSearchFields({ phone: user.phoneNumber }) : {}),
+    role: normalizedRole,
     photoURL: user.photoURL || null,
     providerIds: user.providerData.map((provider) => provider.providerId),
     createdAtAuth: user.metadata.creationTime || null,

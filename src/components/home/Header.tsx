@@ -22,6 +22,7 @@ export default function Header() {
     cpfValue,
     phoneValue,
     isEmailSubmitting,
+    isPasswordResetSubmitting,
     googleAuthError,
     emailAuthError,
     authMenuRef,
@@ -30,6 +31,7 @@ export default function Header() {
     handleSignOut,
     handleEmailOptionClick,
     handleCreateAccountClick,
+    handlePasswordResetRequest,
     handleEmailAuthSubmit,
     setEmailValue,
     setPasswordValue,
@@ -37,6 +39,7 @@ export default function Header() {
     setPhoneValue,
   } = useHeaderAuth()
   const isHomePage = location.pathname === '/'
+  const authButtonLabel = isLoggedIn ? (userRole === 'admin' ? 'Dashboard' : 'Minha conta') : 'Entrar'
 
   const formatPhone = (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 11)
@@ -122,7 +125,7 @@ export default function Header() {
               aria-expanded={isAuthModalOpen}
               aria-haspopup={!isLoggedIn}
             >
-              {isLoggedIn ? (userRole === 'admin' ? 'Dashboard' : 'Minha conta') : 'Entrar'}
+              {authButtonLabel}
             </button>
             {!isLoggedIn && isAuthModalOpen ? (
               <div className="absolute right-4 top-[calc(100%-0.35rem)] w-[310px] overflow-hidden rounded-xl border border-gold/30 bg-luxury-card/95 p-3 shadow-2xl backdrop-blur-md md:right-8 lg:right-8">
@@ -183,7 +186,7 @@ export default function Header() {
                         value={emailValue}
                         onChange={(event) => setEmailValue(event.target.value)}
                         autoComplete="email"
-                        disabled={!isEmailFormOpen || isEmailSubmitting}
+                        disabled={!isEmailFormOpen || isEmailSubmitting || isPasswordResetSubmitting}
                         required={isEmailFormOpen}
                       />
                     </div>
@@ -196,10 +199,22 @@ export default function Header() {
                         value={passwordValue}
                         onChange={(event) => setPasswordValue(event.target.value)}
                         autoComplete={isCreatingAccount ? 'new-password' : 'current-password'}
-                        disabled={!isEmailFormOpen || isEmailSubmitting}
+                        disabled={!isEmailFormOpen || isEmailSubmitting || isPasswordResetSubmitting}
                         required={isEmailFormOpen}
                       />
                     </div>
+                    {!isCreatingAccount ? (
+                      <div className="flex justify-end">
+                        <button
+                          className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold/80 transition-colors hover:text-gold disabled:cursor-not-allowed disabled:opacity-60"
+                          type="button"
+                          onClick={() => void handlePasswordResetRequest()}
+                          disabled={!isEmailFormOpen || isEmailSubmitting || isPasswordResetSubmitting}
+                        >
+                          {isPasswordResetSubmitting ? 'Enviando link...' : 'Esqueci minha senha'}
+                        </button>
+                      </div>
+                    ) : null}
                     {isCreatingAccount ? (
                       <div className="space-y-2">
                         <label className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/50">Telefone</label>
@@ -210,7 +225,7 @@ export default function Header() {
                           placeholder="(00) 00000-0000"
                           value={formatPhone(phoneValue)}
                           onChange={(event) => setPhoneValue(event.target.value.replace(/\D/g, '').slice(0, 11))}
-                          disabled={!isEmailFormOpen || isEmailSubmitting}
+                          disabled={!isEmailFormOpen || isEmailSubmitting || isPasswordResetSubmitting}
                           required={isEmailFormOpen && isCreatingAccount}
                         />
                       </div>
@@ -225,7 +240,7 @@ export default function Header() {
                           placeholder="000.000.000-00"
                           value={formatCpfInput(cpfValue)}
                           onChange={(event) => setCpfValue(event.target.value.replace(/\D/g, '').slice(0, 11))}
-                          disabled={!isEmailFormOpen || isEmailSubmitting}
+                          disabled={!isEmailFormOpen || isEmailSubmitting || isPasswordResetSubmitting}
                           required={isEmailFormOpen && isCreatingAccount}
                         />
                       </div>
@@ -233,7 +248,7 @@ export default function Header() {
                     <button
                       className="flex h-10 w-full items-center justify-center rounded bg-gold px-4 text-xs font-black uppercase tracking-widest text-black transition-all hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-70"
                       type="submit"
-                      disabled={!isEmailFormOpen || isEmailSubmitting}
+                      disabled={!isEmailFormOpen || isEmailSubmitting || isPasswordResetSubmitting}
                     >
                       {isEmailSubmitting ? 'Enviando...' : isCreatingAccount ? 'Criar conta' : 'Entrar'}
                     </button>
@@ -287,7 +302,7 @@ export default function Header() {
                 setIsMobileMenuOpen(false)
               }}
             >
-              {isLoggedIn ? (userRole === 'admin' ? 'Dashboard' : 'Minha conta') : 'Entrar'}
+              {authButtonLabel}
             </button>
             {isLoggedIn ? (
               <button

@@ -350,6 +350,9 @@ Faixa atual de runtime:
 - Alterou secrets? atualizar deploy de secrets no Firebase.
 - Evitar logs com PII em claro (ha mascaramento em varios pontos do backend).
 - Nao expor chaves/credentials no repositorio.
+- Na aba admin de usuarios, campo `role` deve usar o componente `src/components/ui/CustomSelect.tsx` (nao usar `<select>` nativo).
+- Nao reintroduzir botao de limpeza de campo legado na UI de usuarios. Se precisar manutencao de legado, fazer via endpoint/script controlado.
+- Em cards de status da campanha (ex.: "Agendada"), priorizar grid responsivo em breakpoints intermediarios para evitar compressao de texto.
 
 ## 14) Ordem recomendada para agentes ao pegar tasks
 

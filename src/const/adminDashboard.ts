@@ -1,4 +1,4 @@
-export type AdminTabId = 'dashboard' | 'campanha' | 'sorteio-top' | 'sorteio-geral'
+export type AdminTabId = 'dashboard' | 'campanha' | 'usuarios' | 'sorteio-top' | 'sorteio-geral'
 
 export type AdminTab = {
   id: AdminTabId
@@ -9,6 +9,7 @@ export type AdminTab = {
 export const ADMIN_TABS: AdminTab[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
   { id: 'campanha', label: 'Campanha', icon: 'campaign' },
+  { id: 'usuarios', label: 'Usuários', icon: 'group' },
   { id: 'sorteio-top', label: 'Sorteio TOP', icon: 'workspace_premium' },
   { id: 'sorteio-geral', label: 'Sorteio Principal', icon: 'emoji_events' },
 ]

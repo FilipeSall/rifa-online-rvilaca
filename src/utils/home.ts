@@ -93,3 +93,23 @@ export function getEmailAuthErrorMessage(code: string, isCreatingAccount: boolea
 
   return isCreatingAccount ? 'Não foi possível criar sua conta agora.' : 'Não foi possível entrar agora.'
 }
+
+export function getPasswordResetAuthErrorMessage(code?: string): string {
+  if (code === 'auth/invalid-email') {
+    return 'Digite um email válido para recuperar sua senha.'
+  }
+
+  if (code === 'auth/missing-email') {
+    return 'Informe seu email para recuperar a senha.'
+  }
+
+  if (code === 'auth/too-many-requests') {
+    return 'Muitas solicitações de recuperação. Aguarde um pouco e tente novamente.'
+  }
+
+  if (code === 'auth/network-request-failed') {
+    return 'Falha de rede ao enviar recuperação de senha. Tente novamente.'
+  }
+
+  return 'Não foi possível enviar o email de recuperação agora.'
+}

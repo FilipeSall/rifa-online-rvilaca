@@ -9,7 +9,7 @@ import { useAuthStore } from '../stores/authStore'
 
 function resolveDashboardTabFromSearch(search: string): AdminTabId | null {
   const tab = new URLSearchParams(search).get('tab')
-  if (tab === 'dashboard' || tab === 'campanha' || tab === 'sorteio-top' || tab === 'sorteio-geral') {
+  if (tab === 'dashboard' || tab === 'campanha' || tab === 'usuarios' || tab === 'sorteio-top' || tab === 'sorteio-geral') {
     return tab
   }
 

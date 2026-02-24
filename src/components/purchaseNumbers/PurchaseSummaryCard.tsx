@@ -75,17 +75,17 @@ export default function PurchaseSummaryCard({
         <label className="text-[10px] uppercase tracking-[0.18em] text-gray-500" htmlFor="coupon-code">
           Cupom de desconto
         </label>
-        <div className="mt-2 flex gap-2">
+        <div className="mt-2 flex gap-2 max-[419px]:flex-col">
           <input
             id="coupon-code"
-            className="h-10 flex-1 rounded border border-white/15 bg-luxury-card px-3 text-sm text-white outline-none focus:border-gold"
+            className="h-10 flex-1 rounded border border-white/15 bg-luxury-card px-3 text-sm text-white outline-none focus:border-gold max-[419px]:w-full"
             type="text"
             placeholder="Ex: PIX10"
             value={couponCode}
             onChange={(event) => onCouponCodeChange(event.target.value)}
           />
           <button
-            className="h-10 rounded bg-gold px-4 text-xs font-black uppercase tracking-widest text-black hover:bg-gold-hover disabled:opacity-40 disabled:cursor-not-allowed"
+            className="h-10 rounded bg-gold px-4 text-xs font-black uppercase tracking-widest text-black hover:bg-gold-hover disabled:opacity-40 disabled:cursor-not-allowed max-[419px]:w-full"
             type="button"
             onClick={onApplyCoupon}
             disabled={!couponCode.trim() || selectedCount === 0}

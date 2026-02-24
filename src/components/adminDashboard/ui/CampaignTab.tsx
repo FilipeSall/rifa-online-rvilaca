@@ -697,14 +697,14 @@ export default function CampaignTab() {
               Configure preço, compra mínima e cupons da campanha em tempo real.
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
             <div className="rounded-xl border border-gold/20 bg-black/40 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Preço atual</p>
               <p className="mt-1 text-lg font-black text-gold">{formatCurrency(campaign.pricePerCota)}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-black/40 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Status</p>
-              <p className={`mt-1 text-lg font-black ${scheduleStatusColorClassName}`}>
+              <p className={`mt-1 break-words text-base font-black leading-tight sm:text-lg ${scheduleStatusColorClassName}`}>
                 {getScheduleStatusLabel(scheduleStatus)}
               </p>
             </div>
@@ -716,7 +716,7 @@ export default function CampaignTab() {
               <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200">Cupons ativos</p>
               <p className="mt-1 text-lg font-black text-cyan-100">{activeCoupons}</p>
             </div>
-            <div className="rounded-xl border border-amber-300/25 bg-amber-500/10 px-4 py-3 lg:col-span-2">
+            <div className="rounded-xl border border-amber-300/25 bg-amber-500/10 px-4 py-3 xl:col-span-2">
               <p className="text-[10px] uppercase tracking-[0.14em] text-amber-200">Total de numeros</p>
               <p className="mt-1 text-lg font-black text-amber-100">{campaign.totalNumbers.toLocaleString('pt-BR')}</p>
             </div>

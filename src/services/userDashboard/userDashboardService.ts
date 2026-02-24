@@ -3,6 +3,7 @@ import { updateProfile } from 'firebase/auth'
 import { doc, getDoc, getDocFromServer, serverTimestamp, setDoc } from 'firebase/firestore'
 import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage'
 import { auth, db, storage } from '../../lib/firebase'
+import { buildUserSearchFields } from '../../utils/userSearch'
 
 async function getCurrentUserWithValidation(expectedUserId?: string) {
   const currentUser = auth.currentUser
@@ -133,6 +134,12 @@ export async function saveUserProfile(expectedUserId: string, name: string, phon
         name,
         phone: phone || null,
         email: currentUser.email || null,
+        ...buildUserSearchFields({
+          name,
+          email: currentUser.email || null,
+          phone,
+          ...(sanitizedCpf ? { cpf: sanitizedCpf } : {}),
+        }),
         ...(sanitizedCpf ? { cpf: sanitizedCpf } : {}),
         updatedAt: serverTimestamp(),
       },

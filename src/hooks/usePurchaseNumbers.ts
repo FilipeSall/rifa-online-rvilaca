@@ -769,6 +769,7 @@ export function usePurchaseNumbers() {
   }, [isPageLoading, loadNumberWindow, nextPageStart])
 
   return {
+    campaign,
     numberPool,
     selectionMode,
     setSelectionMode: handleSelectionModeChange,

@@ -5,6 +5,7 @@ import CampaignTab from './ui/CampaignTab'
 import DashboardTab from './ui/DashboardTab'
 import MainRaffleDrawTab from './ui/MainRaffleDrawTab'
 import TopBuyersDrawTab from './ui/TopBuyersDrawTab'
+import UsersTab from './ui/UsersTab'
 
 export default function AdminDashboardContent({ activeTab, onTabChange, onSignOut }: AdminDashboardContentProps) {
   return (
@@ -17,6 +18,7 @@ export default function AdminDashboardContent({ activeTab, onTabChange, onSignOu
         <div className="mt-6">
           {activeTab === 'dashboard' ? <DashboardTab /> : null}
           {activeTab === 'campanha' ? <CampaignTab /> : null}
+          {activeTab === 'usuarios' ? <UsersTab /> : null}
           {activeTab === 'sorteio-top' ? <TopBuyersDrawTab /> : null}
           {activeTab === 'sorteio-geral' ? <MainRaffleDrawTab /> : null}
         </div>
