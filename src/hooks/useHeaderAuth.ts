@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   deleteUser,
   fetchSignInMethodsForEmail,
+  sendEmailVerification,
   signOut,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -21,6 +22,27 @@ import { getEmailAuthErrorMessage, getGoogleAuthErrorMessage } from '../utils/ho
 
 const googleProvider = new GoogleAuthProvider()
 googleProvider.setCustomParameters({ prompt: 'select_account' })
+
+function getVerificationActionSettings() {
+  const origin = window.location.origin.replace(/\/+$/, '')
+  return {
+    url: `${origin}/?email_verified=1`,
+    handleCodeInApp: false,
+  }
+}
+
+function getVerificationErrorMessage(error: unknown) {
+  const authError = error as AuthError
+  if (authError?.code === 'auth/too-many-requests') {
+    return 'Ja enviamos um email recentemente. Aguarde um pouco e tente novamente.'
+  }
+
+  if (authError?.code === 'auth/network-request-failed') {
+    return 'Falha de rede ao enviar email de confirmacao. Tente novamente.'
+  }
+
+  return 'Nao foi possivel enviar o email de confirmacao agora.'
+}
 
 export function useHeaderAuth() {
   const navigate = useNavigate()
@@ -222,16 +244,42 @@ export function useHeaderAuth() {
           )
 
           await batch.commit()
-        } else {
-          await signInWithEmailAndPassword(auth, emailValue.trim().toLowerCase(), passwordValue)
-        }
-        closeAuthModal()
-        if (isCreatingAccount) {
-          navigate('/#comprar-numeros')
-          toast.success('Conta criada com sucesso! Escolha seus números.', {
+          let verificationMessage = 'Conta criada! Enviamos um email de confirmacao para ativar sua conta.'
+
+          try {
+            await sendEmailVerification(userCredential.user, getVerificationActionSettings())
+          } catch (sendError) {
+            verificationMessage = `Conta criada, mas ${getVerificationErrorMessage(sendError).toLowerCase()}`
+          }
+
+          await signOut(auth).catch(() => null)
+          closeAuthModal()
+          toast.success(verificationMessage, {
             position: 'bottom-right',
           })
+          return
+        } else {
+          const userCredential = await signInWithEmailAndPassword(auth, emailValue.trim().toLowerCase(), passwordValue)
+          const signedUser = userCredential.user
+          const usesPasswordProvider = signedUser.providerData.some((provider) => provider.providerId === 'password')
+          if (usesPasswordProvider && !signedUser.emailVerified) {
+            let message = 'Seu email ainda nao foi confirmado. Verifique sua caixa de entrada para ativar a conta.'
+
+            try {
+              await sendEmailVerification(signedUser, getVerificationActionSettings())
+              message = 'Seu email ainda nao foi confirmado. Reenviamos um novo link de ativacao.'
+            } catch (sendError) {
+              message = getVerificationErrorMessage(sendError)
+            } finally {
+              await signOut(auth).catch(() => null)
+            }
+
+            setEmailAuthError(message)
+            return
+          }
         }
+
+        closeAuthModal()
       } catch (error) {
         if (isCreatingAccount && createdUser) {
           try {
@@ -261,7 +309,7 @@ export function useHeaderAuth() {
         setIsEmailSubmitting(false)
       }
     },
-    [closeAuthModal, cpfValue, emailValue, isCreatingAccount, navigate, passwordValue, phoneValue]
+    [closeAuthModal, cpfValue, emailValue, isCreatingAccount, passwordValue, phoneValue]
   )
 
   return {

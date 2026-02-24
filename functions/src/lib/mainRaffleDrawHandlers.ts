@@ -3,7 +3,7 @@ import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
 import { CAMPAIGN_DOC_ID, DEFAULT_MAIN_PRIZE } from './constants.js'
 import { readCampaignNumberRange } from './numberStateStore.js'
-import { asRecord, readTimestampMillis, sanitizeString } from './shared.js'
+import { asRecord, readTimestampMillis, requireActiveUid, sanitizeString } from './shared.js'
 
 const MAIN_RAFFLE_DRAW_HISTORY_COLLECTION = 'mainRaffleDrawResults'
 const EXTRACTION_COUNT = 5
@@ -434,10 +434,7 @@ function parseMainRaffleResult(raw: Record<string, unknown> | null | undefined):
 
 export function createPublishMainRaffleDrawHandler(db: Firestore) {
   return async (request: { auth?: { uid?: string | null } | null, data: unknown }): Promise<MainRaffleDrawResult> => {
-    const uid = sanitizeString(request.auth?.uid)
-    if (!uid) {
-      throw new HttpsError('unauthenticated', 'Autenticacao obrigatoria para publicar resultado.')
-    }
+    const uid = requireActiveUid(request.auth)
 
     await assertAdminRole(db, uid)
 

@@ -3,6 +3,10 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { HttpsError } from 'firebase-functions/v2/https'
 
 export type JsonRecord = Record<string, unknown>
+export type CallableAuth = {
+  uid?: string | null
+  token?: Record<string, unknown> | null
+} | null | undefined
 
 export function sanitizeString(value: unknown): string {
   if (typeof value !== 'string') {
@@ -10,6 +14,33 @@ export function sanitizeString(value: unknown): string {
   }
 
   return value.trim()
+}
+
+export function requireAuthenticatedUid(auth: CallableAuth): string {
+  const uid = sanitizeString(auth?.uid)
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Usuario precisa estar autenticado')
+  }
+
+  return uid
+}
+
+export function assertVerifiedEmailForPasswordProvider(auth: CallableAuth): void {
+  const signInProvider = sanitizeString(getNestedValue(auth?.token, 'firebase.sign_in_provider'))
+  if (signInProvider !== 'password') {
+    return
+  }
+
+  const emailVerified = auth?.token?.email_verified === true
+  if (!emailVerified) {
+    throw new HttpsError('failed-precondition', 'Confirme seu email para ativar sua conta.')
+  }
+}
+
+export function requireActiveUid(auth: CallableAuth): string {
+  const uid = requireAuthenticatedUid(auth)
+  assertVerifiedEmailForPasswordProvider(auth)
+  return uid
 }
 
 export function sanitizePhone(value: unknown): string | null {

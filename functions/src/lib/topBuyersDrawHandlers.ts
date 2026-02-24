@@ -2,7 +2,7 @@ import { FieldValue, type DocumentData, type Firestore } from 'firebase-admin/fi
 import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
 import { CAMPAIGN_DOC_ID, DEFAULT_MAIN_PRIZE } from './constants.js'
-import { asRecord, readString, readTimestampMillis, sanitizeString } from './shared.js'
+import { asRecord, readString, readTimestampMillis, requireActiveUid, sanitizeString } from './shared.js'
 
 const TOP_BUYERS_DRAW_HISTORY_COLLECTION = 'topBuyersDrawResults'
 const DEFAULT_RANKING_LIMIT = 50
@@ -585,10 +585,7 @@ function resolveWinnerByFederalRule(
 
 export function createPublishTopBuyersDrawHandler(db: Firestore) {
   return async (request: { auth?: { uid?: string | null } | null, data: unknown }): Promise<TopBuyersDrawResult> => {
-    const uid = sanitizeString(request.auth?.uid)
-    if (!uid) {
-      throw new HttpsError('unauthenticated', 'Autenticacao obrigatoria para publicar resultado.')
-    }
+    const uid = requireActiveUid(request.auth)
 
     await assertAdminRole(db, uid)
 
@@ -837,10 +834,7 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
 
 export function createGetTopBuyersDrawHistoryHandler(db: Firestore) {
   return async (request: { auth?: { uid?: string | null } | null }): Promise<GetTopBuyersDrawHistoryOutput> => {
-    const uid = sanitizeString(request.auth?.uid)
-    if (!uid) {
-      throw new HttpsError('unauthenticated', 'Autenticacao obrigatoria para consultar historico.')
-    }
+    const uid = requireActiveUid(request.auth)
 
     await assertAdminRole(db, uid)
 
@@ -1130,10 +1124,7 @@ export function createGetPublicTopBuyersDrawHistoryHandler(db: Firestore) {
 
 export function createGetMyTopBuyersWinningSummaryHandler(db: Firestore) {
   return async (request: { auth?: { uid?: string | null } | null }): Promise<GetMyTopBuyersWinningSummaryOutput> => {
-    const uid = sanitizeString(request.auth?.uid)
-    if (!uid) {
-      throw new HttpsError('unauthenticated', 'Autenticacao obrigatoria para consultar premiacoes.')
-    }
+    const uid = requireActiveUid(request.auth)
 
     try {
       const winsSnapshot = await db.collection(TOP_BUYERS_DRAW_HISTORY_COLLECTION)

@@ -15,7 +15,7 @@ import {
   getNumberStateRef,
   readCampaignNumberRange,
 } from './numberStateStore.js'
-import { asRecord, maskUid } from './shared.js'
+import { asRecord, maskUid, requireActiveUid } from './shared.js'
 
 interface ReserveNumbersInput {
   numbers: number[]
@@ -89,11 +89,7 @@ export function readStoredReservationNumbers(
 
 export function createReserveNumbersHandler(db: Firestore) {
   return async (request: { auth?: { uid?: string } | null; data: unknown }) => {
-    if (!request.auth?.uid) {
-      throw new HttpsError('unauthenticated', 'Usuario precisa estar autenticado')
-    }
-
-    const uid = request.auth.uid
+    const uid = requireActiveUid(request.auth)
 
     try {
       const payload = asRecord(request.data) as Partial<ReserveNumbersInput>
@@ -254,11 +250,7 @@ export function createReserveNumbersHandler(db: Firestore) {
 
 export function createReleaseReservationHandler(db: Firestore) {
   return async (request: { auth?: { uid?: string } | null }) => {
-    if (!request.auth?.uid) {
-      throw new HttpsError('unauthenticated', 'Usuario precisa estar autenticado')
-    }
-
-    const uid = request.auth.uid
+    const uid = requireActiveUid(request.auth)
 
     try {
       const campaignRef = db.collection('campaigns').doc(CAMPAIGN_DOC_ID)

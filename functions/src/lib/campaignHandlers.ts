@@ -18,7 +18,7 @@ import {
   type CampaignStatus,
 } from './constants.js'
 import { readCampaignNumberRange } from './numberStateStore.js'
-import { asRecord, readMetricNumber, sanitizeString } from './shared.js'
+import { asRecord, readMetricNumber, requireActiveUid, sanitizeString } from './shared.js'
 
 type CampaignCouponDiscountType = 'percent' | 'fixed'
 
@@ -596,11 +596,8 @@ function readCampaignDate(data: DocumentData | undefined, fieldName: 'startsAt' 
 
 export function createUpsertCampaignSettingsHandler(db: Firestore) {
   return async (request: { auth?: { uid?: string } | null; data: unknown }) => {
-    if (!request.auth?.uid) {
-      throw new HttpsError('unauthenticated', 'Usuario precisa estar autenticado')
-    }
-
-    await assertAdminRole(db, request.auth.uid)
+    const uid = requireActiveUid(request.auth)
+    await assertAdminRole(db, uid)
 
     try {
       const payload = asRecord(request.data) as Partial<UpsertCampaignSettingsInput>
@@ -624,7 +621,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
 
       const updateData: DocumentData = {
         updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: request.auth.uid,
+        updatedBy: uid,
       }
 
       if (nextTitle !== null) {
@@ -759,7 +756,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       }
 
       logger.info('upsertCampaignSettings started', {
-        uid: request.auth.uid,
+        uid,
         hasNewCoupons: Array.isArray(nextCoupons),
         nextCouponsCount: Array.isArray(nextCoupons) ? nextCoupons.length : null,
         hasNewMidias: nextMidias !== null,
@@ -792,7 +789,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       } satisfies UpsertCampaignSettingsOutput
 
       logger.info('upsertCampaignSettings succeeded', {
-        uid: request.auth.uid,
+        uid,
         campaignId: CAMPAIGN_DOC_ID,
         minPurchaseQuantity: output.minPurchaseQuantity,
         couponsCount: output.coupons.length,
@@ -803,7 +800,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       return output
     } catch (error) {
       logger.error('upsertCampaignSettings failed', {
-        uid: request.auth.uid,
+        uid,
         error: String(error),
       })
 
@@ -818,11 +815,8 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
 
 export function createGetDashboardSummaryHandler(db: Firestore) {
   return async (request: { auth?: { uid?: string } | null; data: unknown }) => {
-    if (!request.auth?.uid) {
-      throw new HttpsError('unauthenticated', 'Usuario precisa estar autenticado')
-    }
-
-    await assertAdminRole(db, request.auth.uid)
+    const uid = requireActiveUid(request.auth)
+    await assertAdminRole(db, uid)
 
     const [summarySnapshot, dailySnapshot] = await Promise.all([
       db.collection('metrics').doc('sales_summary').get(),

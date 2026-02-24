@@ -41,6 +41,7 @@ import {
   sanitizePhone,
   sanitizeString,
   sleep,
+  requireActiveUid,
   type JsonRecord,
 } from './shared.js'
 
@@ -601,16 +602,14 @@ async function runPaidDepositBusinessLogic(
 
 export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretReaders) {
   return async (request: { auth?: { uid?: string } | null; data: unknown }) => {
-    if (!request.auth?.uid) {
-      throw new HttpsError('unauthenticated', 'Usuario precisa estar autenticado')
-    }
+    const uid = requireActiveUid(request.auth)
 
     try {
       const payload = asRecord(request.data) as Partial<CreatePixDepositInput>
       const requestedAmount = sanitizeOptionalAmount(payload.amount)
       const payerName = sanitizeString(payload.payerName)
       const phone = sanitizePhone(payload.phone)
-      const reservationRef = db.collection('numberReservations').doc(request.auth.uid)
+      const reservationRef = db.collection('numberReservations').doc(uid)
       const reservationSnapshot = await reservationRef.get()
 
       if (!payerName) {
@@ -663,7 +662,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
       const hasAmountMismatch = requestedAmount !== null && Math.abs(requestedAmount - expectedAmount) > 0.009
       if (hasAmountMismatch) {
         logger.warn('createPixDeposit amount mismatch', {
-          uid: maskUid(request.auth.uid),
+          uid: maskUid(uid),
           requestedAmount,
           expectedAmount,
           quantity: reservationNumbers.length,
@@ -681,10 +680,10 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         throw new HttpsError('internal', 'Nao foi possivel montar a callback_url do webhook')
       }
 
-      const clientReferenceBase = `${request.auth.uid}_${Date.now()}`
+      const clientReferenceBase = `${uid}_${Date.now()}`
 
       logger.info('createPixDeposit started', {
-        uid: maskUid(request.auth.uid),
+        uid: maskUid(uid),
         requestedAmount,
         expectedAmount,
         subtotalAmount,
@@ -798,7 +797,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
 
           await db.collection('orders').doc(externalId).set(
             {
-              userId: request.auth.uid,
+              userId: uid,
               campaignId: CAMPAIGN_DOC_ID,
               externalId,
               type: 'deposit',
@@ -842,7 +841,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         const persistedStatus: CreatePixDepositOutput['status'] = status === 'failed' ? 'failed' : 'pending'
 
         await db.collection('orders').doc(externalId).set({
-          userId: request.auth.uid,
+          userId: uid,
           campaignId: CAMPAIGN_DOC_ID,
           externalId,
           type: 'deposit',
@@ -869,7 +868,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         })
 
         logger.info('createPixDeposit persisted order', {
-          uid: maskUid(request.auth.uid),
+          uid: maskUid(uid),
           attempt,
           externalId,
           status: persistedStatus,
@@ -900,7 +899,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
       throw new HttpsError('internal', 'Falha ao criar deposito PIX apos multiplas tentativas')
     } catch (error) {
       logger.error('createPixDeposit failed', {
-        uid: request.auth?.uid ? maskUid(request.auth.uid) : null,
+        uid: maskUid(uid),
         rawCouponCode: sanitizeString((request.data as Record<string, unknown> | null)?.couponCode),
         error: String(error),
       })
@@ -911,9 +910,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
 
 export function createRequestWithdrawHandler(db: Firestore, secrets: HorsePaySecretReaders) {
   return async (request: { auth?: { uid?: string } | null; data: unknown }) => {
-    if (!request.auth?.uid) {
-      throw new HttpsError('unauthenticated', 'Usuario precisa estar autenticado')
-    }
+    const uid = requireActiveUid(request.auth)
 
     try {
       // HorsePay valida o IP de origem para saques no painel da conta.
@@ -931,10 +928,10 @@ export function createRequestWithdrawHandler(db: Firestore, secrets: HorsePaySec
         clientKey: secrets.getClientKey(),
         clientSecret: secrets.getClientSecret(),
       })
-      const clientReferenceId = `${request.auth.uid}_${Date.now()}`
+      const clientReferenceId = `${uid}_${Date.now()}`
 
       logger.info('requestWithdraw started', {
-        uid: maskUid(request.auth.uid),
+        uid: maskUid(uid),
         amount,
         pixType,
         pixKeyMasked: maskPixKey(pixKey),
@@ -965,7 +962,7 @@ export function createRequestWithdrawHandler(db: Firestore, secrets: HorsePaySec
       if (externalId) {
         await db.collection('orders').doc(externalId).set(
           {
-            userId: request.auth.uid,
+            userId: uid,
             externalId,
             type: 'withdraw',
             amount,
@@ -979,7 +976,7 @@ export function createRequestWithdrawHandler(db: Firestore, secrets: HorsePaySec
         )
 
         logger.info('requestWithdraw persisted order', {
-          uid: maskUid(request.auth.uid),
+          uid: maskUid(uid),
           externalId,
           status: 'pending',
           clientReferenceId,
@@ -989,7 +986,7 @@ export function createRequestWithdrawHandler(db: Firestore, secrets: HorsePaySec
       return response
     } catch (error) {
       logger.error('requestWithdraw failed', {
-        uid: request.auth?.uid ? maskUid(request.auth.uid) : null,
+        uid: maskUid(uid),
         error: String(error),
       })
       throw toHttpsError(error, 'Falha ao solicitar saque')
@@ -999,12 +996,10 @@ export function createRequestWithdrawHandler(db: Firestore, secrets: HorsePaySec
 
 export function createGetBalanceHandler(secrets: HorsePaySecretReaders) {
   return async (request: { auth?: { uid?: string } | null; data: unknown }) => {
-    if (!request.auth?.uid) {
-      throw new HttpsError('unauthenticated', 'Usuario precisa estar autenticado')
-    }
+    const uid = requireActiveUid(request.auth)
 
     try {
-      logger.info('getBalance started', { uid: maskUid(request.auth.uid) })
+      logger.info('getBalance started', { uid: maskUid(uid) })
       const accessToken = await getHorsePayToken({
         baseUrl: HORSEPAY_BASE_URL,
         clientKey: secrets.getClientKey(),
@@ -1017,13 +1012,13 @@ export function createGetBalanceHandler(secrets: HorsePaySecretReaders) {
         token: accessToken,
       })
       logger.info('getBalance response received', {
-        uid: maskUid(request.auth.uid),
+        uid: maskUid(uid),
         topLevelKeys: getTopLevelKeys(response),
       })
       return response
     } catch (error) {
       logger.error('getBalance failed', {
-        uid: request.auth?.uid ? maskUid(request.auth.uid) : null,
+        uid: maskUid(uid),
         error: String(error),
       })
       throw toHttpsError(error, 'Falha ao consultar saldo')
