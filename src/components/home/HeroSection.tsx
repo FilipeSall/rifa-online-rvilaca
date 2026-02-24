@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useHeroSection } from '../../hooks/useHeroSection'
 import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 import { DEFAULT_BONUS_PRIZE, DEFAULT_CAMPAIGN_TITLE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../const/campaign'
@@ -77,6 +77,8 @@ export default function HeroSection() {
   const { campaign } = useCampaignSettings()
   const userRole = useAuthStore((state) => state.userRole)
   const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({})
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const [heroSalesCardWidth, setHeroSalesCardWidth] = useState<number | null>(null)
   const campaignTitle = campaign.title || DEFAULT_CAMPAIGN_TITLE
   const mainPrize = campaign.mainPrize || DEFAULT_MAIN_PRIZE
   const secondPrize = campaign.secondPrize || DEFAULT_SECOND_PRIZE
@@ -97,6 +99,7 @@ export default function HeroSection() {
     && countdownDisplayState.mode === 'hidden'
     && !campaign.startsAt
     && !campaign.endsAt
+  const heroAlignedSectionStyle = heroSalesCardWidth ? { width: `${heroSalesCardWidth}px` } : undefined
   const heroCarouselImages = useMemo(() => {
     return campaign.midias.heroCarousel
       .filter((item) => item.active && !!item.url)
@@ -120,8 +123,42 @@ export default function HeroSection() {
     })
   }, [])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const titleElement = titleRef.current
+    if (!titleElement) {
+      return
+    }
+
+    const updateHeroSalesCardWidth = () => {
+      if (!window.matchMedia('(min-width: 1280px)').matches) {
+        setHeroSalesCardWidth(null)
+        return
+      }
+
+      const nextWidth = Math.round(titleElement.getBoundingClientRect().width)
+      setHeroSalesCardWidth(nextWidth > 0 ? nextWidth : null)
+    }
+
+    updateHeroSalesCardWidth()
+    window.addEventListener('resize', updateHeroSalesCardWidth)
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(updateHeroSalesCardWidth)
+      : null
+    resizeObserver?.observe(titleElement)
+
+    return () => {
+      window.removeEventListener('resize', updateHeroSalesCardWidth)
+      resizeObserver?.disconnect()
+    }
+  }, [])
+
   return (
-    <section className="relative pt-12 pb-20 lg:pt-24 lg:pb-32 overflow-hidden hero-bg">
+    <section className="relative pt-12 pb-20 lg:pt-18 lg:pb-32 overflow-hidden hero-bg">
       <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-gold/5 to-transparent pointer-events-none" />
       <div className="container relative z-10 mx-auto px-4 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
@@ -134,7 +171,7 @@ export default function HeroSection() {
             </div>
 
             {/* Title */}
-            <h1 className="w-full text-5xl lg:text-6xl font-luxury font-black leading-tight text-white">
+            <h1 ref={titleRef} className="w-full xl:w-fit text-5xl md:text-6xl lg:text-7xl font-luxury font-black leading-tight text-white">
               {campaignTitleHighlight ? (
                 <>
                   {campaignTitlePrefix} <span className="text-gold">{campaignTitleHighlight}</span>
@@ -153,7 +190,10 @@ export default function HeroSection() {
             </p>
 
             {/* Progress bar */}
-            <div className="hero-sales-card mt-2 w-full lg:max-w-lg">
+            <div
+              className="hero-sales-card mt-2 w-full lg:max-w-lg xl:max-w-none"
+              style={heroAlignedSectionStyle}
+            >
               <span className="hero-edge-badge hero-edge-badge-left">🔥 {demandMessaging.badge}</span>
               <span className="hero-edge-badge hero-edge-badge-right">{demandMessaging.chip}</span>
               <div className="hero-sales-header">
@@ -177,9 +217,9 @@ export default function HeroSection() {
             </div>
 
             {/* Countdown */}
-            <div className="mt-2 w-full lg:max-w-lg">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-gold">{countdownDisplayState.title}</p>
-              <p className="mt-1 text-xs text-gray-400">{countdownDisplayState.helper}</p>
+            <div className="mt-2 w-full lg:max-w-lg xl:max-w-none" style={heroAlignedSectionStyle}>
+              <p className="text-[11px] uppercase tracking-[0.2em] text-gold xl:text-center">{countdownDisplayState.title}</p>
+              <p className="mt-1 text-xs text-gray-400 xl:text-center">{countdownDisplayState.helper}</p>
               {countdownDisplayState.mode !== 'hidden' ? (
                 <div className="mt-3 grid grid-cols-4 gap-4">
                   {countdownItems.map(({ value, label }) => (
@@ -191,12 +231,12 @@ export default function HeroSection() {
                 </div>
               ) : null}
               {shouldShowAdminCampaignHint ? (
-                <div className="mt-4 rounded-xl border border-cyan-300/35 bg-cyan-500/10 p-4">
+                <div className="mt-4 rounded-xl border border-cyan-300/35 bg-cyan-500/10 p-4 xl:text-center">
                   <p className="text-xs font-semibold text-cyan-100">
                     Admin: defina inicio e fim da campanha para liberar o contador e a comunicacao para os usuarios.
                   </p>
                   <button
-                    className="mt-3 inline-flex h-10 items-center rounded-lg border border-cyan-200/60 bg-cyan-300 px-4 text-[11px] font-black uppercase tracking-[0.14em] text-black transition hover:brightness-95"
+                    className="mt-3 inline-flex h-10 items-center rounded-lg border border-cyan-200/60 bg-cyan-300 px-4 text-[11px] font-black uppercase tracking-[0.14em] text-black transition hover:brightness-95 xl:mx-auto"
                     type="button"
                     onClick={handleOpenCampaignSettings}
                   >
@@ -207,7 +247,7 @@ export default function HeroSection() {
             </div>
 
             {/* CTA button + secure payment */}
-            <div className="mt-2 flex w-full flex-col gap-3 lg:max-w-lg">
+            <div className="mt-2 flex w-full flex-col gap-3 lg:max-w-lg xl:max-w-none" style={heroAlignedSectionStyle}>
               <button
                 className="inline-flex w-full h-16 items-center justify-center rounded-xl bg-gold px-8 text-base font-black text-black transition-all hover:bg-yellow-400 hover:scale-[1.02] shadow-[0_0_30px_rgba(245,168,0,0.4)] uppercase tracking-widest gap-3"
                 type="button"

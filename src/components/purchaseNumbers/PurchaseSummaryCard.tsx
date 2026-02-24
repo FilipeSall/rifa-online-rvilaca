@@ -18,6 +18,7 @@ type PurchaseSummaryCardProps = {
   isAutoSelecting: boolean
   shouldHighlightSelectedNumbers: boolean
   selectedNumbers: number[]
+  isSticky?: boolean
   onCouponCodeChange: (value: string) => void
   onApplyCoupon: () => void
   onProceed: () => void
@@ -39,6 +40,7 @@ export default function PurchaseSummaryCard({
   isAutoSelecting,
   shouldHighlightSelectedNumbers,
   selectedNumbers,
+  isSticky = true,
   onCouponCodeChange,
   onApplyCoupon,
   onProceed,
@@ -46,7 +48,7 @@ export default function PurchaseSummaryCard({
   const formattedSelectedNumbers = formatTicketNumbers(selectedNumbers)
 
   return (
-    <div className="sticky top-24 rounded-2xl border border-gold/25 bg-luxury-card p-6 shadow-2xl">
+    <div className={`${isSticky ? 'sticky top-24 ' : ''}rounded-2xl border border-gold/25 bg-luxury-card p-6 shadow-2xl`}>
       <p className="text-[10px] uppercase tracking-[0.22em] text-gold">3. Carrinho</p>
       <h2 className="mt-3 text-xl font-bold text-white">Resumo da compra</h2>
 

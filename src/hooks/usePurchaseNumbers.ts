@@ -65,7 +65,7 @@ type PickRandomAvailableNumbersResponse = {
 }
 
 type CallableEnvelope<T> = T | { result?: T }
-const NUMBER_WINDOW_PAGE_SIZE = 100
+const NUMBER_WINDOW_PAGE_SIZE = 50
 
 function unwrapCallableData<T>(value: CallableEnvelope<T>) {
   if (value && typeof value === 'object' && 'result' in value) {

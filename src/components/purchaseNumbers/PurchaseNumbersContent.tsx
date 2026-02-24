@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react'
 import type { usePurchaseNumbers } from '../../hooks/usePurchaseNumbers'
 import NumberSelectionCard from './NumberSelectionCard'
 import QuantitySelectionCard from './QuantitySelectionCard'
@@ -8,6 +9,7 @@ type PurchaseNumbersContentProps = {
 }
 
 export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumbersContentProps) {
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false)
   const {
     numberPool,
     selectionMode,
@@ -54,69 +56,153 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     handleProceed,
   } = purchaseState
 
+  useEffect(() => {
+    if (!isMobileCartOpen) {
+      return
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsMobileCartOpen(false)
+      }
+    }
+
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', handleEscape)
+
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [isMobileCartOpen])
+
+  const summaryCardProps = useMemo(
+    () => ({
+      selectedCount,
+      minQuantity: minPurchaseQuantity,
+      unitPrice,
+      subtotal,
+      discountAmount,
+      totalAmount,
+      appliedCoupon,
+      couponCode,
+      couponFeedback,
+      couponHint,
+      canProceed,
+      isReserving,
+      isAutoSelecting,
+      shouldHighlightSelectedNumbers,
+      selectedNumbers,
+      onCouponCodeChange: setCouponCode,
+      onApplyCoupon: handleApplyCoupon,
+      onProceed: handleProceed,
+    }),
+    [
+      selectedCount,
+      minPurchaseQuantity,
+      unitPrice,
+      subtotal,
+      discountAmount,
+      totalAmount,
+      appliedCoupon,
+      couponCode,
+      couponFeedback,
+      couponHint,
+      canProceed,
+      isReserving,
+      isAutoSelecting,
+      shouldHighlightSelectedNumbers,
+      selectedNumbers,
+      setCouponCode,
+      handleApplyCoupon,
+      handleProceed,
+    ],
+  )
+
   return (
-    <section className="container mx-auto px-4 py-10 lg:px-8 lg:py-14">
-      <div className="grid grid-cols-1 gap-8 xl:grid-cols-12">
-        <div className="space-y-6 xl:col-span-8">
-          <QuantitySelectionCard
-            quantity={quantity}
-            minQuantity={minPurchaseQuantity}
-            maxSelectable={maxSelectable}
-            onSetQuantity={handleSetQuantity}
-          />
+    <>
+      <section className="container mx-auto px-4 py-10 lg:px-8 lg:py-14">
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-12">
+          <div className="space-y-6 xl:col-span-8">
+            <QuantitySelectionCard
+              quantity={quantity}
+              minQuantity={minPurchaseQuantity}
+              maxSelectable={maxSelectable}
+              onSetQuantity={handleSetQuantity}
+            />
 
-          <NumberSelectionCard
-            numberPool={numberPool}
-            selectionMode={selectionMode}
-            quantity={quantity}
-            selectedNumbers={selectedNumbers}
-            selectedCount={selectedCount}
-            rangeStart={rangeStart}
-            rangeEnd={rangeEnd}
-            totalNumbers={totalNumbers}
-            pageStart={pageStart}
-            pageEnd={pageEnd}
-            smallestAvailableNumber={smallestAvailableNumber}
-            hasPreviousPage={previousPageStart !== null}
-            hasNextPage={nextPageStart !== null}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            isPageLoading={isPageLoading}
-            isManualAdding={isManualAdding}
-            shouldHighlightAutoButton={shouldHighlightAutoButton}
-            onSelectionModeChange={setSelectionMode}
-            onToggleNumber={handleToggleNumber}
-            onLoadPreviousPage={handleLoadPreviousPage}
-            onLoadNextPage={handleLoadNextPage}
-            onClearSelectedNumbers={handleClearSelectedNumbers}
-            onGoToPage={handleGoToPage}
-            onAddManualNumber={handleAddManualNumber}
-          />
+            <NumberSelectionCard
+              numberPool={numberPool}
+              selectionMode={selectionMode}
+              quantity={quantity}
+              selectedNumbers={selectedNumbers}
+              selectedCount={selectedCount}
+              rangeStart={rangeStart}
+              rangeEnd={rangeEnd}
+              totalNumbers={totalNumbers}
+              pageStart={pageStart}
+              pageEnd={pageEnd}
+              smallestAvailableNumber={smallestAvailableNumber}
+              hasPreviousPage={previousPageStart !== null}
+              hasNextPage={nextPageStart !== null}
+              currentPage={currentPage}
+              totalPages={totalPages}
+              isPageLoading={isPageLoading}
+              isManualAdding={isManualAdding}
+              shouldHighlightAutoButton={shouldHighlightAutoButton}
+              onSelectionModeChange={setSelectionMode}
+              onToggleNumber={handleToggleNumber}
+              onLoadPreviousPage={handleLoadPreviousPage}
+              onLoadNextPage={handleLoadNextPage}
+              onClearSelectedNumbers={handleClearSelectedNumbers}
+              onGoToPage={handleGoToPage}
+              onAddManualNumber={handleAddManualNumber}
+            />
+          </div>
+
+          <aside className="hidden xl:block xl:col-span-4">
+            <PurchaseSummaryCard {...summaryCardProps} />
+          </aside>
         </div>
+      </section>
 
-        <aside className="xl:col-span-4">
-          <PurchaseSummaryCard
-            selectedCount={selectedCount}
-            minQuantity={minPurchaseQuantity}
-            unitPrice={unitPrice}
-            subtotal={subtotal}
-            discountAmount={discountAmount}
-            totalAmount={totalAmount}
-            appliedCoupon={appliedCoupon}
-            couponCode={couponCode}
-            couponFeedback={couponFeedback}
-            couponHint={couponHint}
-            canProceed={canProceed}
-            isReserving={isReserving}
-            isAutoSelecting={isAutoSelecting}
-            shouldHighlightSelectedNumbers={shouldHighlightSelectedNumbers}
-            selectedNumbers={selectedNumbers}
-            onCouponCodeChange={setCouponCode}
-            onApplyCoupon={handleApplyCoupon}
-            onProceed={handleProceed}
-          />
-        </aside>
-      </div>
-    </section>
+      <button
+        aria-label="Abrir carrinho"
+        className="fixed bottom-4 right-4 z-[72] flex h-16 w-16 items-center justify-center rounded-full border border-gold/70 bg-[radial-gradient(circle_at_35%_30%,#ffd568,#f5a800_56%,#b87900_100%)] text-black shadow-[0_14px_35px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-gold/75 xl:hidden"
+        type="button"
+        onClick={() => setIsMobileCartOpen(true)}
+      >
+        <span className="material-symbols-outlined text-[31px]">shopping_cart</span>
+        {selectedCount > 0 ? (
+          <span className="pointer-events-none absolute -right-0.5 -top-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-red-200/70 bg-red-500 px-1 text-[11px] font-black leading-none text-white shadow-[0_6px_12px_rgba(0,0,0,0.35)]">
+            !
+          </span>
+        ) : null}
+      </button>
+
+      {isMobileCartOpen ? (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-[95] flex items-end bg-black/75 p-3 xl:hidden"
+          role="dialog"
+          onClick={() => setIsMobileCartOpen(false)}
+        >
+          <div
+            className="relative w-full max-h-[92vh] overflow-y-auto rounded-2xl border border-white/15 bg-luxury-bg p-1 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              aria-label="Fechar carrinho"
+              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white"
+              type="button"
+              onClick={() => setIsMobileCartOpen(false)}
+            >
+              <span className="material-symbols-outlined text-lg">close</span>
+            </button>
+            <PurchaseSummaryCard {...summaryCardProps} isSticky={false} />
+          </div>
+        </div>
+      ) : null}
+    </>
   )
 }

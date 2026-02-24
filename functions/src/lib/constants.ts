@@ -13,7 +13,7 @@ export const DEFAULT_MIN_PURCHASE_QUANTITY = 10
 export const MAX_PURCHASE_QUANTITY = 300
 export const RAFFLE_NUMBER_START = 1
 export const RAFFLE_NUMBER_END = 3_450_000
-export const DEFAULT_NUMBER_WINDOW_PAGE_SIZE = 100
+export const DEFAULT_NUMBER_WINDOW_PAGE_SIZE = 50
 export const MAX_NUMBER_WINDOW_PAGE_SIZE = 240
 
 export const CAMPAIGN_DOC_ID = 'campanha-bmw-r1200-gs-2026'

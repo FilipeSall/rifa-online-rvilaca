@@ -97,21 +97,69 @@ function isContinueUriError(error: unknown) {
   return authError?.code === 'auth/unauthorized-continue-uri' || authError?.code === 'auth/invalid-continue-uri'
 }
 
+function getAuthErrorDebugData(error: unknown) {
+  const authError = error as AuthError
+  return {
+    code: authError?.code || 'unknown',
+    message: authError?.message || 'unknown',
+  }
+}
+
 async function sendVerificationEmailWithFallback(user: User) {
+  const actionSettings = getVerificationActionSettings()
+
   try {
-    await sendEmailVerification(user, getVerificationActionSettings())
+    await sendEmailVerification(user, actionSettings)
+    console.info('[auth:email-verification] sent_with_action_settings', {
+      uid: user.uid,
+      actionUrl: actionSettings.url,
+    })
     return { sent: true, usedFallback: false, error: null as unknown }
   } catch (error) {
+    console.error('[auth:email-verification] send_failed_with_action_settings', {
+      uid: user.uid,
+      actionUrl: actionSettings.url,
+      ...getAuthErrorDebugData(error),
+    })
+
     if (!isContinueUriError(error)) {
       return { sent: false, usedFallback: false, error }
     }
 
     try {
       await sendEmailVerification(user)
+      console.info('[auth:email-verification] sent_with_default_fallback', {
+        uid: user.uid,
+      })
       return { sent: true, usedFallback: true, error: null as unknown }
     } catch (fallbackError) {
+      console.error('[auth:email-verification] fallback_send_failed', {
+        uid: user.uid,
+        ...getAuthErrorDebugData(fallbackError),
+      })
       return { sent: false, usedFallback: true, error: fallbackError }
     }
+  }
+}
+
+function isPasswordProviderUser(user: User) {
+  return user.providerData.some((provider) => provider.providerId === 'password')
+}
+
+async function sendPasswordSignupVerificationEmail(user: User) {
+  if (user.emailVerified || !isPasswordProviderUser(user)) {
+    return {
+      attempted: false,
+      sent: false,
+      usedFallback: false,
+      error: null as unknown,
+    }
+  }
+
+  const verificationResult = await sendVerificationEmailWithFallback(user)
+  return {
+    attempted: true,
+    ...verificationResult,
   }
 }
 
@@ -363,7 +411,7 @@ export function useHeaderAuth() {
           )
 
           await batch.commit()
-          const verificationResult = await sendVerificationEmailWithFallback(userCredential.user)
+          const verificationResult = await sendPasswordSignupVerificationEmail(userCredential.user)
           const verificationMessage = verificationResult.sent
             ? verificationResult.usedFallback
               ? 'Conta criada! Enviamos o email de confirmacao com link padrao do Firebase.'
@@ -384,7 +432,7 @@ export function useHeaderAuth() {
             let message = 'Seu email ainda nao foi confirmado. Verifique sua caixa de entrada para ativar a conta.'
 
             try {
-              const verificationResult = await sendVerificationEmailWithFallback(signedUser)
+              const verificationResult = await sendPasswordSignupVerificationEmail(signedUser)
               if (verificationResult.sent) {
                 message = verificationResult.usedFallback
                   ? 'Seu email ainda nao foi confirmado. Reenviamos usando o link padrao do Firebase.'
