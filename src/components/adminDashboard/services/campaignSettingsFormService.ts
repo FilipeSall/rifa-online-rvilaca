@@ -9,6 +9,7 @@ import {
   DEFAULT_TOTAL_NUMBERS,
 } from '../../../const/campaign'
 import type {
+  CampaignFeaturedVideoMedia,
   CampaignCoupon,
   CampaignHeroCarouselMedia,
   CampaignMidias,
@@ -85,10 +86,41 @@ function sanitizeHeroCarouselMediaItems(value: unknown): CampaignHeroCarouselMed
     }))
 }
 
+function sanitizeFeaturedVideo(value: unknown): CampaignFeaturedVideoMedia | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const payload = value as Partial<CampaignFeaturedVideoMedia>
+  const id = typeof payload.id === 'string' ? payload.id.trim().slice(0, 96) : ''
+  const url = typeof payload.url === 'string' ? payload.url.trim() : ''
+  if (!id || !/^https?:\/\//i.test(url)) {
+    return null
+  }
+
+  const storagePath = typeof payload.storagePath === 'string' && payload.storagePath.trim()
+    ? payload.storagePath.trim().slice(0, 260)
+    : null
+  const createdAt = typeof payload.createdAt === 'string' && payload.createdAt.trim()
+    ? payload.createdAt.trim()
+    : new Date().toISOString()
+
+  return {
+    id,
+    url,
+    storagePath,
+    active: payload.active !== false,
+    createdAt,
+  }
+}
+
 function sanitizeCampaignMidias(value: unknown): CampaignMidias {
-  const payload = value && typeof value === 'object' ? (value as CampaignMidias) : { heroCarousel: [] }
+  const payload = value && typeof value === 'object'
+    ? (value as CampaignMidias)
+    : { heroCarousel: [], featuredVideo: null }
   return {
     heroCarousel: sanitizeHeroCarouselMediaItems(payload.heroCarousel),
+    featuredVideo: sanitizeFeaturedVideo(payload.featuredVideo),
   }
 }
 

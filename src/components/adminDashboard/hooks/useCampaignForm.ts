@@ -38,7 +38,7 @@ export function useCampaignForm() {
   const [startsAt, setStartsAt] = useState('')
   const [endsAt, setEndsAt] = useState('')
   const [coupons, setCoupons] = useState<CampaignCoupon[]>([])
-  const [midias, setMidias] = useState<CampaignMidias>({ heroCarousel: [] })
+  const [midias, setMidias] = useState<CampaignMidias>({ heroCarousel: [], featuredVideo: null })
   const hasEnsuredCampaignRef = useRef(false)
 
   useEffect(() => {

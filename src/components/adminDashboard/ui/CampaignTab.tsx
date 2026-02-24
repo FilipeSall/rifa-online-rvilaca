@@ -9,6 +9,7 @@ import {
   DEFAULT_TOTAL_NUMBERS,
 } from '../../../const/campaign'
 import type {
+  CampaignFeaturedVideoMedia,
   CampaignCoupon,
   CampaignCouponDiscountType,
   CampaignHeroCarouselMedia,
@@ -16,7 +17,12 @@ import type {
 } from '../../../types/campaign'
 import { CustomSelect } from '../../ui/CustomSelect'
 import { useCampaignForm } from '../hooks/useCampaignForm'
-import { deleteCampaignHeroCarouselImage, uploadCampaignHeroCarouselImage } from '../services/campaignMediaStorageService'
+import {
+  deleteCampaignFeaturedVideo,
+  deleteCampaignHeroCarouselImage,
+  uploadCampaignFeaturedVideo,
+  uploadCampaignHeroCarouselImage,
+} from '../services/campaignMediaStorageService'
 import { buildCampaignSettingsInput } from '../services/campaignSettingsFormService'
 import { formatCurrency, getCampaignStatusLabel } from '../utils/formatters'
 
@@ -111,6 +117,9 @@ export default function CampaignTab() {
   const [heroAltInput, setHeroAltInput] = useState('')
   const [isUploadingHeroMedia, setIsUploadingHeroMedia] = useState(false)
   const [heroMediaActionId, setHeroMediaActionId] = useState<string | null>(null)
+  const [selectedFeaturedVideoFile, setSelectedFeaturedVideoFile] = useState<File | null>(null)
+  const [isUploadingFeaturedVideo, setIsUploadingFeaturedVideo] = useState(false)
+  const [isRemovingFeaturedVideo, setIsRemovingFeaturedVideo] = useState(false)
 
   const activeCoupons = useMemo(() => coupons.filter((item) => item.active).length, [coupons])
   const heroCarouselItems = useMemo(
@@ -125,6 +134,15 @@ export default function CampaignTab() {
     () => heroCarouselItems.filter((item) => item.active).length,
     [heroCarouselItems],
   )
+  const featuredVideo = useMemo<CampaignFeaturedVideoMedia | null>(() => {
+    const candidate = midias.featuredVideo
+    if (!candidate?.url) {
+      return null
+    }
+
+    return candidate
+  }, [midias.featuredVideo])
+  const isFeaturedVideoBusy = isUploadingFeaturedVideo || isRemovingFeaturedVideo
   const normalizedCurrentCampaignPayload = useMemo(() => (
     buildCampaignSettingsInput({
       title,
@@ -437,7 +455,7 @@ export default function CampaignTab() {
     }
   }
 
-  const handleCopyHeroMediaUrl = async (url: string, mediaId: string) => {
+  const handleCopyMediaUrl = async (url: string, mediaId: string) => {
     try {
       if (!window.isSecureContext || !navigator.clipboard?.writeText) {
         throw new Error('Copiar link exige contexto seguro (HTTPS ou localhost).')
@@ -495,6 +513,109 @@ export default function CampaignTab() {
       })
     } finally {
       setHeroMediaActionId(null)
+    }
+  }
+
+  const handleUploadFeaturedVideo = async () => {
+    if (!selectedFeaturedVideoFile) {
+      toast.error('Selecione um arquivo de video para continuar.', {
+        toastId: 'campaign-featured-video-missing-file',
+      })
+      return
+    }
+
+    setIsUploadingFeaturedVideo(true)
+    const previousFeaturedVideo = featuredVideo
+    let uploadedFeaturedVideo: CampaignFeaturedVideoMedia | null = null
+
+    try {
+      uploadedFeaturedVideo = await uploadCampaignFeaturedVideo(selectedFeaturedVideoFile, campaign.id)
+      const nextMidias = {
+        ...midias,
+        featuredVideo: uploadedFeaturedVideo,
+      }
+      const saved = await persistMidias(nextMidias)
+      if (!saved) {
+        if (uploadedFeaturedVideo.storagePath) {
+          try {
+            await deleteCampaignFeaturedVideo(uploadedFeaturedVideo.storagePath)
+          } catch {
+            // Ignora erro de limpeza para nao sobrescrever o erro principal de persistencia.
+          }
+        }
+        return
+      }
+
+      setMidias(nextMidias)
+      setSelectedFeaturedVideoFile(null)
+
+      if (previousFeaturedVideo?.storagePath) {
+        try {
+          await deleteCampaignFeaturedVideo(previousFeaturedVideo.storagePath)
+        } catch (error) {
+          toast.error(parseErrorMessage(error, 'Novo video salvo, mas nao foi possivel remover o video antigo.'), {
+            toastId: 'campaign-featured-video-cleanup-warning',
+          })
+        }
+      }
+
+      toast.success('Video em destaque atualizado.', {
+        toastId: 'campaign-featured-video-updated',
+      })
+    } catch (error) {
+      toast.error(parseErrorMessage(error, 'Falha ao enviar video em destaque.'), {
+        toastId: 'campaign-featured-video-upload-error',
+      })
+    } finally {
+      setIsUploadingFeaturedVideo(false)
+    }
+  }
+
+  const handleRemoveFeaturedVideo = async () => {
+    if (!featuredVideo) {
+      return
+    }
+
+    setIsRemovingFeaturedVideo(true)
+    try {
+      const nextMidias = {
+        ...midias,
+        featuredVideo: null,
+      }
+      const saved = await persistMidias(nextMidias)
+      if (!saved) {
+        return
+      }
+
+      setMidias(nextMidias)
+      setSelectedFeaturedVideoFile(null)
+
+      try {
+        await deleteCampaignFeaturedVideo(featuredVideo.storagePath)
+      } catch (error) {
+        const restored = await persistMidias(midias)
+        if (restored) {
+          setMidias(midias)
+          toast.error(parseErrorMessage(error, 'Falha ao remover no Storage. O video foi restaurado.'), {
+            toastId: 'campaign-featured-video-delete-storage-error',
+          })
+          return
+        }
+
+        toast.error(
+          'Falha ao remover no Storage e nao foi possivel restaurar o video automaticamente. Recarregue e tente novamente.',
+          {
+            toastId: 'campaign-featured-video-delete-storage-restore-failed',
+          },
+        )
+        return
+      }
+
+      toast.success('Video removido com sucesso (painel + storage).', {
+        toastId: 'campaign-featured-video-removed',
+      })
+    } finally {
+      setIsRemovingFeaturedVideo(false)
     }
   }
 
@@ -795,13 +916,110 @@ export default function CampaignTab() {
           <div>
             <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-200">4. Midias</p>
             <p className="mt-1 text-xs text-emerald-100/80">
-              Gerencie as imagens do carrossel da home (maximo 12).
+              Gerencie imagens do carrossel (maximo 12) e 1 video em destaque para o botao flutuante.
             </p>
           </div>
-          <div className="rounded-lg border border-emerald-300/25 bg-black/25 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-[0.15em] text-emerald-200">Slides ativos</p>
-            <p className="mt-1 text-sm font-black text-white">{activeHeroSlides}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-emerald-300/25 bg-black/25 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.15em] text-emerald-200">Slides ativos</p>
+              <p className="mt-1 text-sm font-black text-white">{activeHeroSlides}</p>
+            </div>
+            <div className="rounded-lg border border-cyan-300/25 bg-black/25 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.15em] text-cyan-200">Video destaque</p>
+              <p className="mt-1 text-sm font-black text-white">{featuredVideo?.active ? 'Ativo' : 'Inativo'}</p>
+            </div>
           </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-cyan-300/20 bg-black/25 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.15em] text-cyan-100">Video de destaque</p>
+              <p className="mt-1 text-xs text-cyan-100/70">Apenas 1 video ativo por vez.</p>
+            </div>
+            {featuredVideo ? (
+              <span className="rounded-full border border-cyan-300/35 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-100">
+                Publicado
+              </span>
+            ) : (
+              <span className="rounded-full border border-gray-400/30 bg-gray-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-300">
+                Sem video
+              </span>
+            )}
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div>
+              <label className="text-[10px] uppercase tracking-[0.15em] text-cyan-100" htmlFor="campaign-featured-video-file">
+                Arquivo de video
+              </label>
+              <input
+                id="campaign-featured-video-file"
+                accept="video/*"
+                className="mt-2 block h-11 w-full cursor-pointer rounded-md border border-cyan-200/30 bg-black/40 px-3 py-2 text-xs text-cyan-50 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-cyan-300/25 file:px-3 file:py-1.5 file:text-[11px] file:font-bold file:text-cyan-100"
+                type="file"
+                onChange={(event) => setSelectedFeaturedVideoFile(event.target.files?.[0] ?? null)}
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <button
+                className="inline-flex h-11 items-center rounded-lg bg-cyan-300 px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={handleUploadFeaturedVideo}
+                disabled={isFeaturedVideoBusy || !selectedFeaturedVideoFile}
+              >
+                {isUploadingFeaturedVideo ? 'Enviando...' : featuredVideo ? 'Substituir video' : 'Publicar video'}
+              </button>
+              <button
+                className="inline-flex h-11 items-center rounded-lg border border-red-400/35 bg-red-500/10 px-5 text-xs font-black uppercase tracking-[0.14em] text-red-200 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={handleRemoveFeaturedVideo}
+                disabled={isFeaturedVideoBusy || !featuredVideo}
+              >
+                {isRemovingFeaturedVideo ? 'Removendo...' : 'Remover'}
+              </button>
+            </div>
+          </div>
+
+          {selectedFeaturedVideoFile ? (
+            <p className="mt-2 text-[11px] text-cyan-100/80">
+              Arquivo selecionado: <span className="font-semibold text-cyan-50">{selectedFeaturedVideoFile.name}</span>
+            </p>
+          ) : null}
+
+          {featuredVideo ? (
+            <div className="mt-4 rounded-xl border border-white/10 bg-black/35 p-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-[220px_minmax(0,1fr)_auto] md:items-center">
+                <div className="relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-black/70">
+                  <video
+                    className="h-full w-full object-cover"
+                    controls
+                    preload="metadata"
+                    src={featuredVideo.url}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-white">Video atual exibido no botao flutuante</p>
+                  <p className="mt-1 text-[11px] text-gray-400">
+                    Criado em {new Date(featuredVideo.createdAt).toLocaleString('pt-BR')}
+                  </p>
+                  <p className="mt-2 truncate text-[11px] text-gray-500" title={featuredVideo.url}>
+                    {featuredVideo.url}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 md:justify-end">
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center rounded-md border border-white/15 bg-black/40 px-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-200 transition hover:bg-black/60 disabled:cursor-not-allowed disabled:opacity-55"
+                    onClick={() => handleCopyMediaUrl(featuredVideo.url, featuredVideo.id)}
+                    disabled={isFeaturedVideoBusy}
+                  >
+                    Copiar link
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-4 rounded-xl border border-emerald-300/20 bg-black/25 p-4">
@@ -908,7 +1126,7 @@ export default function CampaignTab() {
                       <button
                         type="button"
                         className="inline-flex h-7 items-center rounded-md border border-white/15 bg-black/40 px-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-200 transition hover:bg-black/60"
-                        onClick={() => handleCopyHeroMediaUrl(media.url, media.id)}
+                        onClick={() => handleCopyMediaUrl(media.url, media.id)}
                         disabled={isProcessing}
                       >
                         Copiar link

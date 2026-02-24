@@ -17,6 +17,7 @@ import {
 } from '../const/campaign'
 import { db, functions } from '../lib/firebase'
 import type {
+  CampaignFeaturedVideoMedia,
   CampaignCoupon,
   CampaignCouponDiscountType,
   CampaignHeroCarouselMedia,
@@ -199,6 +200,7 @@ function sanitizeCoupons(value: unknown): CampaignCoupon[] {
 function getDefaultCampaignMidias(): CampaignMidias {
   return {
     heroCarousel: [],
+    featuredVideo: null,
   }
 }
 
@@ -305,6 +307,69 @@ function sanitizeHeroCarousel(value: unknown): CampaignHeroCarouselMedia[] {
     }))
 }
 
+function sanitizeFeaturedVideoId(value: unknown) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 96)
+}
+
+function sanitizeFeaturedVideoUrl(value: unknown) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  const normalized = value.trim()
+  if (!/^https?:\/\//i.test(normalized)) {
+    return ''
+  }
+
+  return normalized
+}
+
+function sanitizeFeaturedVideoStoragePath(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const normalized = value.trim()
+  if (!normalized) {
+    return null
+  }
+
+  return normalized.slice(0, 260)
+}
+
+function sanitizeFeaturedVideoCreatedAt(value: unknown) {
+  if (typeof value === 'string' && value.trim()) {
+    return value
+  }
+
+  return new Date().toISOString()
+}
+
+function sanitizeFeaturedVideo(value: unknown): CampaignFeaturedVideoMedia | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const payload = value as Record<string, unknown>
+  const id = sanitizeFeaturedVideoId(payload.id)
+  const url = sanitizeFeaturedVideoUrl(payload.url)
+  if (!id || !url) {
+    return null
+  }
+
+  return {
+    id,
+    url,
+    storagePath: sanitizeFeaturedVideoStoragePath(payload.storagePath),
+    active: payload.active !== false,
+    createdAt: sanitizeFeaturedVideoCreatedAt(payload.createdAt),
+  }
+}
+
 function sanitizeCampaignMidias(value: unknown): CampaignMidias {
   if (!value || typeof value !== 'object') {
     return getDefaultCampaignMidias()
@@ -314,6 +379,7 @@ function sanitizeCampaignMidias(value: unknown): CampaignMidias {
 
   return {
     heroCarousel: sanitizeHeroCarousel(payload.heroCarousel),
+    featuredVideo: sanitizeFeaturedVideo(payload.featuredVideo),
   }
 }
 

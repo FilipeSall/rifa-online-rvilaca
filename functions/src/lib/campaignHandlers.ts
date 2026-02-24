@@ -40,8 +40,17 @@ interface CampaignHeroCarouselMedia {
   createdAt: string
 }
 
+interface CampaignFeaturedVideoMedia {
+  id: string
+  url: string
+  storagePath: string | null
+  active: boolean
+  createdAt: string
+}
+
 interface CampaignMidias {
   heroCarousel: CampaignHeroCarouselMedia[]
+  featuredVideo: CampaignFeaturedVideoMedia | null
 }
 
 interface UpsertCampaignSettingsInput {
@@ -289,6 +298,7 @@ function sanitizeCoupons(value: unknown): CampaignCoupon[] | null {
 function getDefaultCampaignMidias(): CampaignMidias {
   return {
     heroCarousel: [],
+    featuredVideo: null,
   }
 }
 
@@ -377,6 +387,55 @@ function sanitizeHeroCarouselMediaItems(value: unknown): CampaignHeroCarouselMed
     }))
 }
 
+function sanitizeFeaturedVideoId(value: unknown): string {
+  const normalized = sanitizeString(value).replace(/[^a-zA-Z0-9_-]/g, '')
+  return normalized.slice(0, 96)
+}
+
+function sanitizeFeaturedVideoUrl(value: unknown): string {
+  const normalized = sanitizeString(value)
+  if (!normalized || !/^https?:\/\//i.test(normalized)) {
+    return ''
+  }
+
+  return normalized
+}
+
+function sanitizeFeaturedVideoStoragePath(value: unknown): string | null {
+  const normalized = sanitizeString(value)
+  if (!normalized) {
+    return null
+  }
+
+  return normalized.slice(0, 260)
+}
+
+function sanitizeFeaturedVideoCreatedAt(value: unknown): string {
+  const normalized = sanitizeString(value)
+  return normalized || new Date().toISOString()
+}
+
+function sanitizeFeaturedVideo(value: unknown): CampaignFeaturedVideoMedia | null {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  const payload = asRecord(value)
+  const id = sanitizeFeaturedVideoId(payload.id)
+  const url = sanitizeFeaturedVideoUrl(payload.url)
+  if (!id || !url) {
+    return null
+  }
+
+  return {
+    id,
+    url,
+    storagePath: sanitizeFeaturedVideoStoragePath(payload.storagePath),
+    active: payload.active !== false,
+    createdAt: sanitizeFeaturedVideoCreatedAt(payload.createdAt),
+  }
+}
+
 function sanitizeCampaignMidias(value: unknown): CampaignMidias | null {
   if (value === undefined) {
     return null
@@ -389,6 +448,7 @@ function sanitizeCampaignMidias(value: unknown): CampaignMidias | null {
   const payload = asRecord(value)
   return {
     heroCarousel: sanitizeHeroCarouselMediaItems(payload.heroCarousel ?? []),
+    featuredVideo: sanitizeFeaturedVideo(payload.featuredVideo),
   }
 }
 
@@ -704,6 +764,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         nextCouponsCount: Array.isArray(nextCoupons) ? nextCoupons.length : null,
         hasNewMidias: nextMidias !== null,
         nextHeroCarouselCount: nextMidias ? nextMidias.heroCarousel.length : null,
+        hasFeaturedVideo: Boolean(nextMidias?.featuredVideo?.url),
         nextMinPurchaseQuantity,
       })
 
@@ -736,6 +797,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         minPurchaseQuantity: output.minPurchaseQuantity,
         couponsCount: output.coupons.length,
         heroCarouselCount: output.midias.heroCarousel.length,
+        hasFeaturedVideo: Boolean(output.midias.featuredVideo?.url),
       })
 
       return output

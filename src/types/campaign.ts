@@ -19,8 +19,17 @@ export type CampaignHeroCarouselMedia = {
   createdAt: string
 }
 
+export type CampaignFeaturedVideoMedia = {
+  id: string
+  url: string
+  storagePath: string | null
+  active: boolean
+  createdAt: string
+}
+
 export type CampaignMidias = {
   heroCarousel: CampaignHeroCarouselMedia[]
+  featuredVideo: CampaignFeaturedVideoMedia | null
 }
 
 export type CampaignSettings = {
