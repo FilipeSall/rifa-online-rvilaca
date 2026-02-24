@@ -60,7 +60,7 @@ export const ANNOUNCEMENT_URGENCY_TEXT =
 export const HEADER_NAV_ITEMS: NavItem[] = [
   { label: 'Início', href: '#', isActive: true },
   { label: 'Prêmios', href: '/premios', isActive: false },
-  { label: 'Ganhadores', href: '#ganhadores', isActive: false },
+  { label: 'Ganhadores', href: '/resultado', isActive: false },
   { label: 'FAQ', href: '#faq', isActive: false },
 ]
 

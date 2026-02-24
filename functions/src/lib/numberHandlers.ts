@@ -65,6 +65,7 @@ interface GetPublicNumberLookupOutput {
   number: number
   formattedNumber: string
   status: 'disponivel' | 'reservado' | 'vendido'
+  awardedPrize: string | null
   owner: {
     name: string
     city: string | null
@@ -314,6 +315,211 @@ async function resolveCampaignRange(db: Firestore, campaignId: string) {
   return readCampaignNumberRange(campaignData, campaignId)
 }
 
+function normalizeTicketDigits(raw: unknown): string | null {
+  const value = sanitizeString(raw)
+  if (!value) {
+    return null
+  }
+
+  const digits = value.replace(/\D/g, '')
+  return digits || null
+}
+
+function parseComparableWinnerTicket(raw: Record<string, unknown>): number | null {
+  const winningCode = sanitizeString(raw.winningCode)
+  const winnerTicketNumbers = Array.isArray(raw.winnerTicketNumbers)
+    ? raw.winnerTicketNumbers
+      .map((item) => normalizeTicketDigits(item))
+      .filter((item): item is string => Boolean(item))
+    : []
+
+  if (winnerTicketNumbers.length === 0) {
+    return null
+  }
+
+  const matched = winningCode
+    ? winnerTicketNumbers.find((ticket) => ticket.endsWith(winningCode))
+    : null
+  const comparableTicket = matched || winnerTicketNumbers[0]
+  const comparableNumber = Number(comparableTicket)
+
+  if (!Number.isInteger(comparableNumber) || comparableNumber <= 0) {
+    return null
+  }
+
+  return comparableNumber
+}
+
+function readTimestampMillis(value: unknown): number {
+  if (!value) {
+    return 0
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (value instanceof Date) {
+    const ms = value.getTime()
+    return Number.isFinite(ms) ? ms : 0
+  }
+
+  const asTimestamp = value as { toMillis?: () => number }
+  if (typeof asTimestamp?.toMillis === 'function') {
+    const ms = asTimestamp.toMillis()
+    return Number.isFinite(ms) ? ms : 0
+  }
+
+  const asRecordValue = asRecord(value)
+  const seconds = Number(asRecordValue.seconds)
+  const nanoseconds = Number(asRecordValue.nanoseconds)
+  if (Number.isFinite(seconds)) {
+    const safeNanoseconds = Number.isFinite(nanoseconds) ? nanoseconds : 0
+    return (seconds * 1000) + Math.floor(safeNanoseconds / 1_000_000)
+  }
+
+  return 0
+}
+
+function readOrderNumbers(data: DocumentData): number[] {
+  const reservedNumbers = data.reservedNumbers
+  if (!Array.isArray(reservedNumbers)) {
+    return []
+  }
+
+  return Array.from(new Set(
+    reservedNumbers
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value > 0),
+  )).sort((left, right) => left - right)
+}
+
+async function readWinnerTicketNumbersFromOrders(
+  db: Firestore,
+  campaignId: string,
+  userId: string,
+  weekStartAtMs: number,
+  weekEndAtMs: number,
+): Promise<string[]> {
+  if (!userId || !Number.isFinite(weekStartAtMs) || !Number.isFinite(weekEndAtMs)) {
+    return []
+  }
+
+  const ordersSnapshot = await db.collection('orders')
+    .where('userId', '==', userId)
+    .select('status', 'type', 'campaignId', 'reservedNumbers', 'createdAt', 'updatedAt')
+    .get()
+
+  const ticketNumbers = new Set<number>()
+
+  for (const documentSnapshot of ordersSnapshot.docs) {
+    const data = documentSnapshot.data()
+    const status = sanitizeString(data.status).toLowerCase()
+    const type = sanitizeString(data.type).toLowerCase()
+    const orderCampaignId = sanitizeString(data.campaignId)
+
+    if (status !== 'paid' || type !== 'deposit' || orderCampaignId !== campaignId) {
+      continue
+    }
+
+    const createdAtMs = readTimestampMillis(data.createdAt)
+    const updatedAtMs = readTimestampMillis(data.updatedAt)
+    const purchaseAtMs = createdAtMs || updatedAtMs
+
+    if (!purchaseAtMs || purchaseAtMs < weekStartAtMs || purchaseAtMs > weekEndAtMs) {
+      continue
+    }
+
+    for (const ticketNumber of readOrderNumbers(data)) {
+      ticketNumbers.add(ticketNumber)
+    }
+  }
+
+  return Array.from(ticketNumbers)
+    .sort((left, right) => left - right)
+    .map((number) => String(number).padStart(7, '0'))
+    .slice(0, 300)
+}
+
+function pickComparableTicketByWinningCode(tickets: string[], winningCode: string): number | null {
+  if (tickets.length === 0) {
+    return null
+  }
+
+  const matched = winningCode
+    ? tickets.find((ticket) => ticket.endsWith(winningCode))
+    : null
+  const comparableTicket = matched || tickets[0]
+  const comparableNumber = Number(comparableTicket)
+
+  if (!Number.isInteger(comparableNumber) || comparableNumber <= 0) {
+    return null
+  }
+
+  return comparableNumber
+}
+
+async function resolveComparableWinnerTicket(
+  db: Firestore,
+  campaignId: string,
+  raw: Record<string, unknown>,
+): Promise<number | null> {
+  const directComparable = parseComparableWinnerTicket(raw)
+  if (directComparable) {
+    return directComparable
+  }
+
+  const winner = asRecord(raw.winner)
+  const winnerUserId = sanitizeString(winner.userId)
+  const weekStartAtMs = Number(raw.weekStartAtMs)
+  const weekEndAtMs = Number(raw.weekEndAtMs)
+  const winningCode = sanitizeString(raw.winningCode)
+  const tickets = await readWinnerTicketNumbersFromOrders(
+    db,
+    campaignId,
+    winnerUserId,
+    weekStartAtMs,
+    weekEndAtMs,
+  )
+  return pickComparableTicketByWinningCode(tickets, winningCode)
+}
+
+async function resolveAwardedPrizeFromTopBuyersFallback(
+  db: Firestore,
+  campaignId: string,
+  number: number,
+): Promise<string | null> {
+  const campaignSnapshot = await db.collection('campaigns').doc(campaignId).get()
+  const latestTopBuyersDraw = asRecord(campaignSnapshot.get('latestTopBuyersDraw'))
+  const latestTopBuyersPrize = sanitizeString(latestTopBuyersDraw.drawPrize)
+  const latestTopBuyersNumber = await resolveComparableWinnerTicket(db, campaignId, latestTopBuyersDraw)
+
+  if (latestTopBuyersPrize && latestTopBuyersNumber === number) {
+    return latestTopBuyersPrize
+  }
+
+  const historySnapshot = await db.collection('topBuyersDrawResults')
+    .orderBy('publishedAtMs', 'desc')
+    .limit(120)
+    .get()
+
+  for (const documentSnapshot of historySnapshot.docs) {
+    const data = asRecord(documentSnapshot.data())
+    const historyCampaignId = sanitizeString(data.campaignId) || CAMPAIGN_DOC_ID
+    if (historyCampaignId !== campaignId) {
+      continue
+    }
+
+    const prize = sanitizeString(data.drawPrize)
+    const comparableNumber = parseComparableWinnerTicket(data)
+    if (prize && comparableNumber === number) {
+      return prize
+    }
+  }
+
+  return null
+}
+
 export function createGetNumberWindowHandler(db: Firestore) {
   return async (request: { data: unknown }) => {
     try {
@@ -546,17 +752,23 @@ export function createGetPublicNumberLookupHandler(db: Firestore) {
           number,
           formattedNumber: String(number).padStart(7, '0'),
           status: state.status === 'reservado' ? 'reservado' : 'disponivel',
+          awardedPrize: null,
           owner: null,
         } satisfies GetPublicNumberLookupOutput
       }
 
       const ownerUid = sanitizeString(numberStateSnapshot.get('ownerUid'))
+      let awardedPrize = sanitizeString(numberStateSnapshot.get('awardedPrize')) || null
+      if (!awardedPrize) {
+        awardedPrize = await resolveAwardedPrizeFromTopBuyersFallback(db, campaignId, number)
+      }
       if (!ownerUid) {
         return {
           campaignId,
           number,
           formattedNumber: String(number).padStart(7, '0'),
           status: 'vendido',
+          awardedPrize,
           owner: null,
         } satisfies GetPublicNumberLookupOutput
       }
@@ -574,6 +786,7 @@ export function createGetPublicNumberLookupHandler(db: Firestore) {
         number,
         formattedNumber: String(number).padStart(7, '0'),
         status: 'vendido',
+        awardedPrize,
         owner: {
           name: ownerName,
           city: ownerCity,
