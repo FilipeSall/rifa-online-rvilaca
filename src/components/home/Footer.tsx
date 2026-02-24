@@ -15,8 +15,7 @@ export default function Footer() {
               </h2>
             </div>
             <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-              A plataforma de sorteios premium líder de mercado. Compromisso com a transparência e a satisfação de
-              nossos participantes.
+              O Jonny tá aqui pra realizar sonhos — com transparência, seriedade e muita animação. Participe e boa sorte!
             </p>
             <div className="flex gap-4">
               <a

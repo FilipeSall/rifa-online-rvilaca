@@ -1,5 +1,6 @@
 import { getDownloadURL, ref as storageRef } from 'firebase/storage'
-import { type MouseEvent, useEffect, useState } from 'react'
+import { type MouseEvent, useEffect, useMemo, useState } from 'react'
+import { FaWhatsapp } from 'react-icons/fa'
 import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 import { storage } from '../../lib/firebase'
 
@@ -20,6 +21,14 @@ export default function FeaturedVideoFloatingButton() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [showNotificationBadge, setShowNotificationBadge] = useState(false)
   const featuredVideo = campaign.midias.featuredVideo
+  const whatsappLink = useMemo(() => {
+    const digitsOnlyNumber = campaign.supportWhatsappNumber.replace(/\D/g, '').slice(0, 15)
+    if (digitsOnlyNumber.length < 10) {
+      return null
+    }
+
+    return `https://wa.me/${digitsOnlyNumber}`
+  }, [campaign.supportWhatsappNumber])
 
   useEffect(() => {
     let isCancelled = false
@@ -82,27 +91,43 @@ export default function FeaturedVideoFloatingButton() {
     event.stopPropagation()
   }
 
-  if (!resolvedVideoUrl) {
+  if (!resolvedVideoUrl && !whatsappLink) {
     return null
   }
 
   return (
     <>
-      <div className="fixed bottom-4 left-4 z-[55] sm:bottom-6 sm:left-6">
-        {showNotificationBadge ? (
-          <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-amber-300/45 bg-amber-500/90 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-black shadow-[0_10px_25px_rgba(0,0,0,0.35)]">
-            Video novo
-          </span>
+      <div className="fixed bottom-4 left-4 z-[55] flex flex-col gap-3 sm:bottom-6 sm:left-6">
+        {resolvedVideoUrl ? (
+          <div className="relative">
+            {showNotificationBadge ? (
+              <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-amber-300/45 bg-amber-500/90 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-black shadow-[0_10px_25px_rgba(0,0,0,0.35)]">
+                Video novo
+              </span>
+            ) : null}
+            <button
+              aria-label="Abrir video em destaque"
+              className="group relative flex h-16 w-16 items-center justify-center rounded-full border border-gold/45 bg-black/75 text-gold shadow-[0_15px_35px_rgba(0,0,0,0.45)] transition-transform hover:scale-[1.03]"
+              type="button"
+              onClick={handleOpenModal}
+            >
+              <span className="absolute inset-0 rounded-full border border-gold/35 animate-ping opacity-35" />
+              <span className="material-symbols-outlined relative z-10 text-3xl">play_circle</span>
+            </button>
+          </div>
         ) : null}
-        <button
-          aria-label="Abrir video em destaque"
-          className="group relative flex h-16 w-16 items-center justify-center rounded-full border border-gold/45 bg-black/75 text-gold shadow-[0_15px_35px_rgba(0,0,0,0.45)] transition-transform hover:scale-[1.03]"
-          type="button"
-          onClick={handleOpenModal}
-        >
-          <span className="absolute inset-0 rounded-full border border-gold/35 animate-ping opacity-35" />
-          <span className="material-symbols-outlined relative z-10 text-3xl">play_circle</span>
-        </button>
+
+        {whatsappLink ? (
+          <a
+            aria-label="Falar no WhatsApp"
+            className="flex h-16 w-16 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-600/90 text-white shadow-[0_15px_35px_rgba(0,0,0,0.45)] transition-all hover:scale-[1.03] hover:bg-emerald-500"
+            href={whatsappLink ?? undefined}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <FaWhatsapp className="text-3xl" />
+          </a>
+        ) : null}
       </div>
 
       {isModalOpen ? (
@@ -127,7 +152,7 @@ export default function FeaturedVideoFloatingButton() {
               controls
               playsInline
               preload="metadata"
-              src={resolvedVideoUrl}
+              src={resolvedVideoUrl ?? undefined}
             />
           </div>
         </div>
