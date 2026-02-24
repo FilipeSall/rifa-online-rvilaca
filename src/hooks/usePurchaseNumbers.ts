@@ -241,10 +241,14 @@ export function usePurchaseNumbers() {
         return payload
       } catch (error) {
         if (pageRequestIdRef.current === requestId) {
-          toast.error(
-            getCallableErrorMessage(error, 'Nao foi possivel carregar a pagina de numeros agora.'),
-            { position: 'bottom-right' },
-          )
+          if (import.meta.env.DEV) {
+            toast.error(
+              getCallableErrorMessage(error, 'Nao foi possivel carregar a pagina de numeros agora.'),
+              { position: 'bottom-right' },
+            )
+          } else {
+            console.error('[getNumberWindow]', error)
+          }
         }
         return null
       } finally {
@@ -323,10 +327,14 @@ export function usePurchaseNumbers() {
         }
 
         setSelectedNumbers(preservedSelection)
-        toast.error(
-          getCallableErrorMessage(error, 'Nao foi possivel selecionar numeros automaticos agora.'),
-          { position: 'bottom-right' },
-        )
+        if (import.meta.env.DEV) {
+          toast.error(
+            getCallableErrorMessage(error, 'Nao foi possivel selecionar numeros automaticos agora.'),
+            { position: 'bottom-right' },
+          )
+        } else {
+          console.error('[pickRandomAvailableNumbers]', error)
+        }
       })
       .finally(() => {
         if (autoSelectRequestIdRef.current === requestId) {

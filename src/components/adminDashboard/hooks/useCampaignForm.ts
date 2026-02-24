@@ -13,7 +13,7 @@ import {
   DEFAULT_TOTAL_NUMBERS,
 } from '../../../const/campaign'
 import { useCampaignSettings } from '../../../hooks/useCampaignSettings'
-import type { CampaignCoupon, CampaignStatus } from '../../../types/campaign'
+import type { CampaignCoupon, CampaignMidias, CampaignStatus } from '../../../types/campaign'
 import { buildCampaignSettingsInput } from '../services/campaignSettingsFormService'
 
 export function useCampaignForm() {
@@ -38,6 +38,7 @@ export function useCampaignForm() {
   const [startsAt, setStartsAt] = useState('')
   const [endsAt, setEndsAt] = useState('')
   const [coupons, setCoupons] = useState<CampaignCoupon[]>([])
+  const [midias, setMidias] = useState<CampaignMidias>({ heroCarousel: [] })
   const hasEnsuredCampaignRef = useRef(false)
 
   useEffect(() => {
@@ -54,10 +55,12 @@ export function useCampaignForm() {
     setStartsAt(campaign.startsAt ?? '')
     setEndsAt(campaign.endsAt ?? '')
     setCoupons(campaign.coupons)
+    setMidias(campaign.midias)
   }, [
     campaign.additionalPrizes,
     campaign.bonusPrize,
     campaign.coupons,
+    campaign.midias,
     campaign.mainPrize,
     campaign.minPurchaseQuantity,
     campaign.pricePerCota,
@@ -98,6 +101,7 @@ export function useCampaignForm() {
       startsAt,
       endsAt,
       coupons,
+      midias,
     })
 
     if (errorMessage || !payload) {
@@ -132,6 +136,7 @@ export function useCampaignForm() {
     startsAt,
     status,
     title,
+    midias,
   ])
 
   const persistCoupons = useCallback(
@@ -150,6 +155,7 @@ export function useCampaignForm() {
         startsAt,
         endsAt,
         coupons: nextCoupons,
+        midias,
       })
 
       if (errorMessage || !payload) {
@@ -186,6 +192,64 @@ export function useCampaignForm() {
       startsAt,
       status,
       title,
+      midias,
+    ],
+  )
+
+  const persistMidias = useCallback(
+    async (nextMidias: CampaignMidias) => {
+      const { payload, errorMessage, errorToastId } = buildCampaignSettingsInput({
+        title,
+        pricePerCotaInput,
+        minPurchaseQuantityInput,
+        mainPrize,
+        secondPrize,
+        bonusPrize,
+        totalNumbersInput,
+        additionalPrizes,
+        supportWhatsappNumber,
+        status,
+        startsAt,
+        endsAt,
+        coupons,
+        midias: nextMidias,
+      })
+
+      if (errorMessage || !payload) {
+        toast.error(errorMessage ?? 'Nao foi possivel validar as midias da campanha.', {
+          toastId: errorToastId ?? 'campaign-midias-validation-error',
+        })
+        return false
+      }
+
+      try {
+        await saveCampaignSettings(payload)
+        toast.success('Midias salvas com sucesso.', {
+          toastId: 'campaign-midias-saved',
+        })
+        return true
+      } catch {
+        toast.error('Falha ao salvar midias. Tente novamente.', {
+          toastId: 'campaign-midias-save-error',
+        })
+        return false
+      }
+    },
+    [
+      additionalPrizes,
+      bonusPrize,
+      coupons,
+      endsAt,
+      mainPrize,
+      minPurchaseQuantityInput,
+      pricePerCotaInput,
+      saveCampaignSettings,
+      secondPrize,
+      totalNumbersInput,
+      supportWhatsappNumber,
+      startsAt,
+      status,
+      title,
     ],
   )
 
@@ -206,6 +270,7 @@ export function useCampaignForm() {
     startsAt,
     endsAt,
     coupons,
+    midias,
     setTitle,
     setPricePerCotaInput,
     setMinPurchaseQuantityInput,
@@ -219,7 +284,9 @@ export function useCampaignForm() {
     setStartsAt,
     setEndsAt,
     setCoupons,
+    setMidias,
     handleSaveCampaignSettings,
     persistCoupons,
+    persistMidias,
   }
 }

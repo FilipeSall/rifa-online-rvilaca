@@ -19,6 +19,8 @@ import { db, functions } from '../lib/firebase'
 import type {
   CampaignCoupon,
   CampaignCouponDiscountType,
+  CampaignHeroCarouselMedia,
+  CampaignMidias,
   CampaignSettings,
   CampaignStatus,
   UpsertCampaignSettingsInput,
@@ -194,6 +196,127 @@ function sanitizeCoupons(value: unknown): CampaignCoupon[] {
   return Array.from(deduplicated.values()).slice(0, 100)
 }
 
+function getDefaultCampaignMidias(): CampaignMidias {
+  return {
+    heroCarousel: [],
+  }
+}
+
+function sanitizeHeroCarouselMediaId(value: unknown) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  const normalized = value.trim()
+  return normalized.slice(0, 96)
+}
+
+function sanitizeHeroCarouselMediaUrl(value: unknown) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  const normalized = value.trim()
+  if (!/^https?:\/\//i.test(normalized)) {
+    return ''
+  }
+
+  return normalized
+}
+
+function sanitizeHeroCarouselMediaStoragePath(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const normalized = value.trim()
+  if (!normalized) {
+    return null
+  }
+
+  return normalized.slice(0, 260)
+}
+
+function sanitizeHeroCarouselMediaAlt(value: unknown) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 140)
+}
+
+function sanitizeHeroCarouselMediaOrder(value: unknown, fallback: number) {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return fallback
+  }
+
+  return parsed
+}
+
+function sanitizeHeroCarouselMediaCreatedAt(value: unknown) {
+  if (typeof value === 'string' && value.trim()) {
+    return value
+  }
+
+  return new Date().toISOString()
+}
+
+function sanitizeHeroCarousel(value: unknown): CampaignHeroCarouselMedia[] {
+  const items = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? Object.values(value as Record<string, unknown>)
+      : []
+
+  if (items.length === 0) {
+    return []
+  }
+
+  const deduplicated = new Map<string, CampaignHeroCarouselMedia>()
+
+  for (let index = 0; index < items.length; index += 1) {
+    const rawItem = items[index]
+    const item = rawItem && typeof rawItem === 'object' ? (rawItem as Record<string, unknown>) : {}
+    const id = sanitizeHeroCarouselMediaId(item.id)
+    const url = sanitizeHeroCarouselMediaUrl(item.url)
+
+    if (!id || !url) {
+      continue
+    }
+
+    deduplicated.set(id, {
+      id,
+      url,
+      storagePath: sanitizeHeroCarouselMediaStoragePath(item.storagePath),
+      alt: sanitizeHeroCarouselMediaAlt(item.alt),
+      order: sanitizeHeroCarouselMediaOrder(item.order, index),
+      active: item.active !== false,
+      createdAt: sanitizeHeroCarouselMediaCreatedAt(item.createdAt),
+    })
+  }
+
+  return Array.from(deduplicated.values())
+    .sort((a, b) => a.order - b.order)
+    .slice(0, 12)
+    .map((item, index) => ({
+      ...item,
+      order: index,
+    }))
+}
+
+function sanitizeCampaignMidias(value: unknown): CampaignMidias {
+  if (!value || typeof value !== 'object') {
+    return getDefaultCampaignMidias()
+  }
+
+  const payload = value as Record<string, unknown>
+
+  return {
+    heroCarousel: sanitizeHeroCarousel(payload.heroCarousel),
+  }
+}
+
 function mapSnapshotToSettings(raw: unknown): CampaignSettings {
   const payload = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
 
@@ -214,6 +337,7 @@ function mapSnapshotToSettings(raw: unknown): CampaignSettings {
     startsAt: sanitizeCampaignDate(payload.startsAt),
     endsAt: sanitizeCampaignDate(payload.endsAt),
     coupons: sanitizeCoupons(payload.coupons),
+    midias: sanitizeCampaignMidias(payload.midias ?? payload.media),
   }
 }
 
@@ -233,6 +357,7 @@ export function useCampaignSettings() {
     startsAt: null,
     endsAt: null,
     coupons: [],
+    midias: getDefaultCampaignMidias(),
   })
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -268,6 +393,7 @@ export function useCampaignSettings() {
             startsAt: null,
             endsAt: null,
             coupons: [],
+            midias: getDefaultCampaignMidias(),
           })
         }
 
@@ -307,6 +433,7 @@ export function useCampaignSettings() {
           startsAt: sanitizeCampaignDate(payload.startsAt),
           endsAt: sanitizeCampaignDate(payload.endsAt),
           coupons: sanitizeCoupons(payload.coupons),
+          midias: sanitizeCampaignMidias(payload.midias),
         })
         setExists(true)
 
@@ -338,6 +465,7 @@ export function useCampaignSettings() {
         startsAt: null,
         endsAt: null,
         coupons: [],
+        midias: getDefaultCampaignMidias(),
       }),
     [saveCampaignSettings],
   )

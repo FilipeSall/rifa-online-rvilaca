@@ -60,6 +60,8 @@ const callableOptions = {
     'http://127.0.0.1:5173',
     'https://rifa-online-395d9.web.app',
     'https://rifa-online-395d9.firebaseapp.com',
+    'https://jhonnybarber.com.br',
+    'https://www.jhonnybarber.com.br',
   ],
 }
 

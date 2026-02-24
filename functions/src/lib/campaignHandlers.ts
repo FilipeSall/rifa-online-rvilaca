@@ -30,6 +30,20 @@ interface CampaignCoupon {
   createdAt: string
 }
 
+interface CampaignHeroCarouselMedia {
+  id: string
+  url: string
+  storagePath: string | null
+  alt: string
+  order: number
+  active: boolean
+  createdAt: string
+}
+
+interface CampaignMidias {
+  heroCarousel: CampaignHeroCarouselMedia[]
+}
+
 interface UpsertCampaignSettingsInput {
   title?: string
   pricePerCota?: number
@@ -44,6 +58,7 @@ interface UpsertCampaignSettingsInput {
   startsAt?: string | null
   endsAt?: string | null
   coupons?: CampaignCoupon[]
+  midias?: CampaignMidias
 }
 
 interface UpsertCampaignSettingsOutput {
@@ -61,6 +76,7 @@ interface UpsertCampaignSettingsOutput {
   startsAt: string | null
   endsAt: string | null
   coupons: CampaignCoupon[]
+  midias: CampaignMidias
 }
 
 interface DashboardSummaryOutput {
@@ -270,6 +286,112 @@ function sanitizeCoupons(value: unknown): CampaignCoupon[] | null {
   return Array.from(deduplicated.values()).slice(0, 100)
 }
 
+function getDefaultCampaignMidias(): CampaignMidias {
+  return {
+    heroCarousel: [],
+  }
+}
+
+function sanitizeHeroCarouselMediaId(value: unknown): string {
+  const normalized = sanitizeString(value).replace(/[^a-zA-Z0-9_-]/g, '')
+  return normalized.slice(0, 96)
+}
+
+function sanitizeHeroCarouselMediaUrl(value: unknown): string {
+  const normalized = sanitizeString(value)
+  if (!normalized || !/^https?:\/\//i.test(normalized)) {
+    return ''
+  }
+
+  return normalized
+}
+
+function sanitizeHeroCarouselMediaStoragePath(value: unknown): string | null {
+  const normalized = sanitizeString(value)
+  if (!normalized) {
+    return null
+  }
+
+  return normalized.slice(0, 260)
+}
+
+function sanitizeHeroCarouselMediaAlt(value: unknown): string {
+  const normalized = sanitizeString(value)
+  return normalized.slice(0, 140)
+}
+
+function sanitizeHeroCarouselMediaOrder(value: unknown, fallback: number): number {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return fallback
+  }
+
+  return parsed
+}
+
+function sanitizeHeroCarouselMediaCreatedAt(value: unknown): string {
+  const normalized = sanitizeString(value)
+  return normalized || new Date().toISOString()
+}
+
+function sanitizeHeroCarouselMediaItems(value: unknown): CampaignHeroCarouselMedia[] {
+  const items = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? Object.values(value as Record<string, unknown>)
+      : null
+
+  if (!items) {
+    throw new HttpsError('invalid-argument', 'midias.heroCarousel deve ser uma lista.')
+  }
+
+  const deduplicated = new Map<string, CampaignHeroCarouselMedia>()
+
+  for (let index = 0; index < items.length; index += 1) {
+    const rawItem = items[index]
+    const item = asRecord(rawItem)
+    const id = sanitizeHeroCarouselMediaId(item.id)
+    const url = sanitizeHeroCarouselMediaUrl(item.url)
+
+    if (!id || !url) {
+      continue
+    }
+
+    deduplicated.set(id, {
+      id,
+      url,
+      storagePath: sanitizeHeroCarouselMediaStoragePath(item.storagePath),
+      alt: sanitizeHeroCarouselMediaAlt(item.alt),
+      order: sanitizeHeroCarouselMediaOrder(item.order, index),
+      active: item.active !== false,
+      createdAt: sanitizeHeroCarouselMediaCreatedAt(item.createdAt),
+    })
+  }
+
+  return Array.from(deduplicated.values())
+    .sort((a, b) => a.order - b.order)
+    .slice(0, 12)
+    .map((item, index) => ({
+      ...item,
+      order: index,
+    }))
+}
+
+function sanitizeCampaignMidias(value: unknown): CampaignMidias | null {
+  if (value === undefined) {
+    return null
+  }
+
+  if (value === null) {
+    return getDefaultCampaignMidias()
+  }
+
+  const payload = asRecord(value)
+  return {
+    heroCarousel: sanitizeHeroCarouselMediaItems(payload.heroCarousel ?? []),
+  }
+}
+
 function sanitizeCampaignDate(value: unknown, fieldName: string): string | null | undefined {
   if (value === undefined) {
     return undefined
@@ -342,6 +464,18 @@ export function readCampaignCoupons(data: DocumentData | undefined): CampaignCou
       error: String(error),
     })
     return []
+  }
+}
+
+function readCampaignMidias(data: DocumentData | undefined): CampaignMidias {
+  try {
+    const sanitized = sanitizeCampaignMidias(data?.midias)
+    return sanitized || getDefaultCampaignMidias()
+  } catch (error) {
+    logger.warn('readCampaignMidias fallback to empty list due to malformed data', {
+      error: String(error),
+    })
+    return getDefaultCampaignMidias()
   }
 }
 
@@ -423,6 +557,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       const nextStartsAt = sanitizeCampaignDate(payload.startsAt, 'startsAt')
       const nextEndsAt = sanitizeCampaignDate(payload.endsAt, 'endsAt')
       const nextCoupons = sanitizeCoupons(payload.coupons)
+      const nextMidias = sanitizeCampaignMidias(payload.midias)
       const campaignRef = db.collection('campaigns').doc(CAMPAIGN_DOC_ID)
       const campaignSnapshot = await campaignRef.get()
       const currentData = campaignSnapshot.exists ? (campaignSnapshot.data() as DocumentData | undefined) : undefined
@@ -485,6 +620,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         updateData.coupons = nextCoupons
       }
 
+      if (nextMidias !== null) {
+        updateData.midias = nextMidias
+      }
+
       const effectiveStartsAt =
         nextStartsAt !== undefined ? nextStartsAt : readCampaignDate(currentData, 'startsAt')
       const effectiveEndsAt =
@@ -535,6 +674,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
           updateData.coupons = []
         }
 
+        if (!updateData.midias) {
+          updateData.midias = getDefaultCampaignMidias()
+        }
+
         updateData.createdAt = FieldValue.serverTimestamp()
       } else if (
         nextTitle === null &&
@@ -549,7 +692,8 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         nextStatus === null &&
         nextStartsAt === undefined &&
         nextEndsAt === undefined &&
-        nextCoupons === null
+        nextCoupons === null &&
+        nextMidias === null
       ) {
         throw new HttpsError('invalid-argument', 'Nenhum dado valido para atualizar campanha.')
       }
@@ -558,6 +702,8 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         uid: request.auth.uid,
         hasNewCoupons: Array.isArray(nextCoupons),
         nextCouponsCount: Array.isArray(nextCoupons) ? nextCoupons.length : null,
+        hasNewMidias: nextMidias !== null,
+        nextHeroCarouselCount: nextMidias ? nextMidias.heroCarousel.length : null,
         nextMinPurchaseQuantity,
       })
 
@@ -581,6 +727,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         startsAt: readCampaignDate(campaignData, 'startsAt'),
         endsAt: readCampaignDate(campaignData, 'endsAt'),
         coupons: readCampaignCoupons(campaignData),
+        midias: readCampaignMidias(campaignData),
       } satisfies UpsertCampaignSettingsOutput
 
       logger.info('upsertCampaignSettings succeeded', {
@@ -588,6 +735,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         campaignId: CAMPAIGN_DOC_ID,
         minPurchaseQuantity: output.minPurchaseQuantity,
         couponsCount: output.coupons.length,
+        heroCarouselCount: output.midias.heroCarousel.length,
       })
 
       return output

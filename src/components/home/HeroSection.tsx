@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useHeroSection } from '../../hooks/useHeroSection'
 import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 import { DEFAULT_BONUS_PRIZE, DEFAULT_CAMPAIGN_TITLE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../const/campaign'
@@ -13,7 +13,11 @@ import 'swiper/css'
 import 'swiper/css/pagination'
 import 'react-loading-skeleton/dist/skeleton.css'
 
-const HERO_CAROUSEL_IMAGES = [slideTwo, slideOne, slideThree]
+const HERO_CAROUSEL_FALLBACK_IMAGES = [
+  { src: slideTwo, alt: 'Imagem principal da campanha' },
+  { src: slideOne, alt: 'Detalhe do premio principal' },
+  { src: slideThree, alt: 'Visual lateral do premio principal' },
+]
 
 function getDemandMessaging(soldPercentage: number) {
   if (soldPercentage >= 85) {
@@ -79,6 +83,22 @@ export default function HeroSection() {
   const soldCotasFormatted = soldNumbers.toLocaleString('pt-BR')
   const totalCotasFormatted = totalNumbers.toLocaleString('pt-BR')
   const demandMessaging = getDemandMessaging(soldPercentage)
+  const heroCarouselImages = useMemo(() => {
+    const fromCampaign = campaign.midias.heroCarousel
+      .filter((item) => item.active && !!item.url)
+      .sort((a, b) => a.order - b.order)
+      .map((item, index) => ({
+        src: item.url,
+        alt: item.alt || `Slide da campanha ${index + 1}`,
+      }))
+
+    if (fromCampaign.length > 0) {
+      return fromCampaign
+    }
+
+    return HERO_CAROUSEL_FALLBACK_IMAGES
+  }, [campaign.midias.heroCarousel])
+
   const handleImageLoaded = useCallback((imageSrc: string) => {
     setLoadedImages((currentState) => {
       if (currentState[imageSrc]) {
@@ -194,10 +214,10 @@ export default function HeroSection() {
                 slidesPerView={1}
                 speed={700}
               >
-                {HERO_CAROUSEL_IMAGES.map((imageSrc, index) => (
-                  <SwiperSlide key={imageSrc} className="relative h-full">
+                {heroCarouselImages.map((image, index) => (
+                  <SwiperSlide key={`${image.src}-${index}`} className="relative h-full">
                     <div className="hero-carousel-slide-overlay" aria-hidden="true" />
-                    {!loadedImages[imageSrc] ? (
+                    {!loadedImages[image.src] ? (
                       <div className="absolute inset-0 z-10">
                         <Skeleton
                           baseColor="rgba(17, 24, 39, 0.95)"
@@ -207,14 +227,14 @@ export default function HeroSection() {
                       </div>
                     ) : null}
                     <img
-                      alt={`BMW R1200 GS slide ${index + 1}`}
+                      alt={image.alt}
                       className={`hero-carousel-image transition-opacity duration-500 ${
-                        loadedImages[imageSrc] ? 'opacity-100' : 'opacity-0'
+                        loadedImages[image.src] ? 'opacity-100' : 'opacity-0'
                       }`}
                       loading={index === 0 ? 'eager' : 'lazy'}
-                      onError={() => handleImageLoaded(imageSrc)}
-                      onLoad={() => handleImageLoaded(imageSrc)}
-                      src={imageSrc}
+                      onError={() => handleImageLoaded(image.src)}
+                      onLoad={() => handleImageLoaded(image.src)}
+                      src={image.src}
                     />
                   </SwiperSlide>
                 ))}

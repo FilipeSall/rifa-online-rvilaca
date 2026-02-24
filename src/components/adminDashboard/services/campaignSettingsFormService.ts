@@ -8,7 +8,13 @@ import {
   DEFAULT_SUPPORT_WHATSAPP_NUMBER,
   DEFAULT_TOTAL_NUMBERS,
 } from '../../../const/campaign'
-import type { CampaignCoupon, CampaignStatus, UpsertCampaignSettingsInput } from '../../../types/campaign'
+import type {
+  CampaignCoupon,
+  CampaignHeroCarouselMedia,
+  CampaignMidias,
+  CampaignStatus,
+  UpsertCampaignSettingsInput,
+} from '../../../types/campaign'
 
 export type CampaignFormState = {
   title: string
@@ -24,12 +30,66 @@ export type CampaignFormState = {
   startsAt: string
   endsAt: string
   coupons: CampaignCoupon[]
+  midias: CampaignMidias
 }
 
 type CampaignValidationResult = {
   errorToastId: string | null
   errorMessage: string | null
   payload: UpsertCampaignSettingsInput | null
+}
+
+function sanitizeHeroCarouselMediaItems(value: unknown): CampaignHeroCarouselMedia[] {
+  const items = Array.isArray(value) ? value : []
+  const deduplicated = new Map<string, CampaignHeroCarouselMedia>()
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index]
+    if (!item || typeof item !== 'object') {
+      continue
+    }
+
+    const payload = item as Partial<CampaignHeroCarouselMedia>
+    const id = typeof payload.id === 'string' ? payload.id.trim().slice(0, 96) : ''
+    const url = typeof payload.url === 'string' ? payload.url.trim() : ''
+    if (!id || !/^https?:\/\//i.test(url)) {
+      continue
+    }
+
+    const storagePath = typeof payload.storagePath === 'string' && payload.storagePath.trim()
+      ? payload.storagePath.trim().slice(0, 260)
+      : null
+    const alt = typeof payload.alt === 'string' ? payload.alt.trim().slice(0, 140) : ''
+    const order = Number.isInteger(payload.order) && Number(payload.order) >= 0 ? Number(payload.order) : index
+    const createdAt = typeof payload.createdAt === 'string' && payload.createdAt.trim()
+      ? payload.createdAt.trim()
+      : new Date().toISOString()
+
+    deduplicated.set(id, {
+      id,
+      url,
+      storagePath,
+      alt,
+      order,
+      active: payload.active !== false,
+      createdAt,
+    })
+  }
+
+  return Array.from(deduplicated.values())
+    .sort((a, b) => a.order - b.order)
+    .slice(0, 12)
+    .map((item, index) => ({
+      ...item,
+      order: index,
+    }))
+}
+
+function sanitizeCampaignMidias(value: unknown): CampaignMidias {
+  const payload = value && typeof value === 'object' ? (value as CampaignMidias) : { heroCarousel: [] }
+  return {
+    heroCarousel: sanitizeHeroCarouselMediaItems(payload.heroCarousel),
+  }
 }
 
 export function buildCampaignSettingsInput(formState: CampaignFormState): CampaignValidationResult {
@@ -96,6 +156,7 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
       startsAt: formState.startsAt.trim() ? formState.startsAt : null,
       endsAt: formState.endsAt.trim() ? formState.endsAt : null,
       coupons: formState.coupons,
+      midias: sanitizeCampaignMidias(formState.midias),
     },
   }
 }
