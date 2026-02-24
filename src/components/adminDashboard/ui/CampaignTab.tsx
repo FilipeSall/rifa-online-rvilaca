@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import {
-  CAMPAIGN_STATUS_OPTIONS,
   DEFAULT_BONUS_PRIZE,
   DEFAULT_CAMPAIGN_TITLE,
   DEFAULT_MAIN_PRIZE,
@@ -13,9 +13,7 @@ import type {
   CampaignCoupon,
   CampaignCouponDiscountType,
   CampaignHeroCarouselMedia,
-  CampaignStatus,
 } from '../../../types/campaign'
-import { CustomSelect } from '../../ui/CustomSelect'
 import { useCampaignForm } from '../hooks/useCampaignForm'
 import {
   deleteCampaignFeaturedVideo,
@@ -24,7 +22,8 @@ import {
   uploadCampaignHeroCarouselImage,
 } from '../services/campaignMediaStorageService'
 import { buildCampaignSettingsInput } from '../services/campaignSettingsFormService'
-import { formatCurrency, getCampaignStatusLabel } from '../utils/formatters'
+import { formatCurrency } from '../utils/formatters'
+import { getScheduleStatusLabel, resolveCampaignScheduleStatus } from '../../../utils/campaignSchedule'
 
 function applyPhoneMask(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 13)
@@ -71,6 +70,8 @@ function parseErrorMessage(error: unknown, fallback: string) {
 }
 
 export default function CampaignTab() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const {
     campaign,
     isLoading,
@@ -84,9 +85,11 @@ export default function CampaignTab() {
     totalNumbersInput,
     additionalPrizes,
     supportWhatsappNumber,
-    status,
+    whatsappContactMessage,
     startsAt,
+    startsAtTime,
     endsAt,
+    endsAtTime,
     coupons,
     midias,
     setTitle,
@@ -98,9 +101,11 @@ export default function CampaignTab() {
     setTotalNumbersInput,
     setAdditionalPrizes,
     setSupportWhatsappNumber,
-    setStatus,
+    setWhatsappContactMessage,
     setStartsAt,
+    setStartsAtTime,
     setEndsAt,
+    setEndsAtTime,
     setMidias,
     handleSaveCampaignSettings,
     persistCoupons,
@@ -120,6 +125,7 @@ export default function CampaignTab() {
   const [selectedFeaturedVideoFile, setSelectedFeaturedVideoFile] = useState<File | null>(null)
   const [isUploadingFeaturedVideo, setIsUploadingFeaturedVideo] = useState(false)
   const [isRemovingFeaturedVideo, setIsRemovingFeaturedVideo] = useState(false)
+  const [shouldHighlightScheduleInputs, setShouldHighlightScheduleInputs] = useState(false)
 
   const activeCoupons = useMemo(() => coupons.filter((item) => item.active).length, [coupons])
   const heroCarouselItems = useMemo(
@@ -154,9 +160,11 @@ export default function CampaignTab() {
       totalNumbersInput,
       additionalPrizes,
       supportWhatsappNumber,
-      status,
+      whatsappContactMessage,
       startsAt,
+      startsAtTime,
       endsAt,
+      endsAtTime,
       coupons,
       midias,
     }).payload
@@ -171,10 +179,12 @@ export default function CampaignTab() {
     pricePerCotaInput,
     secondPrize,
     startsAt,
-    status,
+    startsAtTime,
     supportWhatsappNumber,
+    whatsappContactMessage,
     title,
     totalNumbersInput,
+    endsAtTime,
   ])
   const normalizedBaseCampaignPayload = useMemo(() => (
     buildCampaignSettingsInput({
@@ -187,9 +197,11 @@ export default function CampaignTab() {
       totalNumbersInput: String(campaign.totalNumbers),
       additionalPrizes: campaign.additionalPrizes,
       supportWhatsappNumber: campaign.supportWhatsappNumber,
-      status: campaign.status,
+      whatsappContactMessage: campaign.whatsappContactMessage ?? '',
       startsAt: campaign.startsAt ?? '',
+      startsAtTime: campaign.startsAtTime ?? '',
       endsAt: campaign.endsAt ?? '',
+      endsAtTime: campaign.endsAtTime ?? '',
       coupons: campaign.coupons,
       midias: campaign.midias,
     }).payload
@@ -204,10 +216,12 @@ export default function CampaignTab() {
     campaign.pricePerCota,
     campaign.secondPrize,
     campaign.startsAt,
-    campaign.status,
+    campaign.startsAtTime,
     campaign.supportWhatsappNumber,
+    campaign.whatsappContactMessage,
     campaign.title,
     campaign.totalNumbers,
+    campaign.endsAtTime,
   ])
   const hasCampaignChanges = useMemo(() => {
     if (!normalizedCurrentCampaignPayload || !normalizedBaseCampaignPayload) {
@@ -221,12 +235,63 @@ export default function CampaignTab() {
     : hasCampaignChanges
       ? 'Salvar campanha'
       : 'Sem alteracoes'
+  const scheduleStatus = useMemo(
+    () =>
+      resolveCampaignScheduleStatus({
+        startsAt: startsAt || null,
+        startsAtTime: startsAtTime || null,
+        endsAt: endsAt || null,
+        endsAtTime: endsAtTime || null,
+      }),
+    [endsAt, endsAtTime, startsAt, startsAtTime],
+  )
+  const scheduleStatusColorClassName = scheduleStatus === 'finished'
+    ? 'text-red-300'
+    : scheduleStatus === 'scheduled'
+      ? 'text-amber-200'
+      : 'text-emerald-300'
+  const scheduleInputClassName = shouldHighlightScheduleInputs
+    ? 'rounded-xl border border-gold/70 bg-gold/10 px-4 py-3 animate-pulse shadow-[0_0_0_1px_rgba(245,168,0,0.45),0_0_30px_rgba(245,168,0,0.35)]'
+    : 'rounded-xl border border-white/10 bg-black/25 px-4 py-3'
+  const isEndOnSameDayAsStart = Boolean(startsAt && endsAt && startsAt === endsAt)
+  const minEndTime = isEndOnSameDayAsStart && startsAtTime ? startsAtTime : undefined
 
   useEffect(() => {
     if (!heroAltInput.trim()) {
       setHeroAltInput(currentPrizeAlt)
     }
   }, [currentPrizeAlt, heroAltInput])
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search)
+    const locationState = location.state && typeof location.state === 'object'
+      ? (location.state as Record<string, unknown>)
+      : null
+    const shouldHighlight = searchParams.get('tab') === 'campanha'
+      && locationState?.highlightCampaignDates === true
+      && locationState?.highlightSource === 'home-hero-admin-cta'
+
+    if (!shouldHighlight) {
+      setShouldHighlightScheduleInputs(false)
+      return
+    }
+
+    setShouldHighlightScheduleInputs(true)
+    const timeout = window.setTimeout(() => {
+      setShouldHighlightScheduleInputs(false)
+      navigate(`${location.pathname}${location.search}`, {
+        replace: true,
+        state: {
+          ...locationState,
+          highlightCampaignDates: false,
+        },
+      })
+    }, 2000)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [location.pathname, location.search, location.state, navigate])
 
   const canAddCoupon = useMemo(() => {
     const normalizedCode = couponCodeInput.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 24)
@@ -639,7 +704,9 @@ export default function CampaignTab() {
             </div>
             <div className="rounded-xl border border-white/10 bg-black/40 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Status</p>
-              <p className="mt-1 text-lg font-black text-emerald-300">{getCampaignStatusLabel(status)}</p>
+              <p className={`mt-1 text-lg font-black ${scheduleStatusColorClassName}`}>
+                {getScheduleStatusLabel(scheduleStatus)}
+              </p>
             </div>
             <div className="rounded-xl border border-white/10 bg-black/40 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Compra mínima</p>
@@ -750,43 +817,111 @@ export default function CampaignTab() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
-                    <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-status">
-                      Status da campanha
-                    </label>
-                    <CustomSelect
-                      id="campaign-status"
-                      value={status}
-                      onChange={(v) => setStatus(v as CampaignStatus)}
-                      options={CAMPAIGN_STATUS_OPTIONS}
-                    />
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className={scheduleInputClassName}>
                     <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-starts-at">
-                      Inicio
+                      Data de inicio
                     </label>
                     <input
                       id="campaign-starts-at"
                       className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
                       type="date"
+                      max={endsAt || undefined}
                       value={startsAt}
-                      onChange={(event) => setStartsAt(event.target.value)}
+                      onChange={(event) => {
+                        const nextValue = event.target.value
+                        setStartsAt(nextValue)
+                        if (!nextValue) {
+                          setStartsAtTime('')
+                          return
+                        }
+
+                        if (!startsAtTime) {
+                          setStartsAtTime('00:00')
+                        }
+                      }}
                     />
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+                  <div className={scheduleInputClassName}>
+                    <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-starts-at-time">
+                      Hora de inicio
+                    </label>
+                    <input
+                      id="campaign-starts-at-time"
+                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!startsAt}
+                      step={60}
+                      type="time"
+                      value={startsAtTime}
+                      onChange={(event) => {
+                        const nextValue = event.target.value
+                        setStartsAtTime(nextValue)
+                        if (
+                          nextValue
+                          && isEndOnSameDayAsStart
+                          && endsAtTime
+                          && endsAtTime < nextValue
+                        ) {
+                          setEndsAtTime(nextValue)
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className={scheduleInputClassName}>
                     <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-ends-at">
-                      Fim
+                      Data de fim
                     </label>
                     <input
                       id="campaign-ends-at"
                       className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
                       type="date"
+                      min={startsAt || undefined}
                       value={endsAt}
-                      onChange={(event) => setEndsAt(event.target.value)}
+                      onChange={(event) => {
+                        const nextValue = event.target.value
+                        setEndsAt(nextValue)
+                        if (!nextValue) {
+                          setEndsAtTime('')
+                          return
+                        }
+
+                        if (!endsAtTime) {
+                          setEndsAtTime('23:59')
+                        }
+
+                        if (
+                          nextValue
+                          && startsAt
+                          && nextValue === startsAt
+                          && startsAtTime
+                          && endsAtTime
+                          && endsAtTime < startsAtTime
+                        ) {
+                          setEndsAtTime(startsAtTime)
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className={scheduleInputClassName}>
+                    <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-ends-at-time">
+                      Hora de fim
+                    </label>
+                    <input
+                      id="campaign-ends-at-time"
+                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!endsAt}
+                      min={minEndTime}
+                      step={60}
+                      type="time"
+                      value={endsAtTime}
+                      onChange={(event) => setEndsAtTime(event.target.value)}
                     />
                   </div>
                 </div>
+                <p className="text-[11px] text-gray-400">
+                  O status e definido automaticamente pelo periodo configurado:
+                  antes do inicio = agendada, durante o periodo = ativa, apos o fim = encerrada.
+                </p>
 
                 <div className="rounded-xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-3">
                   <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-support-whatsapp">
@@ -799,6 +934,20 @@ export default function CampaignTab() {
                     value={supportWhatsappNumber}
                     onChange={(event) => setSupportWhatsappNumber(applyPhoneMask(event.target.value))}
                     placeholder="+55(62)98507-4477"
+                  />
+                </div>
+
+                <div className="rounded-xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-3">
+                  <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-whatsapp-contact-message">
+                    Mensagem automática WhatsApp (ao clicar no botão)
+                  </label>
+                  <textarea
+                    id="campaign-whatsapp-contact-message"
+                    className="mt-2 w-full rounded-md border border-cyan-200/30 bg-black/25 px-3 py-2 text-sm font-semibold text-cyan-50 outline-none transition-colors focus:border-cyan-200/80"
+                    value={whatsappContactMessage}
+                    onChange={(event) => setWhatsappContactMessage(event.target.value)}
+                    placeholder="Olá! Tenho interesse em comprar números da rifa..."
+                    rows={3}
                   />
                 </div>
               </div>

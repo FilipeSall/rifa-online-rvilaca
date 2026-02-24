@@ -3,6 +3,7 @@ import { useHeroSection } from '../../hooks/useHeroSection'
 import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 import { DEFAULT_BONUS_PRIZE, DEFAULT_CAMPAIGN_TITLE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../const/campaign'
 import { usePublicSalesSnapshot } from '../../hooks/usePublicSalesSnapshot'
+import { useAuthStore } from '../../stores/authStore'
 import Skeleton from 'react-loading-skeleton'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import { Autoplay, Pagination } from 'swiper/modules'
@@ -56,8 +57,17 @@ export default function HeroSection() {
     totalNumbers: totalNumbersRaw,
     soldPercentage,
   } = usePublicSalesSnapshot()
-  const { animatedSoldPercentage, countdownItems, handleOpenBuyModal } = useHeroSection(soldPercentage)
+  const {
+    animatedSoldPercentage,
+    countdownItems,
+    countdownDisplayState,
+    handleOpenBuyModal,
+    handleOpenCampaignSettings,
+  } = useHeroSection(
+    soldPercentage,
+  )
   const { campaign } = useCampaignSettings()
+  const userRole = useAuthStore((state) => state.userRole)
   const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({})
   const campaignTitle = campaign.title || DEFAULT_CAMPAIGN_TITLE
   const mainPrize = campaign.mainPrize || DEFAULT_MAIN_PRIZE
@@ -74,6 +84,10 @@ export default function HeroSection() {
   const soldCotasFormatted = soldNumbers.toLocaleString('pt-BR')
   const totalCotasFormatted = totalNumbers.toLocaleString('pt-BR')
   const demandMessaging = getDemandMessaging(soldPercentage)
+  const shouldShowAdminCampaignHint = userRole === 'admin'
+    && countdownDisplayState.mode === 'hidden'
+    && !campaign.startsAt
+    && !campaign.endsAt
   const heroCarouselImages = useMemo(() => {
     return campaign.midias.heroCarousel
       .filter((item) => item.active && !!item.url)
@@ -154,13 +168,33 @@ export default function HeroSection() {
             </div>
 
             {/* Countdown */}
-            <div className="grid grid-cols-4 gap-4 max-w-md mt-2">
-              {countdownItems.map(({ value, label }) => (
-                <div key={label} className="hero-countdown-card text-center">
-                  <span className="hero-countdown-value">{value}</span>
-                  <span className="hero-countdown-label">{label}</span>
+            <div className="max-w-md mt-2">
+              <p className="text-[11px] uppercase tracking-[0.2em] text-gold">{countdownDisplayState.title}</p>
+              <p className="mt-1 text-xs text-gray-400">{countdownDisplayState.helper}</p>
+              {countdownDisplayState.mode !== 'hidden' ? (
+                <div className="mt-3 grid grid-cols-4 gap-4">
+                  {countdownItems.map(({ value, label }) => (
+                    <div key={label} className="hero-countdown-card text-center">
+                      <span className="hero-countdown-value">{value}</span>
+                      <span className="hero-countdown-label">{label}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ) : null}
+              {shouldShowAdminCampaignHint ? (
+                <div className="mt-4 rounded-xl border border-cyan-300/35 bg-cyan-500/10 p-4">
+                  <p className="text-xs font-semibold text-cyan-100">
+                    Admin: defina inicio e fim da campanha para liberar o contador e a comunicacao para os usuarios.
+                  </p>
+                  <button
+                    className="mt-3 inline-flex h-10 items-center rounded-lg border border-cyan-200/60 bg-cyan-300 px-4 text-[11px] font-black uppercase tracking-[0.14em] text-black transition hover:brightness-95"
+                    type="button"
+                    onClick={handleOpenCampaignSettings}
+                  >
+                    Configurar campanha no dashboard
+                  </button>
+                </div>
+              ) : null}
             </div>
 
             {/* CTA button + secure payment */}
@@ -232,34 +266,36 @@ export default function HeroSection() {
               )}
 
               {/* Stars + moto name overlay — bottom of the image */}
-              <div className="absolute z-20 bottom-0 left-0 right-0 px-6 pb-4 flex flex-col gap-2 pointer-events-none">
+              <div className="absolute z-20 bottom-0 left-0 right-0 px-4 pb-4 sm:px-6 sm:pb-5 pointer-events-none">
                 {/* Stars */}
-                <div className="flex items-center gap-1">
-                  {[...Array(5)].map((_, i) => (
-                    <svg
-                      key={i}
-                      className="w-7 h-7 text-yellow-400 drop-shadow-lg"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
+                <div className="rounded-2xl border border-white/20 bg-black/45 px-4 py-3 backdrop-blur-[2px] shadow-[0_18px_34px_rgba(0,0,0,0.45)] sm:px-5 sm:py-4">
+                  <div className="flex items-center gap-1.5">
+                    {[...Array(5)].map((_, i) => (
+                      <svg
+                        key={i}
+                        className="h-7 w-7 text-yellow-300 drop-shadow-[0_4px_10px_rgba(0,0,0,0.6)] sm:h-8 sm:w-8"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                      </svg>
+                    ))}
+                  </div>
+                  {/* Moto name */}
+                  <div className="mt-2">
+                    <p
+                      className="font-black leading-[0.95] text-white text-[2.35rem] sm:text-[2.9rem] lg:text-[3.35rem]"
+                      style={{ textShadow: '0 6px 26px rgba(0,0,0,1)' }}
                     >
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                    </svg>
-                  ))}
-                </div>
-                {/* Moto name */}
-                <div>
-                  <p
-                    className="text-white font-black text-4xl lg:text-5xl leading-none drop-shadow-lg"
-                    style={{ textShadow: '0 3px 16px rgba(0,0,0,1)' }}
-                  >
-                    {mainPrize}
-                  </p>
-                  <p
-                    className="text-gold text-base font-bold tracking-[0.2em] uppercase mt-1"
-                    style={{ textShadow: '0 2px 12px rgba(0,0,0,1)' }}
-                  >
-                    Triple Black
-                  </p>
+                      {mainPrize}
+                    </p>
+                    <p
+                      className="mt-1 text-sm font-black uppercase tracking-[0.28em] text-gold sm:text-base"
+                      style={{ textShadow: '0 3px 16px rgba(0,0,0,1)' }}
+                    >
+                      Triple Black
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

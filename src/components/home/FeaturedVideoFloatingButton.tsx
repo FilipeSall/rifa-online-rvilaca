@@ -27,8 +27,15 @@ export default function FeaturedVideoFloatingButton() {
       return null
     }
 
-    return `https://wa.me/${digitsOnlyNumber}`
-  }, [campaign.supportWhatsappNumber])
+    const baseUrl = `https://wa.me/${digitsOnlyNumber}`
+    const message = campaign.whatsappContactMessage?.trim()
+    if (message) {
+      const encodedMessage = encodeURIComponent(message)
+      return `${baseUrl}?text=${encodedMessage}`
+    }
+
+    return baseUrl
+  }, [campaign.supportWhatsappNumber, campaign.whatsappContactMessage])
 
   useEffect(() => {
     let isCancelled = false

@@ -4,7 +4,6 @@ import {
   DEFAULT_ADDITIONAL_PRIZES,
   DEFAULT_BONUS_PRIZE,
   DEFAULT_MIN_PURCHASE_QUANTITY,
-  DEFAULT_CAMPAIGN_STATUS,
   DEFAULT_CAMPAIGN_TITLE,
   DEFAULT_MAIN_PRIZE,
   DEFAULT_SECOND_PRIZE,
@@ -13,7 +12,7 @@ import {
   DEFAULT_TOTAL_NUMBERS,
 } from '../../../const/campaign'
 import { useCampaignSettings } from '../../../hooks/useCampaignSettings'
-import type { CampaignCoupon, CampaignMidias, CampaignStatus } from '../../../types/campaign'
+import type { CampaignCoupon, CampaignMidias } from '../../../types/campaign'
 import { buildCampaignSettingsInput } from '../services/campaignSettingsFormService'
 
 export function useCampaignForm() {
@@ -34,9 +33,11 @@ export function useCampaignForm() {
   const [totalNumbersInput, setTotalNumbersInput] = useState(String(DEFAULT_TOTAL_NUMBERS))
   const [additionalPrizes, setAdditionalPrizes] = useState<string[]>(DEFAULT_ADDITIONAL_PRIZES)
   const [supportWhatsappNumber, setSupportWhatsappNumber] = useState(DEFAULT_SUPPORT_WHATSAPP_NUMBER)
-  const [status, setStatus] = useState<CampaignStatus>(DEFAULT_CAMPAIGN_STATUS)
+  const [whatsappContactMessage, setWhatsappContactMessage] = useState('')
   const [startsAt, setStartsAt] = useState('')
+  const [startsAtTime, setStartsAtTime] = useState('')
   const [endsAt, setEndsAt] = useState('')
+  const [endsAtTime, setEndsAtTime] = useState('')
   const [coupons, setCoupons] = useState<CampaignCoupon[]>([])
   const [midias, setMidias] = useState<CampaignMidias>({ heroCarousel: [], featuredVideo: null })
   const hasEnsuredCampaignRef = useRef(false)
@@ -51,9 +52,11 @@ export function useCampaignForm() {
     setTotalNumbersInput(String(campaign.totalNumbers))
     setAdditionalPrizes(campaign.additionalPrizes)
     setSupportWhatsappNumber(campaign.supportWhatsappNumber)
-    setStatus(campaign.status)
+    setWhatsappContactMessage(campaign.whatsappContactMessage ?? '')
     setStartsAt(campaign.startsAt ?? '')
+    setStartsAtTime(campaign.startsAtTime ?? '')
     setEndsAt(campaign.endsAt ?? '')
+    setEndsAtTime(campaign.endsAtTime ?? '')
     setCoupons(campaign.coupons)
     setMidias(campaign.midias)
   }, [
@@ -67,9 +70,11 @@ export function useCampaignForm() {
     campaign.secondPrize,
     campaign.totalNumbers,
     campaign.supportWhatsappNumber,
-    campaign.status,
+    campaign.whatsappContactMessage,
     campaign.startsAt,
+    campaign.startsAtTime,
     campaign.endsAt,
+    campaign.endsAtTime,
     campaign.title,
   ])
 
@@ -97,9 +102,11 @@ export function useCampaignForm() {
       totalNumbersInput,
       additionalPrizes,
       supportWhatsappNumber,
-      status,
+      whatsappContactMessage,
       startsAt,
+      startsAtTime,
       endsAt,
+      endsAtTime,
       coupons,
       midias,
     })
@@ -133,9 +140,11 @@ export function useCampaignForm() {
     secondPrize,
     totalNumbersInput,
     supportWhatsappNumber,
+    whatsappContactMessage,
     startsAt,
-    status,
+    startsAtTime,
     title,
+    endsAtTime,
     midias,
   ])
 
@@ -151,9 +160,11 @@ export function useCampaignForm() {
         totalNumbersInput,
         additionalPrizes,
         supportWhatsappNumber,
-        status,
+        whatsappContactMessage,
         startsAt,
+        startsAtTime,
         endsAt,
+        endsAtTime,
         coupons: nextCoupons,
         midias,
       })
@@ -189,9 +200,11 @@ export function useCampaignForm() {
       secondPrize,
       totalNumbersInput,
       supportWhatsappNumber,
+      whatsappContactMessage,
       startsAt,
-      status,
+      startsAtTime,
       title,
+      endsAtTime,
       midias,
     ],
   )
@@ -208,9 +221,11 @@ export function useCampaignForm() {
         totalNumbersInput,
         additionalPrizes,
         supportWhatsappNumber,
-        status,
+        whatsappContactMessage,
         startsAt,
+        startsAtTime,
         endsAt,
+        endsAtTime,
         coupons,
         midias: nextMidias,
       })
@@ -247,9 +262,11 @@ export function useCampaignForm() {
       secondPrize,
       totalNumbersInput,
       supportWhatsappNumber,
+      whatsappContactMessage,
       startsAt,
-      status,
+      startsAtTime,
       title,
+      endsAtTime,
     ],
   )
 
@@ -266,9 +283,11 @@ export function useCampaignForm() {
     totalNumbersInput,
     additionalPrizes,
     supportWhatsappNumber,
-    status,
+    whatsappContactMessage,
     startsAt,
+    startsAtTime,
     endsAt,
+    endsAtTime,
     coupons,
     midias,
     setTitle,
@@ -280,9 +299,11 @@ export function useCampaignForm() {
     setTotalNumbersInput,
     setAdditionalPrizes,
     setSupportWhatsappNumber,
-    setStatus,
+    setWhatsappContactMessage,
     setStartsAt,
+    setStartsAtTime,
     setEndsAt,
+    setEndsAtTime,
     setCoupons,
     setMidias,
     handleSaveCampaignSettings,

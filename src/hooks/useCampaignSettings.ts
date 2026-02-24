@@ -108,6 +108,23 @@ function sanitizeCampaignDate(value: unknown) {
   return normalized
 }
 
+function sanitizeCampaignTime(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const normalized = value.trim()
+  if (!normalized) {
+    return null
+  }
+
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(normalized)) {
+    return null
+  }
+
+  return normalized
+}
+
 function sanitizeSupportWhatsappNumber(value: unknown) {
   if (typeof value !== 'string') {
     return DEFAULT_SUPPORT_WHATSAPP_NUMBER
@@ -399,9 +416,12 @@ function mapSnapshotToSettings(raw: unknown): CampaignSettings {
       ? payload.additionalPrizes.map((p) => (typeof p === 'string' ? p.trim() : '')).filter(Boolean)
       : DEFAULT_ADDITIONAL_PRIZES,
     supportWhatsappNumber: sanitizeSupportWhatsappNumber(payload.supportWhatsappNumber),
+    whatsappContactMessage: typeof payload.whatsappContactMessage === 'string' ? payload.whatsappContactMessage.trim().slice(0, 500) : undefined,
     status: sanitizeCampaignStatus(payload.status),
     startsAt: sanitizeCampaignDate(payload.startsAt),
+    startsAtTime: sanitizeCampaignTime(payload.startsAtTime),
     endsAt: sanitizeCampaignDate(payload.endsAt),
+    endsAtTime: sanitizeCampaignTime(payload.endsAtTime),
     coupons: sanitizeCoupons(payload.coupons),
     midias: sanitizeCampaignMidias(payload.midias ?? payload.media),
   }
@@ -419,9 +439,12 @@ export function useCampaignSettings() {
     totalNumbers: DEFAULT_TOTAL_NUMBERS,
     additionalPrizes: DEFAULT_ADDITIONAL_PRIZES,
     supportWhatsappNumber: DEFAULT_SUPPORT_WHATSAPP_NUMBER,
+    whatsappContactMessage: undefined,
     status: DEFAULT_CAMPAIGN_STATUS,
     startsAt: null,
+    startsAtTime: null,
     endsAt: null,
+    endsAtTime: null,
     coupons: [],
     midias: getDefaultCampaignMidias(),
   })
@@ -455,9 +478,12 @@ export function useCampaignSettings() {
             totalNumbers: DEFAULT_TOTAL_NUMBERS,
             additionalPrizes: DEFAULT_ADDITIONAL_PRIZES,
             supportWhatsappNumber: DEFAULT_SUPPORT_WHATSAPP_NUMBER,
+            whatsappContactMessage: undefined,
             status: DEFAULT_CAMPAIGN_STATUS,
             startsAt: null,
+            startsAtTime: null,
             endsAt: null,
+            endsAtTime: null,
             coupons: [],
             midias: getDefaultCampaignMidias(),
           })
@@ -495,9 +521,14 @@ export function useCampaignSettings() {
             ? payload.additionalPrizes.map((p) => (typeof p === 'string' ? p.trim() : '')).filter(Boolean)
             : DEFAULT_ADDITIONAL_PRIZES,
           supportWhatsappNumber: sanitizeSupportWhatsappNumber(payload.supportWhatsappNumber),
+          whatsappContactMessage: typeof payload.whatsappContactMessage === 'string'
+            ? payload.whatsappContactMessage.trim().slice(0, 500)
+            : undefined,
           status: sanitizeCampaignStatus(payload.status),
           startsAt: sanitizeCampaignDate(payload.startsAt),
+          startsAtTime: sanitizeCampaignTime(payload.startsAtTime),
           endsAt: sanitizeCampaignDate(payload.endsAt),
+          endsAtTime: sanitizeCampaignTime(payload.endsAtTime),
           coupons: sanitizeCoupons(payload.coupons),
           midias: sanitizeCampaignMidias(payload.midias),
         })
@@ -527,9 +558,12 @@ export function useCampaignSettings() {
         totalNumbers: DEFAULT_TOTAL_NUMBERS,
         additionalPrizes: DEFAULT_ADDITIONAL_PRIZES,
         supportWhatsappNumber: DEFAULT_SUPPORT_WHATSAPP_NUMBER,
+        whatsappContactMessage: undefined,
         status: DEFAULT_CAMPAIGN_STATUS,
         startsAt: null,
+        startsAtTime: null,
         endsAt: null,
+        endsAtTime: null,
         coupons: [],
         midias: getDefaultCampaignMidias(),
       }),

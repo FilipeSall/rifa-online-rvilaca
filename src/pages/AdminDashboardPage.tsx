@@ -1,19 +1,38 @@
 import { signOut } from 'firebase/auth'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import AdminDashboardContent from '../components/adminDashboard/AdminDashboardContent'
 import Header from '../components/home/Header'
 import { type AdminTabId } from '../const/adminDashboard'
 import { auth } from '../lib/firebase'
 import { useAuthStore } from '../stores/authStore'
 
+function resolveDashboardTabFromSearch(search: string): AdminTabId | null {
+  const tab = new URLSearchParams(search).get('tab')
+  if (tab === 'dashboard' || tab === 'campanha' || tab === 'sorteio-top' || tab === 'sorteio-geral') {
+    return tab
+  }
+
+  return null
+}
+
 export default function AdminDashboardPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const isAuthReady = useAuthStore((state) => state.isAuthReady)
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
   const isRoleReady = useAuthStore((state) => state.isRoleReady)
   const userRole = useAuthStore((state) => state.userRole)
-  const [activeTab, setActiveTab] = useState<AdminTabId>('dashboard')
+  const [activeTab, setActiveTab] = useState<AdminTabId>(() => resolveDashboardTabFromSearch(location.search) || 'dashboard')
+
+  useEffect(() => {
+    const nextTab = resolveDashboardTabFromSearch(location.search)
+    if (!nextTab) {
+      return
+    }
+
+    setActiveTab(nextTab)
+  }, [location.search])
 
   useEffect(() => {
     if (!isAuthReady || !isRoleReady) {

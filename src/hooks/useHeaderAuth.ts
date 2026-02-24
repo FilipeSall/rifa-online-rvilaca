@@ -33,6 +33,10 @@ function getVerificationActionSettings() {
 
 function getVerificationErrorMessage(error: unknown) {
   const authError = error as AuthError
+  if (authError?.code === 'auth/unauthorized-continue-uri' || authError?.code === 'auth/invalid-continue-uri') {
+    return 'a configuracao do link de confirmacao esta invalida. Ajuste os dominios autorizados no Firebase.'
+  }
+
   if (authError?.code === 'auth/too-many-requests') {
     return 'Ja enviamos um email recentemente. Aguarde um pouco e tente novamente.'
   }
@@ -42,6 +46,29 @@ function getVerificationErrorMessage(error: unknown) {
   }
 
   return 'Nao foi possivel enviar o email de confirmacao agora.'
+}
+
+function isContinueUriError(error: unknown) {
+  const authError = error as AuthError
+  return authError?.code === 'auth/unauthorized-continue-uri' || authError?.code === 'auth/invalid-continue-uri'
+}
+
+async function sendVerificationEmailWithFallback(user: User) {
+  try {
+    await sendEmailVerification(user, getVerificationActionSettings())
+    return { sent: true, usedFallback: false, error: null as unknown }
+  } catch (error) {
+    if (!isContinueUriError(error)) {
+      return { sent: false, usedFallback: false, error }
+    }
+
+    try {
+      await sendEmailVerification(user)
+      return { sent: true, usedFallback: true, error: null as unknown }
+    } catch (fallbackError) {
+      return { sent: false, usedFallback: true, error: fallbackError }
+    }
+  }
 }
 
 export function useHeaderAuth() {
@@ -244,17 +271,16 @@ export function useHeaderAuth() {
           )
 
           await batch.commit()
-          let verificationMessage = 'Conta criada! Enviamos um email de confirmacao para ativar sua conta.'
-
-          try {
-            await sendEmailVerification(userCredential.user, getVerificationActionSettings())
-          } catch (sendError) {
-            verificationMessage = `Conta criada, mas ${getVerificationErrorMessage(sendError).toLowerCase()}`
-          }
+          const verificationResult = await sendVerificationEmailWithFallback(userCredential.user)
+          const verificationMessage = verificationResult.sent
+            ? verificationResult.usedFallback
+              ? 'Conta criada! Enviamos o email de confirmacao com link padrao do Firebase.'
+              : 'Conta criada! Enviamos um email de confirmacao para ativar sua conta.'
+            : `Conta criada, mas ${getVerificationErrorMessage(verificationResult.error).toLowerCase()}`
 
           await signOut(auth).catch(() => null)
           closeAuthModal()
-          toast.success(verificationMessage, {
+          toast[verificationResult.sent ? 'success' : 'warning'](verificationMessage, {
             position: 'bottom-right',
           })
           return
@@ -266,8 +292,14 @@ export function useHeaderAuth() {
             let message = 'Seu email ainda nao foi confirmado. Verifique sua caixa de entrada para ativar a conta.'
 
             try {
-              await sendEmailVerification(signedUser, getVerificationActionSettings())
-              message = 'Seu email ainda nao foi confirmado. Reenviamos um novo link de ativacao.'
+              const verificationResult = await sendVerificationEmailWithFallback(signedUser)
+              if (verificationResult.sent) {
+                message = verificationResult.usedFallback
+                  ? 'Seu email ainda nao foi confirmado. Reenviamos usando o link padrao do Firebase.'
+                  : 'Seu email ainda nao foi confirmado. Reenviamos um novo link de ativacao.'
+              } else {
+                message = getVerificationErrorMessage(verificationResult.error)
+              }
             } catch (sendError) {
               message = getVerificationErrorMessage(sendError)
             } finally {

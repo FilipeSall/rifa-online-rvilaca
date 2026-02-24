@@ -43,9 +43,12 @@ export type CampaignSettings = {
   totalNumbers: number
   additionalPrizes: string[]
   supportWhatsappNumber: string
+  whatsappContactMessage?: string
   status: CampaignStatus
   startsAt: string | null
+  startsAtTime: string | null
   endsAt: string | null
+  endsAtTime: string | null
   coupons: CampaignCoupon[]
   midias: CampaignMidias
 }
@@ -60,9 +63,12 @@ export type UpsertCampaignSettingsInput = {
   totalNumbers?: number
   additionalPrizes?: string[]
   supportWhatsappNumber?: string
+  whatsappContactMessage?: string
   status?: CampaignStatus
   startsAt?: string | null
+  startsAtTime?: string | null
   endsAt?: string | null
+  endsAtTime?: string | null
   coupons?: CampaignCoupon[]
   midias?: CampaignMidias
 }
@@ -78,9 +84,12 @@ export type UpsertCampaignSettingsOutput = {
   totalNumbers: number
   additionalPrizes: string[]
   supportWhatsappNumber: string
+  whatsappContactMessage?: string
   status: CampaignStatus
   startsAt: string | null
+  startsAtTime: string | null
   endsAt: string | null
+  endsAtTime: string | null
   coupons: CampaignCoupon[]
   midias: CampaignMidias
 }

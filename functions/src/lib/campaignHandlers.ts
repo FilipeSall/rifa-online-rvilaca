@@ -63,9 +63,12 @@ interface UpsertCampaignSettingsInput {
   totalNumbers?: number
   additionalPrizes?: string[]
   supportWhatsappNumber?: string
+  whatsappContactMessage?: string
   status?: CampaignStatus
   startsAt?: string | null
+  startsAtTime?: string | null
   endsAt?: string | null
+  endsAtTime?: string | null
   coupons?: CampaignCoupon[]
   midias?: CampaignMidias
 }
@@ -81,9 +84,12 @@ interface UpsertCampaignSettingsOutput {
   totalNumbers: number
   additionalPrizes: string[]
   supportWhatsappNumber: string
+  whatsappContactMessage?: string
   status: CampaignStatus
   startsAt: string | null
+  startsAtTime: string | null
   endsAt: string | null
+  endsAtTime: string | null
   coupons: CampaignCoupon[]
   midias: CampaignMidias
 }
@@ -474,6 +480,23 @@ function sanitizeCampaignDate(value: unknown, fieldName: string): string | null 
   return normalized
 }
 
+function sanitizeCampaignTime(value: unknown, fieldName: string): string | null | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (value === null || value === '') {
+    return null
+  }
+
+  const normalized = sanitizeString(value)
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(normalized)) {
+    throw new HttpsError('invalid-argument', `${fieldName} deve seguir o formato HH:mm.`)
+  }
+
+  return normalized
+}
+
 async function assertAdminRole(db: Firestore, uid: string) {
   const userSnapshot = await db.collection('users').doc(uid).get()
   const role = sanitizeString(userSnapshot.get('role')).toLowerCase()
@@ -572,6 +595,11 @@ function readCampaignSupportWhatsappNumber(data: DocumentData | undefined): stri
   return value || DEFAULT_SUPPORT_WHATSAPP_NUMBER
 }
 
+function readCampaignWhatsappContactMessage(data: DocumentData | undefined): string | undefined {
+  const value = sanitizeString(data?.whatsappContactMessage)
+  return value || undefined
+}
+
 function readCampaignStatus(data: DocumentData | undefined): CampaignStatus {
   const value = sanitizeString(data?.status).toLowerCase()
   if (CAMPAIGN_STATUS_VALUES.includes(value as CampaignStatus)) {
@@ -594,6 +622,37 @@ function readCampaignDate(data: DocumentData | undefined, fieldName: 'startsAt' 
   return value
 }
 
+function readCampaignTime(data: DocumentData | undefined, fieldName: 'startsAtTime' | 'endsAtTime'): string | null {
+  const value = sanitizeString(data?.[fieldName])
+  if (!value) {
+    return null
+  }
+
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+    return null
+  }
+
+  return value
+}
+
+function resolveCampaignDateTime(
+  dateValue: string | null,
+  timeValue: string | null,
+  useEndOfDayFallback: boolean,
+): number | null {
+  if (!dateValue) {
+    return null
+  }
+
+  const effectiveTime = timeValue || (useEndOfDayFallback ? '23:59' : '00:00')
+  const parsed = new Date(`${dateValue}T${effectiveTime}:00`)
+  if (Number.isNaN(parsed.getTime())) {
+    return null
+  }
+
+  return parsed.getTime()
+}
+
 export function createUpsertCampaignSettingsHandler(db: Firestore) {
   return async (request: { auth?: { uid?: string } | null; data: unknown }) => {
     const uid = requireActiveUid(request.auth)
@@ -610,9 +669,12 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       const nextTotalNumbers = sanitizeTotalNumbers(payload.totalNumbers)
       const nextAdditionalPrizes = sanitizeCampaignAdditionalPrizes(payload.additionalPrizes)
       const nextSupportWhatsappNumber = sanitizeSupportWhatsappNumber(payload.supportWhatsappNumber)
+      const nextWhatsappContactMessage = sanitizeString(payload.whatsappContactMessage)?.slice(0, 500) || null
       const nextStatus = sanitizeCampaignStatus(payload.status)
       const nextStartsAt = sanitizeCampaignDate(payload.startsAt, 'startsAt')
+      const nextStartsAtTime = sanitizeCampaignTime(payload.startsAtTime, 'startsAtTime')
       const nextEndsAt = sanitizeCampaignDate(payload.endsAt, 'endsAt')
+      const nextEndsAtTime = sanitizeCampaignTime(payload.endsAtTime, 'endsAtTime')
       const nextCoupons = sanitizeCoupons(payload.coupons)
       const nextMidias = sanitizeCampaignMidias(payload.midias)
       const campaignRef = db.collection('campaigns').doc(CAMPAIGN_DOC_ID)
@@ -661,6 +723,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         updateData.supportWhatsappNumber = nextSupportWhatsappNumber
       }
 
+      if (nextWhatsappContactMessage !== null) {
+        updateData.whatsappContactMessage = nextWhatsappContactMessage
+      }
+
       if (nextStatus !== null) {
         updateData.status = nextStatus
       }
@@ -669,8 +735,16 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         updateData.startsAt = nextStartsAt
       }
 
+      if (nextStartsAtTime !== undefined) {
+        updateData.startsAtTime = nextStartsAtTime
+      }
+
       if (nextEndsAt !== undefined) {
         updateData.endsAt = nextEndsAt
+      }
+
+      if (nextEndsAtTime !== undefined) {
+        updateData.endsAtTime = nextEndsAtTime
       }
 
       if (nextCoupons !== null) {
@@ -683,10 +757,16 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
 
       const effectiveStartsAt =
         nextStartsAt !== undefined ? nextStartsAt : readCampaignDate(currentData, 'startsAt')
+      const effectiveStartsAtTime =
+        nextStartsAtTime !== undefined ? nextStartsAtTime : readCampaignTime(currentData, 'startsAtTime')
       const effectiveEndsAt =
         nextEndsAt !== undefined ? nextEndsAt : readCampaignDate(currentData, 'endsAt')
-      if (effectiveStartsAt && effectiveEndsAt && effectiveStartsAt > effectiveEndsAt) {
-        throw new HttpsError('invalid-argument', 'startsAt nao pode ser maior que endsAt.')
+      const effectiveEndsAtTime =
+        nextEndsAtTime !== undefined ? nextEndsAtTime : readCampaignTime(currentData, 'endsAtTime')
+      const startsAtMs = resolveCampaignDateTime(effectiveStartsAt, effectiveStartsAtTime, false)
+      const endsAtMs = resolveCampaignDateTime(effectiveEndsAt, effectiveEndsAtTime, true)
+      if (startsAtMs !== null && endsAtMs !== null && startsAtMs > endsAtMs) {
+        throw new HttpsError('invalid-argument', 'startsAt nao pode ser maior que endsAt considerando hora.')
       }
 
       if (!campaignSnapshot.exists) {
@@ -748,7 +828,9 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         nextSupportWhatsappNumber === null &&
         nextStatus === null &&
         nextStartsAt === undefined &&
+        nextStartsAtTime === undefined &&
         nextEndsAt === undefined &&
+        nextEndsAtTime === undefined &&
         nextCoupons === null &&
         nextMidias === null
       ) {
@@ -781,9 +863,12 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         totalNumbers: readCampaignTotalNumbers(campaignData),
         additionalPrizes: readCampaignAdditionalPrizes(campaignData),
         supportWhatsappNumber: readCampaignSupportWhatsappNumber(campaignData),
+        whatsappContactMessage: readCampaignWhatsappContactMessage(campaignData),
         status: readCampaignStatus(campaignData),
         startsAt: readCampaignDate(campaignData, 'startsAt'),
+        startsAtTime: readCampaignTime(campaignData, 'startsAtTime'),
         endsAt: readCampaignDate(campaignData, 'endsAt'),
+        endsAtTime: readCampaignTime(campaignData, 'endsAtTime'),
         coupons: readCampaignCoupons(campaignData),
         midias: readCampaignMidias(campaignData),
       } satisfies UpsertCampaignSettingsOutput
