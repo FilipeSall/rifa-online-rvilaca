@@ -2,7 +2,6 @@ import { initializeApp, type FirebaseOptions } from 'firebase/app'
 import { getAnalytics, isSupported } from 'firebase/analytics'
 import {
   initializeAppCheck,
-  onTokenChanged,
   ReCaptchaEnterpriseProvider,
   ReCaptchaV3Provider,
   type AppCheck,
@@ -62,14 +61,6 @@ if (isAppCheckEnabled && appCheckSiteKey) {
       : new ReCaptchaV3Provider(appCheckSiteKey),
     isTokenAutoRefreshEnabled: true,
   })
-
-  onTokenChanged(
-    appCheck,
-    () => {},
-    (error) => {
-      console.error('[app-check] token_error', error)
-    },
-  )
 }
 
 const auth = getAuth(app)

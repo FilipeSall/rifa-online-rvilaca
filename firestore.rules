@@ -20,7 +20,8 @@ service cloud.firestore {
 
     function isValidUserProfileBase() {
       let allowed = ['uid', 'name', 'email', 'phone', 'cpf', 'role', 'photoURL',
-                    'providerIds', 'createdAtAuth', 'updatedAt', 'lastLoginAt'];
+                    'providerIds', 'createdAtAuth', 'updatedAt', 'lastLoginAt',
+                    'nameSearch', 'emailSearch', 'cpfSearch', 'phoneSearch'];
       return request.resource.data.keys().hasOnly(allowed)
         && request.resource.data.uid == request.auth.uid;
     }

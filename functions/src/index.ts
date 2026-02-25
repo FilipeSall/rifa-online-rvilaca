@@ -47,6 +47,7 @@ import {
   createSearchAdminUsersHandler,
   createUpdateAdminUserRoleHandler,
 } from './lib/userAdminHandlers.js'
+import { createEnsureUserProfileHandler } from './lib/userProfileHandlers.js'
 
 initializeApp()
 
@@ -126,6 +127,7 @@ export const getPublicMainRaffleDrawHistory = onCall(
   callableOptions,
   createGetPublicMainRaffleDrawHistoryHandler(db),
 )
+export const ensureUserProfile = onCall(callableOptions, createEnsureUserProfileHandler(db))
 export const searchAdminUsers = onCall(callableOptions, createSearchAdminUsersHandler(db))
 export const getAdminUserDetails = onCall(callableOptions, createGetAdminUserDetailsHandler(db))
 export const updateAdminUserRole = onCall(callableOptions, createUpdateAdminUserRoleHandler(db))
