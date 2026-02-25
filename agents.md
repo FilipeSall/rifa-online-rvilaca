@@ -71,8 +71,12 @@ Obrigatorias:
 - `VITE_FIREBASE_APP_ID`
 - `VITE_FIREBASE_MEASUREMENT_ID`
 - `VITE_FIREBASE_FUNCTIONS_REGION` (default no codigo: `southamerica-east1`)
+- `VITE_FIREBASE_APPCHECK_SITE_KEY` (reCAPTCHA v3 site key para Firebase App Check)
+- `VITE_FIREBASE_APPCHECK_ENABLED` (`true` para ativar App Check no ambiente; default no codigo: ativo em producao)
+- `VITE_FIREBASE_APPCHECK_PROVIDER` (`v3` ou `enterprise`)
+- `VITE_FIREBASE_APPCHECK_DEBUG_TOKEN` (opcional para debug local)
 
-Observacao: `src/lib/firebase.ts` lanca erro em runtime se faltar qualquer variavel obrigatoria.
+Observacao: `src/lib/firebase.ts` lanca erro em runtime se faltar variavel obrigatoria; quando App Check estiver ativo, `VITE_FIREBASE_APPCHECK_SITE_KEY` e obrigatoria.
 
 ### Scripts de seed (`.env` / shell)
 

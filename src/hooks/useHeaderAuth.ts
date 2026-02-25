@@ -226,6 +226,12 @@ export function useHeaderAuth() {
   const [googleAuthError, setGoogleAuthError] = useState<string | null>(null)
   const [emailAuthError, setEmailAuthError] = useState<string | null>(null)
   const authMenuRef = useRef<HTMLDivElement>(null)
+  const showLoginSuccessToast = useCallback(() => {
+    toast.success('Login realizado com sucesso.', {
+      position: 'bottom-right',
+      toastId: 'auth-login-success',
+    })
+  }, [])
 
   const closeAuthModal = useCallback(() => {
     setIsAuthModalOpen(false)
@@ -317,6 +323,7 @@ export function useHeaderAuth() {
 
         if (redirectResult?.user) {
           setAuthUser(redirectResult.user)
+          showLoginSuccessToast()
         }
       } catch (error) {
         if (!isMounted) {
@@ -333,7 +340,7 @@ export function useHeaderAuth() {
     return () => {
       isMounted = false
     }
-  }, [setAuthUser])
+  }, [setAuthUser, showLoginSuccessToast])
 
   const handleAuthButtonClick = useCallback(() => {
     if (isLoggedIn) {
@@ -364,6 +371,7 @@ export function useHeaderAuth() {
       }
 
       await signInWithPopup(auth, googleProvider)
+      showLoginSuccessToast()
       closeAuthModal()
     } catch (error) {
       const currentAuthError = error as AuthError
@@ -384,7 +392,7 @@ export function useHeaderAuth() {
     } finally {
       setIsSigningIn(false)
     }
-  }, [closeAuthModal])
+  }, [closeAuthModal, showLoginSuccessToast])
 
   const handleSignOut = useCallback(async () => {
     closeAuthModal()
@@ -570,6 +578,7 @@ export function useHeaderAuth() {
           }
         }
 
+        showLoginSuccessToast()
         closeAuthModal()
       } catch (error) {
         if (isCreatingAccount && createdUser) {
@@ -600,7 +609,7 @@ export function useHeaderAuth() {
         setIsEmailSubmitting(false)
       }
     },
-    [closeAuthModal, cpfValue, emailValue, isCreatingAccount, passwordValue, phoneValue]
+    [closeAuthModal, cpfValue, emailValue, isCreatingAccount, passwordValue, phoneValue, showLoginSuccessToast]
   )
 
   return {

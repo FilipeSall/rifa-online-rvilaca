@@ -1,4 +1,5 @@
 import type { CouponFeedback } from '../../types/purchaseNumbers'
+import type { SelectionMode } from '../../types/purchaseNumbers'
 import { formatCurrency } from '../../utils/purchaseNumbers'
 import { formatTicketNumbers } from '../../utils/ticketNumber'
 
@@ -16,11 +17,13 @@ type PurchaseSummaryCardProps = {
   canProceed: boolean
   isReserving: boolean
   isAutoSelecting: boolean
+  selectionMode: SelectionMode
   shouldHighlightSelectedNumbers: boolean
   selectedNumbers: number[]
   isSticky?: boolean
   onCouponCodeChange: (value: string) => void
   onApplyCoupon: () => void
+  onSwitchToManual: () => void
   onProceed: () => void
 }
 
@@ -38,14 +41,17 @@ export default function PurchaseSummaryCard({
   canProceed,
   isReserving,
   isAutoSelecting,
+  selectionMode,
   shouldHighlightSelectedNumbers,
   selectedNumbers,
   isSticky = true,
   onCouponCodeChange,
   onApplyCoupon,
+  onSwitchToManual,
   onProceed,
 }: PurchaseSummaryCardProps) {
   const formattedSelectedNumbers = formatTicketNumbers(selectedNumbers)
+  const isAutomaticSelection = selectionMode === 'automatico'
 
   return (
     <div className={`${isSticky ? 'sticky top-24 ' : ''}rounded-2xl border border-gold/25 bg-luxury-card p-6 shadow-2xl`}>
@@ -128,7 +134,33 @@ export default function PurchaseSummaryCard({
       </p>
 
       <div className="mt-6 border-t border-white/10 pt-4">
-        <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Numeros selecionados</p>
+        <div className="flex items-start justify-between gap-3">
+          <p className={`text-[10px] uppercase tracking-[0.18em] ${isAutomaticSelection ? 'text-gold md:text-gray-500' : 'text-gray-500'}`}>
+            Numeros selecionados
+          </p>
+          {isAutomaticSelection ? (
+            <button
+              className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-gold transition-colors hover:text-gold-hover md:hidden"
+              type="button"
+              onClick={onSwitchToManual}
+            >
+              Modo manual
+            </button>
+          ) : null}
+        </div>
+        {isAutomaticSelection ? (
+          <p className="mt-2 text-[11px] leading-relaxed text-gray-300 md:hidden">
+            Os numeros foram selecionados automaticamente. Prefere escolher manualmente?{' '}
+            <button
+              className="font-semibold text-gold underline underline-offset-2 transition-colors hover:text-gold-hover"
+              type="button"
+              onClick={onSwitchToManual}
+            >
+              Clique aqui
+            </button>
+            .
+          </p>
+        ) : null}
         <p
           className={`mt-2 break-all text-sm text-gray-300 ${
             shouldHighlightSelectedNumbers ? 'selected-numbers-limit-flash' : ''

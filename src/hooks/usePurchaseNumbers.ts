@@ -249,8 +249,6 @@ export function usePurchaseNumbers() {
               getCallableErrorMessage(error, 'Nao foi possivel carregar a pagina de numeros agora.'),
               { position: 'bottom-right' },
             )
-          } else {
-            console.error('[getNumberWindow]', error)
           }
         }
         return null
@@ -335,8 +333,6 @@ export function usePurchaseNumbers() {
             getCallableErrorMessage(error, 'Nao foi possivel selecionar numeros automaticos agora.'),
             { position: 'bottom-right' },
           )
-        } else {
-          console.error('[pickRandomAvailableNumbers]', error)
         }
       })
       .finally(() => {

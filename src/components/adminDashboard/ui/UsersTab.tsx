@@ -92,11 +92,9 @@ export default function UsersTab() {
     roleValue,
     setRoleValue,
     isSavingRole,
-    isClearingOrderHistory,
     openUserDetails,
     closeUserDetails,
     saveRole,
-    clearOrderHistory,
   } = useAdminUsers()
 
   return (
@@ -110,23 +108,6 @@ export default function UsersTab() {
               Busca otimizada por prefixo em campos indexados (email, CPF, número e nome) com limite controlado para reduzir leituras.
             </p>
           </div>
-          <div className="rounded-xl border border-emerald-300/25 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-100">
-            Sem regex global: foco em busca escalável com menor custo.
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
-          <p className="text-xs text-gray-300">
-            Manutenção global: esta ação remove todos os pedidos e dados transacionais relacionados.
-          </p>
-          <button
-            className="h-10 rounded-lg border border-rose-400/45 bg-rose-500/12 px-4 text-[11px] font-black uppercase tracking-[0.14em] text-rose-200 transition-colors hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-            type="button"
-            onClick={() => void clearOrderHistory()}
-            disabled={isClearingOrderHistory}
-          >
-            {isClearingOrderHistory ? 'Limpando Pedidos...' : 'Apagar Histórico de Pedidos'}
-          </button>
         </div>
 
         <div className="mt-5 rounded-xl border border-gold/30 bg-black/25 p-4">

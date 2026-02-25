@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { usePurchaseNumbers } from '../../hooks/usePurchaseNumbers'
+import { useAuthStore } from '../../stores/authStore'
+import MobileAuthCard from './MobileAuthCard'
 import NumberSelectionCard from './NumberSelectionCard'
 import QuantitySelectionCard from './QuantitySelectionCard'
 import PurchaseSummaryCard from './PurchaseSummaryCard'
@@ -10,6 +12,9 @@ type PurchaseNumbersContentProps = {
 
 export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumbersContentProps) {
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false)
+  const [mobileModalView, setMobileModalView] = useState<'cart' | 'auth'>('cart')
+  const [shouldProceedAfterMobileAuth, setShouldProceedAfterMobileAuth] = useState(false)
+  const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
   const {
     numberPool,
     selectionMode,
@@ -56,6 +61,20 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     handleProceed,
   } = purchaseState
 
+  const closeMobileOverlay = useCallback(() => {
+    setIsMobileCartOpen(false)
+    setMobileModalView('cart')
+    setShouldProceedAfterMobileAuth(false)
+  }, [])
+
+  const isSmallViewport = () => {
+    if (typeof window === 'undefined') {
+      return false
+    }
+
+    return window.matchMedia('(max-width: 1023px)').matches
+  }
+
   useEffect(() => {
     if (!isMobileCartOpen) {
       return
@@ -63,7 +82,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setIsMobileCartOpen(false)
+        closeMobileOverlay()
       }
     }
 
@@ -74,7 +93,28 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
       document.body.style.overflow = ''
       window.removeEventListener('keydown', handleEscape)
     }
-  }, [isMobileCartOpen])
+  }, [closeMobileOverlay, isMobileCartOpen])
+
+  useEffect(() => {
+    if (!isMobileCartOpen || mobileModalView !== 'auth' || !shouldProceedAfterMobileAuth || !isLoggedIn) {
+      return
+    }
+
+    setShouldProceedAfterMobileAuth(false)
+    setMobileModalView('cart')
+    setIsMobileCartOpen(false)
+    void handleProceed()
+  }, [handleProceed, isLoggedIn, isMobileCartOpen, mobileModalView, shouldProceedAfterMobileAuth])
+
+  const handleSummaryProceed = useCallback(() => {
+    if (!isLoggedIn && isSmallViewport()) {
+      setMobileModalView('auth')
+      setShouldProceedAfterMobileAuth(true)
+      return
+    }
+
+    void handleProceed()
+  }, [handleProceed, isLoggedIn])
 
   const summaryCardProps = useMemo(
     () => ({
@@ -91,11 +131,13 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
       canProceed,
       isReserving,
       isAutoSelecting,
+      selectionMode,
       shouldHighlightSelectedNumbers,
       selectedNumbers,
       onCouponCodeChange: setCouponCode,
       onApplyCoupon: handleApplyCoupon,
-      onProceed: handleProceed,
+      onSwitchToManual: () => setSelectionMode('manual'),
+      onProceed: handleSummaryProceed,
     }),
     [
       selectedCount,
@@ -111,11 +153,13 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
       canProceed,
       isReserving,
       isAutoSelecting,
+      selectionMode,
       shouldHighlightSelectedNumbers,
       selectedNumbers,
       setCouponCode,
       handleApplyCoupon,
-      handleProceed,
+      handleSummaryProceed,
+      setSelectionMode,
     ],
   )
 
@@ -170,7 +214,10 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
         aria-label="Abrir carrinho"
         className="fixed bottom-4 right-4 z-[72] flex h-16 w-16 items-center justify-center rounded-full border border-gold/70 bg-[radial-gradient(circle_at_35%_30%,#ffd568,#f5a800_56%,#b87900_100%)] text-black shadow-[0_14px_35px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-gold/75 xl:hidden"
         type="button"
-        onClick={() => setIsMobileCartOpen(true)}
+        onClick={() => {
+          setMobileModalView('cart')
+          setIsMobileCartOpen(true)
+        }}
       >
         <span className="material-symbols-outlined text-[31px]">shopping_cart</span>
         {selectedCount > 0 ? (
@@ -185,21 +232,27 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
           aria-modal="true"
           className="fixed inset-0 z-[95] flex items-end bg-black/75 p-3 xl:hidden"
           role="dialog"
-          onClick={() => setIsMobileCartOpen(false)}
+          onClick={closeMobileOverlay}
         >
           <div
             className="relative w-full max-h-[92vh] overflow-y-auto rounded-2xl border border-white/15 bg-luxury-bg p-1 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <button
-              aria-label="Fechar carrinho"
-              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white"
-              type="button"
-              onClick={() => setIsMobileCartOpen(false)}
-            >
-              <span className="material-symbols-outlined text-lg">close</span>
-            </button>
-            <PurchaseSummaryCard {...summaryCardProps} isSticky={false} />
+            {mobileModalView !== 'auth' ? (
+              <button
+                aria-label="Fechar carrinho"
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white"
+                type="button"
+                onClick={closeMobileOverlay}
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            ) : null}
+            {mobileModalView === 'auth' ? (
+              <MobileAuthCard onBackToCart={() => setMobileModalView('cart')} />
+            ) : (
+              <PurchaseSummaryCard {...summaryCardProps} isSticky={false} />
+            )}
           </div>
         </div>
       ) : null}

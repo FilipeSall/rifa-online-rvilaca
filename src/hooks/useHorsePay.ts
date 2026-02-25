@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { httpsCallable, type HttpsCallableResult } from 'firebase/functions'
 import { functions } from '../lib/firebase'
-import { logPurchaseFlow, serializeError } from '../utils/purchaseFlowLogger'
 
 export type PixType = 'CPF' | 'CNPJ' | 'EMAIL' | 'PHONE' | 'RANDOM'
 
@@ -73,22 +72,16 @@ export function useHorsePay() {
   )
 
   const runCallable = useCallback(
-    async <T>(label: string, operation: () => Promise<T>) => {
-      logPurchaseFlow('useHorsePay', 'callable_started', 'info', { label })
+    async <T>(operation: () => Promise<T>) => {
       setLoading(true)
       setError(null)
 
       try {
         const result = await operation()
-        logPurchaseFlow('useHorsePay', 'callable_succeeded', 'info', { label })
         return result
       } catch (callableError) {
         const normalizedError = toError(callableError)
         setError(normalizedError)
-        logPurchaseFlow('useHorsePay', 'callable_failed', 'error', {
-          label,
-          error: serializeError(callableError),
-        })
         throw normalizedError
       } finally {
         setLoading(false)
@@ -99,7 +92,7 @@ export function useHorsePay() {
 
   const createDeposit = useCallback(
     async ({ payerName, phone, cpf, couponCode }: CreateDepositInput) =>
-      runCallable('createPixDeposit', () => {
+      runCallable(() => {
         const payload: CreateDepositInput = {
           payerName,
         }
@@ -123,14 +116,14 @@ export function useHorsePay() {
 
   const requestWithdraw = useCallback(
     async ({ amount, pixKey, pixType }: RequestWithdrawInput) =>
-      runCallable('requestWithdraw', () =>
+      runCallable(() =>
         unwrapCallable<RequestWithdrawResponse>(callables.requestWithdraw({ amount, pixKey, pixType })),
       ),
     [callables.requestWithdraw, runCallable],
   )
 
   const getBalance = useCallback(
-    async () => runCallable('getBalance', () => unwrapCallable<BalanceResponse>(callables.getBalance({}))),
+    async () => runCallable(() => unwrapCallable<BalanceResponse>(callables.getBalance({}))),
     [callables.getBalance, runCallable],
   )
 
