@@ -297,9 +297,8 @@ export default function HeroSection() {
                       ) : null}
                       <img
                         alt={image.alt}
-                        className={`hero-carousel-image transition-opacity duration-500 ${
-                          loadedImages[image.src] ? 'opacity-100' : 'opacity-0'
-                        }`}
+                        className={`hero-carousel-image transition-opacity duration-500 ${loadedImages[image.src] ? 'opacity-100' : 'opacity-0'
+                          }`}
                         loading={index === 0 ? 'eager' : 'lazy'}
                         onError={() => handleImageLoaded(image.src)}
                         onLoad={() => handleImageLoaded(image.src)}
