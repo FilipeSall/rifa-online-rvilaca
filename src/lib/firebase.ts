@@ -48,8 +48,6 @@ const appCheckProvider = `${import.meta.env.VITE_FIREBASE_APPCHECK_PROVIDER ?? '
 const appCheckEnabledEnv = `${import.meta.env.VITE_FIREBASE_APPCHECK_ENABLED ?? ''}`.trim().toLowerCase()
 // App Check deve ser opt-in para evitar quebrar autenticacao em deploys sem configuracao valida.
 const isAppCheckEnabled = appCheckEnabledEnv === 'true'
-const isLocalDevHost = typeof window !== 'undefined'
-  && ['localhost', '127.0.0.1'].includes(window.location.hostname)
 
 if (isAppCheckEnabled && !appCheckSiteKey) {
   throw new Error('Missing Firebase environment variable: VITE_FIREBASE_APPCHECK_SITE_KEY')
