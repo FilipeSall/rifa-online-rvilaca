@@ -1,6 +1,12 @@
 import { initializeApp, type FirebaseOptions } from 'firebase/app'
 import { getAnalytics, isSupported } from 'firebase/analytics'
-import { initializeAppCheck, ReCaptchaEnterpriseProvider, ReCaptchaV3Provider } from 'firebase/app-check'
+import {
+  initializeAppCheck,
+  onTokenChanged,
+  ReCaptchaEnterpriseProvider,
+  ReCaptchaV3Provider,
+  type AppCheck,
+} from 'firebase/app-check'
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getFunctions } from 'firebase/functions'
@@ -36,38 +42,35 @@ const firebaseConfig: FirebaseOptions = {
 
 const app = initializeApp(firebaseConfig)
 const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY?.trim()
-const appCheckDebugToken = import.meta.env.VITE_FIREBASE_APPCHECK_DEBUG_TOKEN?.trim()
 const appCheckProvider = `${import.meta.env.VITE_FIREBASE_APPCHECK_PROVIDER ?? 'v3'}`.trim().toLowerCase() === 'enterprise'
   ? 'enterprise'
   : 'v3'
 const appCheckEnabledEnv = `${import.meta.env.VITE_FIREBASE_APPCHECK_ENABLED ?? ''}`.trim().toLowerCase()
-const isAppCheckEnabled = appCheckEnabledEnv ? appCheckEnabledEnv === 'true' : import.meta.env.PROD
+// App Check deve ser opt-in para evitar quebrar autenticacao em deploys sem configuracao valida.
+const isAppCheckEnabled = appCheckEnabledEnv === 'true'
 const isLocalDevHost = typeof window !== 'undefined'
   && ['localhost', '127.0.0.1'].includes(window.location.hostname)
-const shouldUseAutoDebugToken = !import.meta.env.PROD && isAppCheckEnabled && isLocalDevHost && !appCheckDebugToken
 
 if (isAppCheckEnabled && !appCheckSiteKey) {
   throw new Error('Missing Firebase environment variable: VITE_FIREBASE_APPCHECK_SITE_KEY')
 }
 
-type AppCheckDebugGlobal = typeof globalThis & {
-  FIREBASE_APPCHECK_DEBUG_TOKEN?: string | boolean
-}
+let appCheck: AppCheck | null = null
 
-if (appCheckDebugToken || shouldUseAutoDebugToken) {
-  const debugTokenValue = appCheckDebugToken || 'true'
-  ;(globalThis as AppCheckDebugGlobal).FIREBASE_APPCHECK_DEBUG_TOKEN =
-    debugTokenValue === 'true' ? true : debugTokenValue
-}
-
-const appCheck = isAppCheckEnabled && appCheckSiteKey
-  ? initializeAppCheck(app, {
+if (isAppCheckEnabled && appCheckSiteKey) {
+  try {
+    appCheck = initializeAppCheck(app, {
       provider: appCheckProvider === 'enterprise'
         ? new ReCaptchaEnterpriseProvider(appCheckSiteKey)
         : new ReCaptchaV3Provider(appCheckSiteKey),
       isTokenAutoRefreshEnabled: true,
     })
-  : null
+
+    onTokenChanged(appCheck, () => {}, () => {})
+  } catch {
+    // App Check init failed silently — auth and other services continue normally
+  }
+}
 
 const auth = getAuth(app)
 const db = getFirestore(app)

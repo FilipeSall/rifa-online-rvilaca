@@ -26,47 +26,10 @@ import { buildUserSearchFields } from '../utils/userSearch'
 
 const googleProvider = new GoogleAuthProvider()
 googleProvider.setCustomParameters({ prompt: 'select_account' })
-const GOOGLE_POPUP_FALLBACK_CODES = new Set([
-  'auth/popup-blocked',
-  'auth/cancelled-popup-request',
-  'auth/operation-not-supported-in-this-environment',
-])
-const MOBILE_USER_AGENT_REGEX = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i
 const GOOGLE_AUTH_FLOW = `${import.meta.env.VITE_FIREBASE_GOOGLE_AUTH_FLOW ?? 'auto'}`.toLowerCase()
 
 function shouldPreferGoogleRedirectFlow() {
-  if (GOOGLE_AUTH_FLOW === 'popup') {
-    return false
-  }
-
-  if (GOOGLE_AUTH_FLOW === 'redirect') {
-    return true
-  }
-
-  if (import.meta.env.PROD) {
-    return true
-  }
-
-  if (typeof window === 'undefined') {
-    return false
-  }
-
-  return MOBILE_USER_AGENT_REGEX.test(window.navigator.userAgent)
-}
-
-function shouldFallbackToGoogleRedirect(error: unknown) {
-  const authError = error as AuthError
-  const errorMessage = `${authError?.message ?? ''}`.toLowerCase()
-
-  if (authError?.code === 'auth/popup-closed-by-user') {
-    return false
-  }
-
-  if (GOOGLE_POPUP_FALLBACK_CODES.has(authError?.code)) {
-    return true
-  }
-
-  return errorMessage.includes('cross-origin-opener-policy') || errorMessage.includes('window.closed')
+  return GOOGLE_AUTH_FLOW === 'redirect'
 }
 
 function getVerificationActionSettings() {
@@ -326,12 +289,18 @@ export function useHeaderAuth() {
           showLoginSuccessToast()
         }
       } catch (error) {
+        const redirectAuthError = error as AuthError
+
         if (!isMounted) {
           return
         }
 
-        const redirectAuthError = error as AuthError
-        setGoogleAuthError(getGoogleAuthErrorMessage(redirectAuthError.code))
+        const redirectErrorMessage = getGoogleAuthErrorMessage(redirectAuthError.code)
+        setGoogleAuthError(redirectErrorMessage)
+        toast.error(redirectErrorMessage, {
+          position: 'bottom-right',
+          toastId: 'auth-redirect-error',
+        })
       }
     }
 
@@ -361,9 +330,9 @@ export function useHeaderAuth() {
     setGoogleAuthError(null)
     setEmailAuthError(null)
 
-    try {
-      const useRedirectFlow = shouldPreferGoogleRedirectFlow()
+    const useRedirectFlow = shouldPreferGoogleRedirectFlow()
 
+    try {
       if (useRedirectFlow) {
         closeAuthModal()
         await signInWithRedirect(auth, googleProvider)
@@ -375,18 +344,6 @@ export function useHeaderAuth() {
       closeAuthModal()
     } catch (error) {
       const currentAuthError = error as AuthError
-
-      if (shouldFallbackToGoogleRedirect(currentAuthError)) {
-        try {
-          closeAuthModal()
-          await signInWithRedirect(auth, googleProvider)
-          return
-        } catch (redirectError) {
-          const redirectAuthError = redirectError as AuthError
-          setGoogleAuthError(getGoogleAuthErrorMessage(redirectAuthError.code))
-          return
-        }
-      }
 
       setGoogleAuthError(getGoogleAuthErrorMessage(currentAuthError.code))
     } finally {

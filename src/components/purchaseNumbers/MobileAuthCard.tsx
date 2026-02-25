@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type SyntheticEvent } from 'react'
-import { GoogleAuthProvider, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signOut, type AuthError } from 'firebase/auth'
+import { GoogleAuthProvider, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, type AuthError } from 'firebase/auth'
 import { FcGoogle } from 'react-icons/fc'
 import { HiOutlineArrowLeft, HiOutlineArrowRight } from 'react-icons/hi2'
 import { toast } from 'react-toastify'
@@ -12,6 +12,7 @@ type MobileAuthCardProps = {
 
 const googleProvider = new GoogleAuthProvider()
 googleProvider.setCustomParameters({ prompt: 'select_account' })
+const GOOGLE_AUTH_FLOW = `${import.meta.env.VITE_FIREBASE_GOOGLE_AUTH_FLOW ?? 'auto'}`.toLowerCase()
 
 export default function MobileAuthCard({ onBackToCart }: MobileAuthCardProps) {
   const [isSigningIn, setIsSigningIn] = useState(false)
@@ -34,6 +35,11 @@ export default function MobileAuthCard({ onBackToCart }: MobileAuthCardProps) {
     setEmailAuthError(null)
 
     try {
+      if (GOOGLE_AUTH_FLOW === 'redirect') {
+        await signInWithRedirect(auth, googleProvider)
+        return
+      }
+
       await signInWithPopup(auth, googleProvider)
       toast.success('Login realizado com sucesso.', {
         position: 'bottom-right',
