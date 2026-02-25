@@ -96,12 +96,12 @@ export default function Header() {
     <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-luxury-bg/90 backdrop-blur-md">
       <div className="container mx-auto px-4 lg:px-8">
         <div className="flex h-20 items-center justify-between">
-          <div className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2">
             <img src={logo} alt="JonnyBarber" className="h-16 w-16 object-contain" />
             <h1 className="text-xl lg:text-2xl font-barber text-white tracking-widest uppercase">
               JONNYBARBER
             </h1>
-          </div>
+          </Link>
 
           <nav className="hidden lg:flex items-center gap-8">
             {HEADER_NAV_ITEMS.map(({ label, href }) => (

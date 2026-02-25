@@ -58,18 +58,20 @@ if (isAppCheckEnabled && !appCheckSiteKey) {
 let appCheck: AppCheck | null = null
 
 if (isAppCheckEnabled && appCheckSiteKey) {
-  try {
-    appCheck = initializeAppCheck(app, {
-      provider: appCheckProvider === 'enterprise'
-        ? new ReCaptchaEnterpriseProvider(appCheckSiteKey)
-        : new ReCaptchaV3Provider(appCheckSiteKey),
-      isTokenAutoRefreshEnabled: true,
-    })
+  appCheck = initializeAppCheck(app, {
+    provider: appCheckProvider === 'enterprise'
+      ? new ReCaptchaEnterpriseProvider(appCheckSiteKey)
+      : new ReCaptchaV3Provider(appCheckSiteKey),
+    isTokenAutoRefreshEnabled: true,
+  })
 
-    onTokenChanged(appCheck, () => {}, () => {})
-  } catch {
-    // App Check init failed silently — auth and other services continue normally
-  }
+  onTokenChanged(
+    appCheck,
+    () => {},
+    (error) => {
+      console.error('[app-check] token_error', error)
+    },
+  )
 }
 
 const auth = getAuth(app)
