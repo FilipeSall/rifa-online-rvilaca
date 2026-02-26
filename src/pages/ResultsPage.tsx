@@ -11,7 +11,7 @@ const federalRules = [
 
 export default function ResultsPage() {
   return (
-    <div className="min-h-screen overflow-x-hidden bg-luxury-bg font-display text-white selection:bg-gold selection:text-black">
+    <div className="min-h-screen overflow-x-hidden bg-luxury-bg font-display text-white selection:bg-neon-pink selection:text-black">
       <Header />
 
       <main>

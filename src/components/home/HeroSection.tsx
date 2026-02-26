@@ -159,7 +159,7 @@ export default function HeroSection() {
 
   return (
     <section className="relative pt-12 pb-20 lg:pt-18 lg:pb-32 overflow-hidden hero-bg">
-      <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-gold/5 to-transparent pointer-events-none" />
+      <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-neon-pink/5 to-transparent pointer-events-none" />
       <div className="container relative z-10 mx-auto px-4 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           <div className="lg:col-span-6 flex flex-col gap-6 order-2 lg:order-1">
@@ -174,7 +174,7 @@ export default function HeroSection() {
             <h1 ref={titleRef} className="w-full xl:w-fit text-5xl md:text-6xl lg:text-7xl font-luxury font-black leading-tight text-white">
               {campaignTitleHighlight ? (
                 <>
-                  {campaignTitlePrefix} <span className="text-gold">{campaignTitleHighlight}</span>
+                  {campaignTitlePrefix} <span className="text-neon-pink">{campaignTitleHighlight}</span>
                 </>
               ) : (
                 campaignTitlePrefix
@@ -183,9 +183,9 @@ export default function HeroSection() {
 
             {/* Subtitle */}
             <p className="w-full max-w-none text-base font-light leading-relaxed text-gray-300">
-              Além de <span className="text-gold font-semibold">{mainPrize}</span>, você também concorre a{' '}
-              <span className="text-gold font-semibold">{secondPrize}</span> e{' '}
-              <span className="text-gold font-semibold">{bonusPrize}</span>. Sorteio com transparência total:
+              Além de <span className="text-neon-cyan font-semibold">{mainPrize}</span>, você também concorre a{' '}
+              <span className="text-neon-cyan font-semibold">{secondPrize}</span> e{' '}
+              <span className="text-neon-cyan font-semibold">{bonusPrize}</span>. Sorteio com transparência total:
               apuração pela Loteria Federal e validação por algoritmo auditável.
             </p>
 
@@ -218,7 +218,7 @@ export default function HeroSection() {
 
             {/* Countdown */}
             <div className="mt-2 w-full lg:max-w-lg xl:max-w-none" style={heroAlignedSectionStyle}>
-              <p className="text-[11px] uppercase tracking-[0.2em] text-gold xl:text-center">{countdownDisplayState.title}</p>
+              <p className="text-[11px] uppercase tracking-[0.2em] text-neon-cyan xl:text-center">{countdownDisplayState.title}</p>
               <p className="mt-1 text-xs text-gray-400 xl:text-center">{countdownDisplayState.helper}</p>
               {countdownDisplayState.mode !== 'hidden' ? (
                 <div className="mt-3 grid grid-cols-4 gap-4">
@@ -249,7 +249,7 @@ export default function HeroSection() {
             {/* CTA button + secure payment */}
             <div className="mt-2 flex w-full flex-col gap-3 lg:max-w-lg xl:max-w-none" style={heroAlignedSectionStyle}>
               <button
-                className="inline-flex w-full h-16 items-center justify-center rounded-xl bg-gold px-8 text-base font-black text-black transition-all hover:bg-yellow-400 hover:scale-[1.02] shadow-[0_0_30px_rgba(245,168,0,0.4)] uppercase tracking-widest gap-3"
+                className="inline-flex w-full h-16 items-center justify-center rounded-xl bg-gradient-to-r from-neon-pink to-purple-600 px-8 text-base font-black text-white transition-all hover:brightness-110 hover:scale-[1.02] shadow-glow-pink uppercase tracking-widest gap-3"
                 type="button"
                 onClick={handleOpenBuyModal}
               >
@@ -257,7 +257,7 @@ export default function HeroSection() {
                 Comprar Números Agora
               </button>
               <div className="flex items-center justify-center gap-2 text-gray-400">
-                <span className="material-symbols-outlined text-gold text-base">verified_user</span>
+                <span className="material-symbols-outlined text-neon-cyan text-base">verified_user</span>
                 <span className="text-xs">Compra 100% segura e processada instantaneamente.</span>
               </div>
             </div>
@@ -265,7 +265,7 @@ export default function HeroSection() {
 
           {/* Moto image */}
           <div className="lg:col-span-6 relative order-1 lg:order-2">
-            <div className="absolute inset-0 bg-gold/20 blur-[100px] rounded-full opacity-20" />
+            <div className="absolute inset-0 bg-neon-pink/20 blur-[100px] rounded-full opacity-20" />
             <div className="relative z-10 w-full max-w-[680px] mx-auto aspect-square hero-carousel-frame">
               {heroCarouselImages.length > 0 ? (
                 <Swiper
@@ -338,7 +338,7 @@ export default function HeroSection() {
                     {mainPrize}
                   </p>
                   <p
-                    className="text-gold text-base font-bold tracking-[0.2em] uppercase mt-1"
+                    className="text-neon-cyan text-base font-bold tracking-[0.2em] uppercase mt-1"
                     style={{ textShadow: '0 2px 12px rgba(0,0,0,1)' }}
                   >
                     Triple Black

@@ -194,7 +194,7 @@ export default function CheckoutPage() {
   }, [navigate])
 
   return (
-    <div className="selection:bg-gold selection:text-black overflow-x-hidden bg-luxury-bg font-display text-text-main">
+    <div className="selection:bg-neon-pink selection:text-black overflow-x-hidden bg-luxury-bg font-display text-text-main">
       <AnnouncementBar />
 
       <div className="relative flex min-h-screen flex-col">
@@ -204,12 +204,12 @@ export default function CheckoutPage() {
           <section className="hero-bg border-b border-white/5">
             <div className="container mx-auto px-4 py-14 lg:px-8 lg:py-18">
               <div className="max-w-3xl">
-                <span className="inline-flex items-center rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-gold">
+                <span className="inline-flex items-center rounded-full border border-neon-pink/40 bg-neon-pink/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-neon-pink">
                   Checkout PIX
                 </span>
                 <h1 className="mt-5 text-3xl font-luxury font-bold leading-tight lg:text-5xl">
                   Finalize agora e
-                  <span className="text-gold"> confirme suas cotas</span> em tempo real.
+                  <span className="text-neon-pink"> confirme suas cotas</span> em tempo real.
                 </h1>
                 <p className="mt-4 text-sm leading-relaxed text-gray-300 lg:text-base">
                   Assim que o pagamento for identificado, seu pedido muda para pago automaticamente.
@@ -221,8 +221,8 @@ export default function CheckoutPage() {
           <section className="container mx-auto px-4 py-10 lg:px-8 lg:py-14">
             <div className="grid gap-6 lg:grid-cols-5 lg:gap-8">
               <aside className="lg:col-span-2 space-y-4">
-                <div className="rounded-2xl border border-gold/25 bg-luxury-card p-6 shadow-2xl">
-                  <p className="text-[10px] uppercase tracking-[0.22em] text-gold">Resumo do pedido</p>
+                <div className="rounded-2xl border border-neon-pink/25 bg-luxury-card p-6 shadow-2xl">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-neon-pink">Resumo do pedido</p>
                   <div className="mt-4 space-y-3 text-sm">
                     <div className="flex items-center justify-between text-gray-300">
                       <span>Quantidade selecionada</span>
@@ -230,7 +230,7 @@ export default function CheckoutPage() {
                     </div>
                     <div className="flex items-center justify-between text-gray-300">
                       <span>Total para pagar</span>
-                      <span className="font-black text-gold">
+                      <span className="font-black text-neon-pink">
                         {amount > 0 ? formatCurrency(amount) : 'Informar valor'}
                       </span>
                     </div>
@@ -248,7 +248,7 @@ export default function CheckoutPage() {
                     </label>
                     <input
                       id="payer-name"
-                      className="h-11 w-full rounded-lg border border-white/15 bg-luxury-bg px-3 text-sm text-white outline-none focus:border-gold"
+                      className="h-11 w-full rounded-lg border border-white/15 bg-luxury-bg px-3 text-sm text-white outline-none focus:border-neon-pink"
                       placeholder="Digite o nome completo"
                       type="text"
                       value={payerName}
@@ -264,7 +264,7 @@ export default function CheckoutPage() {
                     </label>
                     <input
                       id="payer-phone"
-                      className="h-11 w-full rounded-lg border border-white/15 bg-luxury-bg px-3 text-sm text-white outline-none focus:border-gold"
+                      className="h-11 w-full rounded-lg border border-white/15 bg-luxury-bg px-3 text-sm text-white outline-none focus:border-neon-pink"
                       inputMode="tel"
                       placeholder="(00) 00000-0000"
                       type="tel"
@@ -282,7 +282,7 @@ export default function CheckoutPage() {
                     </label>
                     <input
                       id="payer-cpf"
-                      className="h-11 w-full rounded-lg border border-white/15 bg-luxury-bg px-3 text-sm text-white outline-none focus:border-gold"
+                      className="h-11 w-full rounded-lg border border-white/15 bg-luxury-bg px-3 text-sm text-white outline-none focus:border-neon-pink"
                       inputMode="numeric"
                       placeholder="000.000.000-00"
                       type="text"
@@ -303,13 +303,13 @@ export default function CheckoutPage() {
                   ) : null}
 
                   <button
-                    className="mt-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gold hover:text-gold-light disabled:cursor-not-allowed disabled:opacity-70"
+                    className="mt-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-neon-pink hover:text-neon-pink-light disabled:cursor-not-allowed disabled:opacity-70"
                     type="button"
                     onClick={handleBackToSelection}
                     disabled={isReturningToSelection}
                   >
                     {isReturningToSelection ? (
-                      <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-gold border-t-transparent" />
+                      <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-neon-pink border-t-transparent" />
                     ) : (
                       <span className="material-symbols-outlined text-sm">arrow_back</span>
                     )}

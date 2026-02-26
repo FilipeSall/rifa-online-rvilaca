@@ -39,7 +39,7 @@ function getSlotStyle(status: NumberSlot['status']) {
     return 'border-amber-400/30 bg-amber-500/10 text-amber-100'
   }
 
-  return 'border-white/10 bg-luxury-bg text-white hover:border-gold/40'
+  return 'border-white/10 bg-luxury-bg text-white hover:border-neon-pink/40'
 }
 
 export default function NumberSelectionCard({
@@ -120,7 +120,7 @@ export default function NumberSelectionCard({
 
   return (
     <article className="relative overflow-hidden rounded-2xl border border-white/10 bg-luxury-card/70 p-6">
-      <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-gold/10 blur-3xl" />
+      <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-neon-pink/10 blur-3xl" />
       <div className="pointer-events-none absolute -left-10 bottom-0 h-44 w-44 rounded-full bg-cyan-400/10 blur-3xl" />
 
       <div className="relative z-10">
@@ -131,7 +131,7 @@ export default function NumberSelectionCard({
             <button
               ref={autoButtonRef}
               className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-widest transition-all ${
-                selectionMode === 'automatico' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'
+                selectionMode === 'automatico' ? 'bg-neon-pink text-black' : 'text-gray-400 hover:text-white'
               } ${shouldHighlightAutoButton ? 'ring-2 ring-white ring-offset-1 ring-offset-luxury-bg scale-105' : ''}`}
               type="button"
               onClick={() => onSelectionModeChange('automatico')}
@@ -140,7 +140,7 @@ export default function NumberSelectionCard({
             </button>
             <button
               className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-widest transition-colors ${
-                selectionMode === 'manual' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'
+                selectionMode === 'manual' ? 'bg-neon-pink text-black' : 'text-gray-400 hover:text-white'
               }`}
               type="button"
               onClick={() => onSelectionModeChange('manual')}
@@ -194,7 +194,7 @@ export default function NumberSelectionCard({
                 Proxima pagina
               </button>
               <input
-                className="h-10 w-20 rounded-lg border border-white/15 bg-black/25 px-3 text-sm font-semibold text-white outline-none transition focus:border-gold"
+                className="h-10 w-20 rounded-lg border border-white/15 bg-black/25 px-3 text-sm font-semibold text-white outline-none transition focus:border-neon-pink"
                 inputMode="numeric"
                 type="text"
                 value={pageInput}
@@ -207,7 +207,7 @@ export default function NumberSelectionCard({
             <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Selecao manual rapida</p>
             <div className="flex min-w-0 max-w-full flex-col gap-2 sm:max-w-[26rem] sm:flex-row sm:items-center sm:gap-1.5">
               <input
-                className="h-10 min-w-0 w-full rounded-lg border border-white/15 bg-black/25 px-3 text-sm font-semibold text-white outline-none transition focus:border-gold sm:max-w-[18rem]"
+                className="h-10 min-w-0 w-full rounded-lg border border-white/15 bg-black/25 px-3 text-sm font-semibold text-white outline-none transition focus:border-neon-pink sm:max-w-[18rem]"
                 inputMode="numeric"
                 maxLength={manualNumberMaxDigits}
                 placeholder={`Numero (${formatTicketNumber(rangeStart)} a ${formatTicketNumber(rangeEnd)})`}
@@ -237,8 +237,8 @@ export default function NumberSelectionCard({
           <span className="inline-flex items-center gap-2 rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-rose-200">
             <span className="h-2 w-2 rounded-full bg-rose-300" /> Pago
           </span>
-          <span className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-gold">
-            <span className="h-2 w-2 rounded-full bg-gold" /> Selecionado
+          <span className="inline-flex items-center gap-2 rounded-full border border-neon-pink/30 bg-neon-pink/10 px-3 py-1 text-neon-pink">
+            <span className="h-2 w-2 rounded-full bg-neon-pink" /> Selecionado
           </span>
           <button
             className="ml-auto h-9 rounded-lg border border-red-300/30 bg-red-500/10 px-3 text-[11px] font-bold uppercase tracking-wider text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
@@ -265,7 +265,7 @@ export default function NumberSelectionCard({
               <button
                 key={slot.number}
                 className={`h-11 rounded border text-xs font-bold tracking-wide transition-all ${
-                  isSelected ? 'border-gold bg-gold/20 text-gold shadow-glow-gold' : getSlotStyle(slot.status)
+                  isSelected ? 'border-neon-pink bg-neon-pink/20 text-neon-pink shadow-glow-pink' : getSlotStyle(slot.status)
                 } ${isBlocked ? 'cursor-not-allowed opacity-65' : ''}`}
                 type="button"
                 onClick={() => onToggleNumber(slot)}
@@ -280,12 +280,12 @@ export default function NumberSelectionCard({
         <div className="mt-4 rounded-lg border border-white/10 bg-luxury-bg p-4 text-sm text-gray-300">
           {selectionMode === 'automatico' ? (
             <p>
-              Selecao automatica ativa: o sistema escolheu <span className="font-bold text-gold">{selectedCount}</span>{' '}
+              Selecao automatica ativa: o sistema escolheu <span className="font-bold text-neon-pink">{selectedCount}</span>{' '}
               numeros disponiveis para voce.
             </p>
           ) : (
             <p>
-              Modo manual ativo: escolha ate <span className="font-bold text-gold">{quantity}</span> numeros
+              Modo manual ativo: escolha ate <span className="font-bold text-neon-pink">{quantity}</span> numeros
               disponiveis. Voce pode limpar a lista e adicionar numeros por pagina ou por busca rapida.
             </p>
           )}

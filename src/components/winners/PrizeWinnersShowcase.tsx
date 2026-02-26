@@ -167,10 +167,10 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
 
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
               <article className="rounded-2xl border border-white/10 bg-black/30 p-5 lg:col-span-5">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gold">Quadro de premiação</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-neon-pink">Quadro de premiação</p>
                 <div className="mt-4 space-y-3">
-                  <div className="rounded-xl border border-gold/25 bg-gold/10 px-4 py-3">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-gold">1º prêmio</p>
+                  <div className="rounded-xl border border-neon-pink/25 bg-neon-pink/10 px-4 py-3">
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-neon-pink">1º prêmio</p>
                     <p className="mt-1 text-sm font-semibold text-white">{campaign.mainPrize}</p>
                   </div>
                   <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
@@ -219,11 +219,11 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                             Cálculo exato: <span className="font-semibold text-white">{buildWinnerCalculationLabel(topResult)}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-200">
-                            Posição do jogador premiado: <span className="font-bold text-gold">{formatWinnerUserCode(topResult)}</span>
+                            Posição do jogador premiado: <span className="font-bold text-neon-pink">{formatWinnerUserCode(topResult)}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-200">
                             Número premiado:{' '}
-                            <span className="font-bold text-gold">{pickComparableWinnerTicket(topResult) || '-'}</span>
+                            <span className="font-bold text-neon-pink">{pickComparableWinnerTicket(topResult) || '-'}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-300">
                             Códigos da Loteria informados: <span className="font-mono text-white">{formatLoteriaInputs(topResult.extractionNumbers)}</span>
@@ -233,7 +233,7 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                           <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Data</p>
                           <p className="mt-1 text-xs font-bold text-white">{formatDateLabel(topResult.drawDate)}</p>
                           <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-gray-500">Posição premiada</p>
-                          <p className="mt-1 text-sm font-black text-gold">{formatWinningPosition(topResult.winningPosition, topResult.participantCount)}</p>
+                          <p className="mt-1 text-sm font-black text-neon-pink">{formatWinningPosition(topResult.winningPosition, topResult.participantCount)}</p>
                         </div>
                       </div>
                     </div>
@@ -254,7 +254,7 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                                   ? `Tentativa ${attempt.extractionIndex}: fallback de segurança ➜ código ${attempt.candidateCode}`
                                   : `Tentativa ${attempt.extractionIndex}: extração ${attempt.extractionNumber} ➜ código ${formatAttemptLabel(attempt.extractionNumber, attempt.comparisonDigits)}${formatNearestPath(attempt) ? ` | caminho ${formatNearestPath(attempt)}` : ''}`}
                               </span>
-                              <span className="font-bold text-gold">
+                              <span className="font-bold text-neon-pink">
                                 {attempt.matchedPosition ? `Match na posição ${formatWinningPosition(attempt.matchedPosition, topResult.participantCount)}` : 'Sem match'}
                               </span>
                             </div>
@@ -300,7 +300,7 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                           </p>
                           <p className="mt-1 text-xs text-gray-200">
                             Número premiado:{' '}
-                            <span className="font-bold text-gold">{mainResult.winningNumberFormatted}</span>
+                            <span className="font-bold text-neon-pink">{mainResult.winningNumberFormatted}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-300">
                             Códigos da Loteria informados: <span className="font-mono text-white">{formatLoteriaInputs(mainResult.extractionNumbers)}</span>
@@ -323,7 +323,7 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                             Extração usada: {mainResult.selectedExtractionIndex} ({mainResult.selectedExtractionNumber}) ➜ alvo {mainResult.targetNumberFormatted}
                             {buildMainFallbackPath(mainResult) ? ` | caminho ${buildMainFallbackPath(mainResult)}` : ''}
                           </span>
-                          <span className="font-bold text-gold">
+                          <span className="font-bold text-neon-pink">
                             {mainResult.fallbackDirection === 'none' ? 'Match exato' : 'Fallback por aproximação'}
                           </span>
                         </div>

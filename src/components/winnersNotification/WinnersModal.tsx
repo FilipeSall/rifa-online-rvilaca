@@ -83,7 +83,7 @@ export default function WinnersModal({
             type="button"
             aria-label="Fechar modal de ganhadores"
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-white/5 text-white transition-colors hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-gold/70"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-white/5 text-white transition-colors hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-neon-pink/70"
           >
             <span className="material-symbols-outlined text-[20px]">close</span>
           </button>
@@ -123,13 +123,13 @@ export default function WinnersModal({
                 <WinnerCard key={winner.id} winner={winner} />
               ))}
 
-              <section className="mt-4 rounded-2xl border border-gold/35 bg-[linear-gradient(140deg,rgba(245,168,0,0.22),rgba(15,23,42,0.95))] p-5 text-center">
+              <section className="mt-4 rounded-2xl border border-neon-pink/35 bg-[linear-gradient(140deg,rgba(255,0,204,0.22),rgba(15,23,42,0.95))] p-5 text-center">
                 <p className="font-luxury text-2xl font-black text-amber-100">O próximo pode ser você!</p>
                 <p className="mt-2 text-sm text-amber-50/90">Garanta seus números e participe dos próximos sorteios.</p>
                 <Link
                   to="/#comprar-numeros"
                   onClick={onClose}
-                  className="mt-4 inline-flex h-11 items-center justify-center rounded-lg bg-gold px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition-colors hover:bg-gold-hover"
+                  className="mt-4 inline-flex h-11 items-center justify-center rounded-lg bg-neon-pink px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition-colors hover:bg-primary-hover"
                 >
                   Comprar números agora
                 </Link>

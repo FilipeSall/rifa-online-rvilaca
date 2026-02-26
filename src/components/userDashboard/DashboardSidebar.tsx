@@ -19,7 +19,7 @@ export default function DashboardSidebar({ activeSection, onSectionChange, onSig
             onClick={() => section && onSectionChange(section)}
             className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
               section === activeSection
-                ? 'border border-gold/20 bg-gold/10 text-gold'
+                ? 'border border-neon-pink/20 bg-neon-pink/10 text-neon-pink'
                 : 'text-text-muted hover:bg-white/5 hover:text-white'
             } ${!section ? 'cursor-not-allowed opacity-40' : ''}`}
           >

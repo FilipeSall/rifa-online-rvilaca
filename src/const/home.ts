@@ -79,7 +79,7 @@ export const HERO_COUNTDOWN_LABELS = ['Dias', 'Horas', 'Min', 'Seg'] as const
 export const PRIZES: PrizeCardData[] = [
   {
     badge: '1º Prêmio',
-    badgeClassName: 'bg-gold text-black',
+    badgeClassName: 'bg-neon-pink text-black',
     title: 'BMW R 1200 GS',
     description:
       'A máquina definitiva para suas aventuras. Completa, com acessórios e documentação grátis.',

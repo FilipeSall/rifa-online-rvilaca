@@ -16,7 +16,7 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
   if (dashboardState.isLoading || !dashboardState.user) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center bg-luxury-bg">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gold border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-neon-pink border-t-transparent" />
       </div>
     )
   }

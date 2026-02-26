@@ -9,14 +9,14 @@ type AdminSidebarProps = {
 export default function AdminSidebar({ activeTab, onTabChange, onSignOut }: AdminSidebarProps) {
   return (
     <aside className="sticky top-20 hidden min-h-[calc(100vh-80px)] w-72 flex-col border-r border-white/10 bg-luxury-card/80 p-5 backdrop-blur-md lg:flex">
-      <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.24em] text-gold">Painel administrativo</p>
+      <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.24em] text-neon-pink">Painel administrativo</p>
       <div className="space-y-1">
         {ADMIN_TABS.map((tab) => (
           <button
             key={tab.id}
             className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all ${
               activeTab === tab.id
-                ? 'border-gold/35 bg-gold/15 text-gold shadow-glow-gold'
+                ? 'border-neon-pink/35 bg-neon-pink/15 text-neon-pink shadow-glow-pink'
                 : 'border-transparent text-gray-400 hover:border-white/10 hover:bg-white/5 hover:text-white'
             }`}
             type="button"

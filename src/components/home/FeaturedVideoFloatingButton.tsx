@@ -120,13 +120,13 @@ export default function FeaturedVideoFloatingButton({ topSlot = null }: Featured
             ) : null}
             <button
               aria-label="Abrir video em destaque"
-              className="group relative isolate flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-gold/50 bg-black text-gold shadow-[0_15px_35px_rgba(0,0,0,0.6)] transition-transform hover:scale-[1.03]"
+              className="group relative isolate flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-neon-pink/50 bg-black text-neon-pink shadow-[0_15px_35px_rgba(0,0,0,0.6)] transition-transform hover:scale-[1.03]"
               type="button"
               onClick={handleOpenModal}
             >
               <span className="pointer-events-none absolute -inset-2 rounded-full bg-black/85 blur-md" />
               <span className="absolute inset-0 rounded-full bg-black/85" />
-              <span className="absolute inset-0 rounded-full border border-gold/35 animate-ping opacity-35" />
+              <span className="absolute inset-0 rounded-full border border-neon-pink/35 animate-ping opacity-35" />
               <span className="material-symbols-outlined relative z-10 text-3xl">play_circle</span>
             </button>
           </div>

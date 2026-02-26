@@ -8,7 +8,7 @@ export default function PurchaseNumbersPage() {
   const purchaseState = usePurchaseNumbers()
 
   return (
-    <div className="selection:bg-gold selection:text-black overflow-x-hidden bg-luxury-bg font-display text-text-main">
+    <div className="selection:bg-neon-pink selection:text-black overflow-x-hidden bg-luxury-bg font-display text-text-main">
       <AnnouncementBar />
 
       <div className="relative flex min-h-screen flex-col">

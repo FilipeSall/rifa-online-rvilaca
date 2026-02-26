@@ -57,7 +57,7 @@ export default function ReceiptCard({ order, campaignTitle, supportWhatsappNumbe
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-text-muted">{order.id}</p>
-            <h3 className="font-bold leading-snug text-white transition-colors group-hover:text-gold">
+            <h3 className="font-bold leading-snug text-white transition-colors group-hover:text-neon-pink">
               {campaignTitle}
             </h3>
             <p className="mt-0.5 text-xs text-text-muted">Pedido #{order.id.slice(0, 8).toUpperCase()}</p>
@@ -78,7 +78,7 @@ export default function ReceiptCard({ order, campaignTitle, supportWhatsappNumbe
           </div>
           <div className="col-span-2">
             <p className="text-[10px] text-text-muted">Valor Total</p>
-            <p className="mt-0.5 text-xl font-bold text-gold">{order.totalBrl}</p>
+            <p className="mt-0.5 text-xl font-bold text-neon-pink">{order.totalBrl}</p>
           </div>
         </div>
 
@@ -87,7 +87,7 @@ export default function ReceiptCard({ order, campaignTitle, supportWhatsappNumbe
             <>
               <button
                 type="button"
-                className="group/btn flex w-full items-center justify-center gap-2 rounded-lg border border-gold/30 px-4 py-2.5 text-sm font-bold text-gold transition-all hover:bg-gold hover:text-black"
+                className="group/btn flex w-full items-center justify-center gap-2 rounded-lg border border-neon-pink/30 px-4 py-2.5 text-sm font-bold text-neon-pink transition-all hover:bg-neon-pink hover:text-black"
                 onClick={() => exportOrderReceiptPdf(order)}
               >
                 <span className="material-symbols-outlined text-[18px] transition-transform group-hover/btn:animate-bounce">
@@ -110,7 +110,7 @@ export default function ReceiptCard({ order, campaignTitle, supportWhatsappNumbe
             <>
               <button
                 type="button"
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-gold px-4 py-2.5 text-sm font-bold text-black shadow-lg shadow-gold/20 transition-all hover:bg-gold-hover"
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-neon-pink px-4 py-2.5 text-sm font-bold text-black shadow-lg shadow-gold/20 transition-all hover:bg-primary-hover"
                 onClick={() =>
                   navigate('/checkout', {
                     state: {

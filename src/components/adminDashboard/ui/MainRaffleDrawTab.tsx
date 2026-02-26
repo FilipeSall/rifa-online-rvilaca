@@ -151,9 +151,9 @@ export default function MainRaffleDrawTab() {
             <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Ultima publicacao</p>
             <p className="mt-1 text-sm font-semibold text-white">{formatPublishedAt(result?.publishedAtMs || 0)}</p>
           </div>
-          <div className="rounded-xl border border-gold/25 bg-gold/10 p-4">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-gold">Numero alvo</p>
-            <p className="mt-1 text-lg font-black text-gold">{result?.targetNumberFormatted || '-'}</p>
+          <div className="rounded-xl border border-neon-pink/25 bg-neon-pink/10 p-4">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-neon-pink">Numero alvo</p>
+            <p className="mt-1 text-lg font-black text-neon-pink">{result?.targetNumberFormatted || '-'}</p>
           </div>
           <div className="rounded-xl border border-emerald-300/25 bg-emerald-500/10 p-4">
             <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-200">Numero vencedor</p>
@@ -189,7 +189,7 @@ export default function MainRaffleDrawTab() {
               </label>
               <span className="group relative inline-flex">
                 <span
-                  className="material-symbols-outlined cursor-help text-sm text-gray-400 transition-colors group-hover:text-gold"
+                  className="material-symbols-outlined cursor-help text-sm text-gray-400 transition-colors group-hover:text-neon-pink"
                   aria-hidden="true"
                 >
                   info
@@ -206,7 +206,7 @@ export default function MainRaffleDrawTab() {
               max={5}
               value={extractionIndexInput}
               onChange={(event) => setExtractionIndexInput(event.target.value)}
-              className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white focus:border-gold/40 focus:outline-none focus:ring-1 focus:ring-gold/20"
+              className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white focus:border-neon-pink/40 focus:outline-none focus:ring-1 focus:ring-neon-pink/20"
             />
           </div>
 
@@ -215,7 +215,7 @@ export default function MainRaffleDrawTab() {
               type="button"
               onClick={handlePublish}
               disabled={isPublishing || selectablePrizes.length === 0}
-              className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-gold px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition-colors hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-neon-pink px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isPublishing ? 'Publicando...' : 'Publicar sorteio principal'}
             </button>
@@ -235,7 +235,7 @@ export default function MainRaffleDrawTab() {
                 value={value}
                 onChange={(event) => handleExtractionChange(index, event.target.value)}
                 placeholder="0000000"
-                className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-black/30 px-3 font-mono text-sm text-white focus:border-gold/40 focus:outline-none focus:ring-1 focus:ring-gold/20"
+                className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-black/30 px-3 font-mono text-sm text-white focus:border-neon-pink/40 focus:outline-none focus:ring-1 focus:ring-neon-pink/20"
               />
             </div>
           ))}

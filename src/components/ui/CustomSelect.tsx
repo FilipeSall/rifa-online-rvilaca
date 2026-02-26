@@ -43,7 +43,7 @@ export function CustomSelect({ id, value, onChange, options, disabled, placehold
         onClick={() => !disabled && setIsOpen((prev) => !prev)}
         className={[
           'flex h-11 w-full items-center justify-between rounded-lg border px-3 text-sm font-semibold text-white outline-none transition-all duration-150',
-          isOpen ? 'border-gold/60 bg-black/60' : 'border-white/10 bg-black/40',
+          isOpen ? 'border-neon-pink/60 bg-black/60' : 'border-white/10 bg-black/40',
           disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer hover:border-white/20',
         ].join(' ')}
       >
@@ -51,7 +51,7 @@ export function CustomSelect({ id, value, onChange, options, disabled, placehold
           {selectedLabel !== '' ? selectedLabel : <span className="text-gray-500">{placeholder ?? 'Selecione...'}</span>}
         </span>
         <HiChevronDown
-          className={`ml-2 h-4 w-4 flex-shrink-0 text-gold/70 transition-transform duration-200 ${isOpen ? 'rotate-180' : 'rotate-0'}`}
+          className={`ml-2 h-4 w-4 flex-shrink-0 text-neon-pink/70 transition-transform duration-200 ${isOpen ? 'rotate-180' : 'rotate-0'}`}
         />
       </button>
 
@@ -81,14 +81,14 @@ export function CustomSelect({ id, value, onChange, options, disabled, placehold
                   isDisabled
                     ? 'cursor-not-allowed opacity-40 text-white/40'
                     : isSelected
-                      ? 'bg-gold/10 text-gold'
+                      ? 'bg-neon-pink/10 text-neon-pink'
                       : 'text-white/75 hover:bg-white/5 hover:text-white',
                 ].join(' ')}
               >
                 <span
                   className={[
                     'h-1.5 w-1.5 flex-shrink-0 rounded-full transition-opacity',
-                    isSelected ? 'bg-gold opacity-100' : 'opacity-0',
+                    isSelected ? 'bg-neon-pink opacity-100' : 'opacity-0',
                   ].join(' ')}
                 />
                 {option.label}

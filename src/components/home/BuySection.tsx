@@ -6,11 +6,11 @@ export default function BuySection() {
     <section className="py-20 bg-luxury-card border-y border-white/5" id="comprar">
       <div className="container mx-auto px-4 lg:px-8">
         <div className="max-w-4xl mx-auto bg-luxury-bg border border-white/10 rounded-2xl p-6 md:p-10 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-gold to-transparent" />
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neon-pink to-transparent" />
           <div className="text-center mb-8">
             <h2 className="text-2xl font-luxury font-bold text-white mb-2">Garanta sua participação</h2>
             <p className="text-gray-400 text-sm">
-              Por apenas <span className="text-gold font-bold">R$ 0,99</span> cada número.
+              Por apenas <span className="text-neon-pink font-bold">R$ 0,99</span> cada número.
             </p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -19,17 +19,17 @@ export default function BuySection() {
                 key={amount}
                 className={`flex flex-col items-center justify-center p-4 rounded-lg transition-all group relative ${
                   popular
-                    ? 'bg-luxury-card border border-gold/30 hover:border-gold hover:bg-gold/5 shadow-glow-gold'
-                    : 'bg-luxury-card border border-white/10 hover:border-gold/50 hover:bg-white/5'
+                    ? 'bg-luxury-card border border-neon-pink/30 hover:border-neon-pink hover:bg-neon-pink/5 shadow-glow-pink'
+                    : 'bg-luxury-card border border-white/10 hover:border-neon-pink/50 hover:bg-white/5'
                 }`}
                 type="button"
               >
                 {popular && (
-                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-gold text-black text-[8px] font-bold px-2 py-0.5 rounded-full uppercase">
+                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-neon-pink text-black text-[8px] font-bold px-2 py-0.5 rounded-full uppercase">
                     Popular
                   </div>
                 )}
-                <span className="text-lg font-black text-white group-hover:text-gold">{amount}</span>
+                <span className="text-lg font-black text-white group-hover:text-neon-pink">{amount}</span>
                 <span className="text-[10px] text-gray-500 uppercase tracking-wider">Números</span>
               </button>
             ))}
@@ -40,7 +40,7 @@ export default function BuySection() {
               <p className="text-3xl font-black text-white">R$ 49,50</p>
             </div>
             <Link
-              className="w-full md:w-auto px-10 py-4 bg-gold hover:bg-gold-hover text-black font-black uppercase tracking-widest rounded transition-all shadow-glow-gold flex items-center justify-center gap-2"
+              className="w-full md:w-auto px-10 py-4 bg-neon-pink hover:bg-primary-hover text-black font-black uppercase tracking-widest rounded transition-all shadow-glow-pink flex items-center justify-center gap-2"
               to="/#comprar-numeros"
             >
               Participar Agora <span className="material-symbols-outlined text-lg">arrow_forward</span>

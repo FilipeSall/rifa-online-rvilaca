@@ -31,7 +31,7 @@ export default function HomePage() {
   ])
 
   return (
-    <div className="bg-luxury-bg font-display text-text-main overflow-x-hidden selection:bg-gold selection:text-black">
+    <div className="bg-luxury-bg font-display text-text-main overflow-x-hidden selection:bg-neon-pink selection:text-black">
       <AnnouncementBar />
 
       <div className="flex min-h-screen flex-col relative">

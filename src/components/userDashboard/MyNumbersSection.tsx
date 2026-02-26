@@ -48,7 +48,7 @@ export default function MyNumbersSection({
           className={`inline-flex h-10 items-center justify-center rounded-lg border px-4 text-xs font-black uppercase tracking-[0.12em] transition-colors ${
             hasWins
               ? 'border-emerald-300/40 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30'
-              : 'border-gold/35 bg-gold/10 text-gold hover:bg-gold/20'
+              : 'border-neon-pink/35 bg-neon-pink/10 text-neon-pink hover:bg-neon-pink/20'
           }`}
         >
           Ver se fui sorteado
@@ -74,8 +74,8 @@ export default function MyNumbersSection({
               onClick={() => onTicketFilterChange(filter)}
               className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
                 ticketFilter === filter
-                  ? 'bg-gold text-black'
-                  : 'border border-luxury-border bg-luxury-card text-text-muted hover:border-gold/40 hover:text-gold'
+                  ? 'bg-neon-pink text-black'
+                  : 'border border-luxury-border bg-luxury-card text-text-muted hover:border-neon-pink/40 hover:text-neon-pink'
               }`}
             >
               {filter}
@@ -92,22 +92,22 @@ export default function MyNumbersSection({
           <input
             value={ticketSearch}
             onChange={(event) => onTicketSearchChange(event.target.value)}
-            className="block w-full rounded-lg border border-luxury-border bg-luxury-card py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-text-muted focus:border-gold/50 focus:outline-none focus:ring-1 focus:ring-gold/30"
+            className="block w-full rounded-lg border border-luxury-border bg-luxury-card py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-text-muted focus:border-neon-pink/50 focus:outline-none focus:ring-1 focus:ring-neon-pink/30"
             placeholder="Buscar por numero ou pedido..."
             type="text"
           />
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gold/20 bg-gold/5 px-4 py-3 text-xs text-text-muted">
-        <span className="material-symbols-outlined text-gold" style={{ fontSize: 16 }}>
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neon-pink/20 bg-neon-pink/5 px-4 py-3 text-xs text-text-muted">
+        <span className="material-symbols-outlined text-neon-pink" style={{ fontSize: 16 }}>
           info
         </span>
         <span>
           Cada numero concorre a <span className="font-semibold text-white">todos os premios</span>:
         </span>
         <div className="flex flex-wrap gap-2">
-          <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 font-medium text-gold">
+          <span className="rounded-full border border-neon-pink/30 bg-neon-pink/10 px-2.5 py-0.5 font-medium text-neon-pink">
             🏆 {mainPrize}
           </span>
           <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-medium text-white">
@@ -154,7 +154,7 @@ export default function MyNumbersSection({
                     <td className="px-5 py-4">
                       <div
                         className={`inline-flex h-10 w-24 items-center justify-center rounded-lg font-mono text-sm font-bold ${
-                          ticket.status === 'pago' ? 'bg-gold/10 text-gold' : 'bg-white/5 text-text-muted'
+                          ticket.status === 'pago' ? 'bg-neon-pink/10 text-neon-pink' : 'bg-white/5 text-text-muted'
                         }`}
                       >
                         {ticket.number}

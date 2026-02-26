@@ -79,7 +79,7 @@ function RankingBoard({
           <div key={`${title}-${pos}-${name}`} className="grid grid-cols-12 gap-3 px-5 py-3 items-center hover:bg-white/5 transition-colors">
             <div className="col-span-2 flex justify-center">
               {pos <= 3 ? (
-                <div className="w-8 h-8 rounded-full bg-gold/20 border border-gold/35 flex items-center justify-center text-gold font-black">
+                <div className="w-8 h-8 rounded-full bg-neon-pink/20 border border-neon-pink/35 flex items-center justify-center text-neon-pink font-black">
                   {pos}
                 </div>
               ) : (
@@ -124,12 +124,12 @@ function RankingSection() {
 
   return (
     <section className="py-20 bg-luxury-bg relative overflow-hidden" id="ganhadores">
-      <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gold/5 via-luxury-bg to-luxury-bg pointer-events-none" />
+      <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neon-pink/5 via-luxury-bg to-luxury-bg pointer-events-none" />
       <div className="container mx-auto px-4 lg:px-8 relative z-10">
         <div className="text-center mb-14">
-          <span className="text-gold font-bold text-xs uppercase tracking-[0.2em] mb-2 block">Top Compradores</span>
+          <span className="text-neon-pink font-bold text-xs uppercase tracking-[0.2em] mb-2 block">Top Compradores</span>
           <div className="flex items-center justify-center gap-3">
-            <span className="material-symbols-outlined text-gold text-4xl">trophy</span>
+            <span className="material-symbols-outlined text-neon-pink text-4xl">trophy</span>
             <h2 className="text-3xl lg:text-4xl font-luxury font-bold text-white">Ranking Geral + Ranking Semanal</h2>
           </div>
           <p className="text-gray-400 mt-4 max-w-3xl mx-auto">
@@ -146,7 +146,7 @@ function RankingSection() {
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
           <RankingBoard
-            accentClassName="bg-gradient-to-r from-amber-400 via-gold to-yellow-300"
+            accentClassName="bg-gradient-to-r from-amber-400 via-neon-pink to-yellow-300"
             emptyMessage="Ainda nao ha compras pagas para montar o ranking geral."
             errorMessage={generalRanking.errorMessage}
             footer="Ranking geral por quantidade total de cotas pagas na campanha."
@@ -179,9 +179,9 @@ function FaqSection() {
     <section className="py-20 bg-luxury-card border-t border-white/5" id="faq">
       <div className="container mx-auto px-4 lg:px-8">
         <div className="text-center mb-16">
-          <span className="text-gold font-bold text-xs uppercase tracking-[0.2em] mb-2 block">Dúvidas?</span>
+          <span className="text-neon-pink font-bold text-xs uppercase tracking-[0.2em] mb-2 block">Dúvidas?</span>
           <div className="flex items-center justify-center gap-3">
-            <span className="material-symbols-outlined text-gold text-4xl">help</span>
+            <span className="material-symbols-outlined text-neon-pink text-4xl">help</span>
             <h2 className="text-3xl lg:text-4xl font-luxury font-bold text-white">Perguntas Frequentes</h2>
           </div>
         </div>
@@ -192,8 +192,8 @@ function FaqSection() {
             return (
               <article
                 key={q}
-                className={`group overflow-hidden rounded-xl border bg-luxury-bg transition-all duration-300 hover:border-gold/30 ${
-                  isOpen ? 'border-gold shadow-glow-gold' : 'border-white/5'
+                className={`group overflow-hidden rounded-xl border bg-luxury-bg transition-all duration-300 hover:border-neon-pink/30 ${
+                  isOpen ? 'border-neon-pink shadow-glow-pink' : 'border-white/5'
                 }`}
               >
                 <button
@@ -202,10 +202,10 @@ function FaqSection() {
                   aria-expanded={isOpen}
                   onClick={() => setOpenIndex((current) => (current === index ? null : index))}
                 >
-                  <span className="text-lg font-medium text-white group-hover:text-gold transition-colors">{q}</span>
+                  <span className="text-lg font-medium text-white group-hover:text-neon-pink transition-colors">{q}</span>
                   <span
                     className={`material-symbols-outlined transition-transform duration-300 ${
-                      isOpen ? 'rotate-180 text-gold' : 'text-gray-500'
+                      isOpen ? 'rotate-180 text-neon-pink' : 'text-gray-500'
                     }`}
                   >
                     expand_more

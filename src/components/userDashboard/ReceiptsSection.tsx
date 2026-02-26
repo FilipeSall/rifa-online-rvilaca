@@ -43,7 +43,7 @@ export default function ReceiptsSection({
           <input
             value={receiptSearch}
             onChange={(event) => onReceiptSearchChange(event.target.value)}
-            className="block w-full rounded-lg border border-luxury-border bg-luxury-bg py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-text-muted focus:border-gold/50 focus:outline-none focus:ring-1 focus:ring-gold/30"
+            className="block w-full rounded-lg border border-luxury-border bg-luxury-bg py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-text-muted focus:border-neon-pink/50 focus:outline-none focus:ring-1 focus:ring-neon-pink/30"
             placeholder="Buscar por ID do pedido ou numero..."
             type="text"
           />
@@ -60,7 +60,7 @@ export default function ReceiptsSection({
                 onClick={() => onReceiptFilterChange(filter)}
                 className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
                   receiptFilter === filter
-                    ? 'bg-gold text-black'
+                    ? 'bg-neon-pink text-black'
                     : 'border border-luxury-border bg-luxury-bg text-text-muted hover:border-white/20 hover:text-white'
                 }`}
               >

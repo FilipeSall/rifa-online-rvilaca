@@ -20,17 +20,17 @@ import KpiCard from './KpiCard'
 
 const DEFAULT_TOOLTIP_STYLE = {
   backgroundColor: 'rgba(20, 20, 20, 0.96)',
-  border: '1px solid rgba(245, 168, 0, 0.25)',
+  border: '1px solid rgba(255, 0, 204, 0.25)',
   borderRadius: '12px',
   color: '#fff',
 }
 
 const DEFAULT_TOOLTIP_ITEM_STYLE = { color: '#f8fafc', fontWeight: 700 }
-const DEFAULT_TOOLTIP_LABEL_STYLE = { color: '#f5a800', fontWeight: 700 }
+const DEFAULT_TOOLTIP_LABEL_STYLE = { color: '#ff00cc', fontWeight: 700 }
 
 const BAR_TOOLTIP_STYLE = {
   backgroundColor: 'rgba(20, 20, 20, 0.96)',
-  border: '1px solid rgba(245, 168, 0, 0.2)',
+  border: '1px solid rgba(255, 0, 204, 0.2)',
   borderRadius: '12px',
   color: '#fff',
 }
@@ -76,8 +76,8 @@ export default function DashboardTab() {
               >
                 <defs>
                   <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#F5A800" stopOpacity={0.7} />
-                    <stop offset="100%" stopColor="#F5A800" stopOpacity={0.05} />
+                    <stop offset="0%" stopColor="#ff00cc" stopOpacity={0.7} />
+                    <stop offset="100%" stopColor="#ff00cc" stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="4 8" />
@@ -113,7 +113,7 @@ export default function DashboardTab() {
                   isAnimationActive={isRevenueAnimationActive}
                   animationDuration={1000}
                   animationEasing="ease-out"
-                  stroke="#F5A800"
+                  stroke="#ff00cc"
                   strokeWidth={3}
                   type="monotone"
                 />
@@ -192,7 +192,7 @@ export default function DashboardTab() {
               />
               <Bar
                 dataKey="orders"
-                fill="#F5A800"
+                fill="#ff00cc"
                 isAnimationActive={!isLoading}
                 radius={[6, 6, 0, 0]}
               />

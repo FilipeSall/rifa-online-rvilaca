@@ -14,7 +14,7 @@ export default function MobileSectionTabs({ activeSection, onSectionChange }: Mo
           type="button"
           onClick={() => onSectionChange(section)}
           className={`flex-1 rounded-lg py-2 text-xs font-semibold transition-colors ${
-            activeSection === section ? 'bg-gold text-black' : 'text-text-muted hover:text-white'
+            activeSection === section ? 'bg-neon-pink text-black' : 'text-text-muted hover:text-white'
           }`}
         >
           {section === 'numeros' ? 'Meus Numeros' : section === 'comprovantes' ? 'Comprovantes' : 'Ganhadores'}

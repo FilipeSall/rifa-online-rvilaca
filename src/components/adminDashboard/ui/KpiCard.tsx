@@ -13,7 +13,7 @@ export default function KpiCard({ card, kpis, index }: KpiCardProps) {
 
   return (
     <article
-      className="group relative overflow-hidden rounded-2xl border border-white/10 bg-luxury-card p-5 transition-all duration-500 hover:-translate-y-1 hover:border-gold/35 hover:shadow-glow-gold"
+      className="group relative overflow-hidden rounded-2xl border border-white/10 bg-luxury-card p-5 transition-all duration-500 hover:-translate-y-1 hover:border-neon-pink/35 hover:shadow-glow-pink"
       style={{ animationDelay: `${index * 40}ms` }}
     >
       <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${card.tone} opacity-80`} />
@@ -22,7 +22,7 @@ export default function KpiCard({ card, kpis, index }: KpiCardProps) {
           <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400">{card.label}</p>
           <p className="mt-3 text-3xl font-black text-white">{card.value(animatedValue)}</p>
         </div>
-        <div className="rounded-lg border border-white/10 bg-black/30 p-2.5 text-gold">
+        <div className="rounded-lg border border-white/10 bg-black/30 p-2.5 text-neon-pink">
           <span className="material-symbols-outlined">{card.icon}</span>
         </div>
       </div>

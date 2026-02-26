@@ -292,9 +292,9 @@ export default function TopBuyersDrawTab() {
                 <p className="text-[10px] uppercase tracking-[0.15em] text-gray-500">Ultima publicacao</p>
                 <p className="mt-1 text-sm font-semibold text-white">{formatPublishedAt(result?.publishedAtMs || 0)}</p>
               </div>
-              <div className="rounded-xl border border-gold/25 bg-black/35 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-gold">Posicao vencedora</p>
-                <p className="mt-1 text-2xl font-black text-gold">{result?.winningPosition || '-'}</p>
+              <div className="rounded-xl border border-neon-pink/25 bg-black/35 px-4 py-3">
+                <p className="text-[10px] uppercase tracking-[0.15em] text-neon-pink">Posicao vencedora</p>
+                <p className="mt-1 text-2xl font-black text-neon-pink">{result?.winningPosition || '-'}</p>
               </div>
               <div className="rounded-xl border border-emerald-300/25 bg-emerald-500/10 px-4 py-3">
                 <p className="text-[10px] uppercase tracking-[0.15em] text-emerald-200">Resolucao</p>
@@ -329,7 +329,7 @@ export default function TopBuyersDrawTab() {
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         <article className="rounded-3xl border border-white/10 bg-luxury-card p-5 xl:col-span-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold">Entrada administrativa</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon-pink">Entrada administrativa</p>
           <h4 className="mt-2 font-luxury text-2xl font-bold text-white">Publicacao oficial do sorteio</h4>
 
           <div className="mt-5 space-y-4">
@@ -353,7 +353,7 @@ export default function TopBuyersDrawTab() {
               </label>
               <input
                 id="draw-ranking-limit"
-                className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-neon-pink/60"
                 inputMode="numeric"
                 placeholder="50"
                 type="text"
@@ -420,11 +420,11 @@ export default function TopBuyersDrawTab() {
             </div>
           ) : (
             <div className="mt-4 space-y-4">
-              <div className="relative overflow-hidden rounded-2xl border border-gold/25 bg-gradient-to-r from-amber-500/20 via-luxury-card to-luxury-card p-5">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold">Ganhador atual</p>
+              <div className="relative overflow-hidden rounded-2xl border border-neon-pink/25 bg-gradient-to-r from-amber-500/20 via-luxury-card to-luxury-card p-5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon-pink">Ganhador atual</p>
                 <p className="mt-2 text-3xl font-black text-white">{result.winner.name}</p>
                 <p className="mt-2 text-sm text-gray-200">
-                  Posicao {result.winner.pos} no ranking com <span className="font-bold text-gold">{result.winner.cotas}</span> cotas.
+                  Posicao {result.winner.pos} no ranking com <span className="font-bold text-neon-pink">{result.winner.cotas}</span> cotas.
                 </p>
                 <p className="mt-2 text-xs font-semibold text-amber-100">
                   Premio do sorteio vigente: {result.drawPrize || '-'}
@@ -433,11 +433,11 @@ export default function TopBuyersDrawTab() {
                   Cálculo exato: <span className="font-semibold text-white">{buildWinnerCalculationLabel(result)}</span>
                 </p>
                 <p className="mt-1 text-xs text-gray-200">
-                  Posicao do jogador premiado: <span className="font-bold text-gold">{formatWinnerUserCode(result)}</span>
+                  Posicao do jogador premiado: <span className="font-bold text-neon-pink">{formatWinnerUserCode(result)}</span>
                 </p>
                 <p className="mt-1 text-xs text-gray-200">
                   Numero premiado:{' '}
-                  <span className="font-bold text-gold">{pickComparableWinnerTicket(result) || '-'}</span>
+                  <span className="font-bold text-neon-pink">{pickComparableWinnerTicket(result) || '-'}</span>
                 </p>
                 <p className="mt-1 text-xs text-gray-300">
                   Códigos da Loteria informados: <span className="font-mono text-white">{formatLoteriaInputs(result.extractionNumbers)}</span>
@@ -473,7 +473,7 @@ export default function TopBuyersDrawTab() {
                           ? `Tentativa ${attempt.extractionIndex}: fallback de seguranca ➜ codigo ${attempt.candidateCode}`
                           : `Tentativa ${attempt.extractionIndex}: ${attempt.extractionNumber} ➜ codigo ${attempt.candidateCode}${formatNearestPath(attempt) ? ` | caminho ${formatNearestPath(attempt)}` : ''}`}
                       </span>
-                      <span className="font-bold text-gold">
+                      <span className="font-bold text-neon-pink">
                         {attempt.matchedPosition ? `Pos ${attempt.matchedPosition}` : 'Sem match'}
                       </span>
                     </div>

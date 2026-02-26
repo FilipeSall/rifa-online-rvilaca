@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import logo from '../../assets/logo.webp'
+import logo from '../../assets/singleLogo.png'
 import { FcGoogle } from 'react-icons/fc'
 import { HiOutlineArrowRight } from 'react-icons/hi2'
 import { Link, useLocation } from 'react-router-dom'
@@ -107,7 +107,7 @@ export default function Header() {
             {HEADER_NAV_ITEMS.map(({ label, href }) => (
               <Link
                 key={label}
-                className={`text-xs font-bold hover:text-gold transition-colors uppercase tracking-widest ${
+                className={`text-xs font-bold hover:text-neon-pink transition-colors uppercase tracking-widest ${
                   isNavItemActive(href) ? 'text-white' : 'text-gray-400'
                 }`}
                 to={getNavTarget(href)}
@@ -119,7 +119,7 @@ export default function Header() {
 
           <div className="flex items-center gap-4" ref={authMenuRef}>
             <button
-              className="hidden md:flex h-10 items-center justify-center rounded bg-gold hover:bg-gold-hover px-6 text-xs font-black text-black transition-all uppercase tracking-widest shadow-glow-gold"
+              className="hidden md:flex h-10 items-center justify-center rounded border border-neon-cyan/60 bg-neon-cyan/10 hover:bg-neon-cyan/20 px-6 text-xs font-black text-neon-cyan transition-all uppercase tracking-widest"
               type="button"
               onClick={handleAuthButtonClick}
               aria-expanded={isAuthModalOpen}
@@ -128,12 +128,12 @@ export default function Header() {
               {authButtonLabel}
             </button>
             {!isLoggedIn && isAuthModalOpen ? (
-              <div className="absolute right-4 top-[calc(100%-0.35rem)] w-[310px] overflow-hidden rounded-xl border border-gold/30 bg-luxury-card/95 p-3 shadow-2xl backdrop-blur-md md:right-8 lg:right-8">
+              <div className="absolute right-4 top-[calc(100%-0.35rem)] w-[310px] overflow-hidden rounded-xl border border-neon-pink/30 bg-luxury-card/95 p-3 shadow-2xl backdrop-blur-md md:right-8 lg:right-8">
                 <div className="mb-2 px-1">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold">Acesso rápido</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon-pink">Acesso rápido</p>
                 </div>
                 <button
-                  className="group flex w-full items-center gap-3 rounded-lg border border-white/10 bg-luxury-bg px-3 py-3 text-left text-sm font-semibold text-white transition-all hover:border-gold/50 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="group flex w-full items-center gap-3 rounded-lg border border-white/10 bg-luxury-bg px-3 py-3 text-left text-sm font-semibold text-white transition-all hover:border-neon-pink/50 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
                   type="button"
                   onClick={handleGoogleSignIn}
                   disabled={isSigningIn}
@@ -142,7 +142,7 @@ export default function Header() {
                     <FcGoogle className="text-lg" />
                   </span>
                   <span className="flex-1">{isSigningIn ? 'Conectando...' : 'Entrar com Google'}</span>
-                  <HiOutlineArrowRight className="text-base text-gold/80 transition-transform group-hover:translate-x-0.5" />
+                  <HiOutlineArrowRight className="text-base text-neon-pink/80 transition-transform group-hover:translate-x-0.5" />
                 </button>
                 {googleAuthError ? <p className="mt-2 px-1 text-[11px] text-red-300">{googleAuthError}</p> : null}
                 <div className="my-3 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/30">
@@ -152,18 +152,18 @@ export default function Header() {
                 </div>
                 <div className="space-y-2">
                   <button
-                    className="group flex w-full items-center gap-3 rounded-lg border border-white/10 bg-black/40 px-3 py-3 text-left text-sm font-semibold text-white transition-all hover:border-gold/50 hover:bg-black/60"
+                    className="group flex w-full items-center gap-3 rounded-lg border border-white/10 bg-black/40 px-3 py-3 text-left text-sm font-semibold text-white transition-all hover:border-neon-pink/50 hover:bg-black/60"
                     type="button"
                     onClick={handleEmailOptionClick}
                   >
                     <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5">
-                      <span className="material-symbols-outlined text-lg text-gold">alternate_email</span>
+                      <span className="material-symbols-outlined text-lg text-neon-pink">alternate_email</span>
                     </span>
                     <span className="flex-1">Entrar com email</span>
-                    <HiOutlineArrowRight className="text-base text-gold/80 transition-transform group-hover:translate-x-0.5" />
+                    <HiOutlineArrowRight className="text-base text-neon-pink/80 transition-transform group-hover:translate-x-0.5" />
                   </button>
                   <button
-                    className="w-full px-1 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-gold/80 transition-colors hover:text-gold"
+                    className="w-full px-1 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-neon-pink/80 transition-colors hover:text-neon-pink"
                     type="button"
                     onClick={handleCreateAccountClick}
                   >
@@ -180,7 +180,7 @@ export default function Header() {
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/50">Email</label>
                       <input
-                        className="w-full rounded-lg border border-white/10 bg-luxury-bg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30"
+                        className="w-full rounded-lg border border-white/10 bg-luxury-bg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-neon-pink/60 focus:outline-none focus:ring-1 focus:ring-neon-pink/30"
                         type="email"
                         placeholder="Digite seu email"
                         value={emailValue}
@@ -193,7 +193,7 @@ export default function Header() {
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/50">Senha</label>
                       <input
-                        className="w-full rounded-lg border border-white/10 bg-luxury-bg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30"
+                        className="w-full rounded-lg border border-white/10 bg-luxury-bg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-neon-pink/60 focus:outline-none focus:ring-1 focus:ring-neon-pink/30"
                         type="password"
                         placeholder="Digite sua senha"
                         value={passwordValue}
@@ -206,7 +206,7 @@ export default function Header() {
                     {!isCreatingAccount ? (
                       <div className="flex justify-end">
                         <button
-                          className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold/80 transition-colors hover:text-gold disabled:cursor-not-allowed disabled:opacity-60"
+                          className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-neon-pink/80 transition-colors hover:text-neon-pink disabled:cursor-not-allowed disabled:opacity-60"
                           type="button"
                           onClick={() => void handlePasswordResetRequest()}
                           disabled={!isEmailFormOpen || isEmailSubmitting || isPasswordResetSubmitting}
@@ -219,7 +219,7 @@ export default function Header() {
                       <div className="space-y-2">
                         <label className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/50">Telefone</label>
                         <input
-                          className="w-full rounded-lg border border-white/10 bg-luxury-bg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30"
+                          className="w-full rounded-lg border border-white/10 bg-luxury-bg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-neon-pink/60 focus:outline-none focus:ring-1 focus:ring-neon-pink/30"
                           type="tel"
                           inputMode="tel"
                           placeholder="(00) 00000-0000"
@@ -234,7 +234,7 @@ export default function Header() {
                       <div className="space-y-2">
                         <label className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/50">CPF</label>
                         <input
-                          className="w-full rounded-lg border border-white/10 bg-luxury-bg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30"
+                          className="w-full rounded-lg border border-white/10 bg-luxury-bg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-neon-pink/60 focus:outline-none focus:ring-1 focus:ring-neon-pink/30"
                           type="text"
                           inputMode="numeric"
                           placeholder="000.000.000-00"
@@ -246,7 +246,7 @@ export default function Header() {
                       </div>
                     ) : null}
                     <button
-                      className="flex h-10 w-full items-center justify-center rounded bg-gold px-4 text-xs font-black uppercase tracking-widest text-black transition-all hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-70"
+                      className="flex h-10 w-full items-center justify-center rounded bg-neon-pink px-4 text-xs font-black uppercase tracking-widest text-black transition-all hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
                       type="submit"
                       disabled={!isEmailFormOpen || isEmailSubmitting || isPasswordResetSubmitting}
                     >
@@ -285,7 +285,7 @@ export default function Header() {
                 <Link
                   key={label}
                   className={`block rounded px-3 py-2 text-xs font-bold uppercase tracking-widest transition-colors ${
-                    isNavItemActive(href) ? 'bg-white/5 text-white' : 'text-gray-400 hover:text-gold'
+                    isNavItemActive(href) ? 'bg-white/5 text-white' : 'text-gray-400 hover:text-neon-pink'
                   }`}
                   to={getNavTarget(href)}
                   onClick={() => setIsMobileMenuOpen(false)}
@@ -295,7 +295,7 @@ export default function Header() {
               ))}
             </nav>
             <button
-              className="h-10 w-full rounded bg-gold px-4 text-xs font-black uppercase tracking-widest text-black"
+              className="h-10 w-full rounded bg-neon-pink px-4 text-xs font-black uppercase tracking-widest text-black"
               type="button"
               onClick={() => {
                 void handleAuthButtonClick()

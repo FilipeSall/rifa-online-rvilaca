@@ -251,7 +251,7 @@ export default function CampaignTab() {
       ? 'text-amber-200'
       : 'text-emerald-300'
   const scheduleInputClassName = shouldHighlightScheduleInputs
-    ? 'rounded-xl border border-gold/70 bg-gold/10 px-4 py-3 animate-pulse shadow-[0_0_0_1px_rgba(245,168,0,0.45),0_0_30px_rgba(245,168,0,0.35)]'
+    ? 'rounded-xl border border-neon-pink/70 bg-neon-pink/10 px-4 py-3 animate-pulse shadow-[0_0_0_1px_rgba(255,0,204,0.45),0_0_30px_rgba(255,0,204,0.35)]'
     : 'rounded-xl border border-white/10 bg-black/25 px-4 py-3'
   const isEndOnSameDayAsStart = Boolean(startsAt && endsAt && startsAt === endsAt)
   const minEndTime = isEndOnSameDayAsStart && startsAtTime ? startsAtTime : undefined
@@ -687,20 +687,20 @@ export default function CampaignTab() {
   return (
     <section className="space-y-6 pb-28">
       <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-luxury-card p-6">
-        <div className="pointer-events-none absolute -left-12 top-0 h-44 w-44 rounded-full bg-gold/15 blur-3xl" />
+        <div className="pointer-events-none absolute -left-12 top-0 h-44 w-44 rounded-full bg-neon-pink/15 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-12 right-0 h-44 w-44 rounded-full bg-cyan-400/10 blur-3xl" />
         <div className="relative z-10 grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr] lg:items-end">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gold">Central da Campanha</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-neon-pink">Central da Campanha</p>
             <h3 className="mt-2 font-luxury text-3xl font-bold text-white">Operacao comercial com controle total</h3>
             <p className="mt-3 max-w-2xl text-sm text-gray-300">
               Configure preço, compra mínima e cupons da campanha em tempo real.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
-            <div className="rounded-xl border border-gold/20 bg-black/40 px-4 py-3">
+            <div className="rounded-xl border border-neon-pink/20 bg-black/40 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Preço atual</p>
-              <p className="mt-1 text-lg font-black text-gold">{formatCurrency(campaign.pricePerCota)}</p>
+              <p className="mt-1 text-lg font-black text-neon-pink">{formatCurrency(campaign.pricePerCota)}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-black/40 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Status</p>
@@ -727,9 +727,9 @@ export default function CampaignTab() {
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         <div className="space-y-5 xl:col-span-5 xl:flex xl:h-full xl:flex-col xl:gap-5 xl:space-y-0">
           <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-luxury-card p-5 xl:flex-1">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(245,168,0,0.16),transparent_48%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,0,204,0.16),transparent_48%)]" />
             <div className="relative z-10 xl:flex xl:h-full xl:flex-col">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold">Preview ao vivo</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon-pink">Preview ao vivo</p>
               <h4 className="mt-3 font-luxury text-2xl font-bold text-white">{title.trim() || DEFAULT_CAMPAIGN_TITLE}</h4>
               <p className="mt-2 text-sm text-gray-300">
                 Visual de como a comunicação principal da campanha fica após o salvamento.
@@ -741,8 +741,8 @@ export default function CampaignTab() {
                     {(Number(totalNumbersInput.replace(/[^0-9]/g, '')) || DEFAULT_TOTAL_NUMBERS).toLocaleString('pt-BR')}
                   </p>
                 </div>
-                <div className="rounded-xl border border-gold/25 bg-black/40 px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-gold">1º prêmio</p>
+                <div className="rounded-xl border border-neon-pink/25 bg-black/40 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.15em] text-neon-pink">1º prêmio</p>
                   <p className="mt-1 text-sm font-semibold text-white">{mainPrize.trim() || DEFAULT_MAIN_PRIZE}</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/35 px-4 py-3">
@@ -773,7 +773,7 @@ export default function CampaignTab() {
                   </label>
                   <input
                     id="campaign-ticket-price"
-                    className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-gold outline-none transition-colors focus:border-gold/60"
+                    className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-neon-pink outline-none transition-colors focus:border-neon-pink/60"
                     inputMode="decimal"
                     type="text"
                     value={pricePerCotaInput}
@@ -802,7 +802,7 @@ export default function CampaignTab() {
         <article className="rounded-3xl border border-white/10 bg-luxury-card p-5 xl:col-span-7">
           <div className="grid grid-cols-1 gap-4">
             <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-gold">1. Informacoes gerais</p>
+              <p className="text-[10px] uppercase tracking-[0.18em] text-neon-pink">1. Informacoes gerais</p>
               <div className="mt-3 grid grid-cols-1 gap-4">
                 <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
                   <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-title">
@@ -810,7 +810,7 @@ export default function CampaignTab() {
                   </label>
                   <input
                     id="campaign-title"
-                    className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                    className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-neon-pink/60"
                     type="text"
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
@@ -824,7 +824,7 @@ export default function CampaignTab() {
                     </label>
                     <input
                       id="campaign-starts-at"
-                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-neon-pink/60"
                       type="date"
                       max={endsAt || undefined}
                       value={startsAt}
@@ -848,7 +848,7 @@ export default function CampaignTab() {
                     </label>
                     <input
                       id="campaign-starts-at-time"
-                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-neon-pink/60 disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={!startsAt}
                       step={60}
                       type="time"
@@ -873,7 +873,7 @@ export default function CampaignTab() {
                     </label>
                     <input
                       id="campaign-ends-at"
-                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-neon-pink/60"
                       type="date"
                       min={startsAt || undefined}
                       value={endsAt}
@@ -908,7 +908,7 @@ export default function CampaignTab() {
                     </label>
                     <input
                       id="campaign-ends-at-time"
-                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-neon-pink/60 disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={!endsAt}
                       min={minEndTime}
                       step={60}
@@ -977,7 +977,7 @@ export default function CampaignTab() {
                     </label>
                     <input
                       id="campaign-main-prize"
-                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-neon-pink/60"
                       type="text"
                       value={mainPrize}
                       onChange={(event) => setMainPrize(event.target.value)}
@@ -989,7 +989,7 @@ export default function CampaignTab() {
                     </label>
                     <input
                       id="campaign-second-prize"
-                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-gold/60"
+                      className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-neon-pink/60"
                       type="text"
                       value={secondPrize}
                       onChange={(event) => setSecondPrize(event.target.value)}
@@ -1376,7 +1376,7 @@ export default function CampaignTab() {
                 <div className="inline-flex rounded-lg border border-white/10 bg-black/35 p-1">
                   <button
                     type="button"
-                    className={`rounded-md px-3 py-2 text-xs font-bold ${couponCodeMode === 'auto' ? 'bg-gold text-black' : 'text-gray-300'}`}
+                    className={`rounded-md px-3 py-2 text-xs font-bold ${couponCodeMode === 'auto' ? 'bg-neon-pink text-black' : 'text-gray-300'}`}
                     onClick={() => {
                       setCouponCodeMode('auto')
                       if (!couponCodeInput.trim()) {
@@ -1388,7 +1388,7 @@ export default function CampaignTab() {
                   </button>
                   <button
                     type="button"
-                    className={`rounded-md px-3 py-2 text-xs font-bold ${couponCodeMode === 'manual' ? 'bg-gold text-black' : 'text-gray-300'}`}
+                    className={`rounded-md px-3 py-2 text-xs font-bold ${couponCodeMode === 'manual' ? 'bg-neon-pink text-black' : 'text-gray-300'}`}
                     onClick={() => setCouponCodeMode('manual')}
                   >
                     Manual
@@ -1432,7 +1432,7 @@ export default function CampaignTab() {
                 <div className="flex gap-2">
                   <input
                     id="coupon-code-input"
-                    className="h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold uppercase tracking-widest text-white outline-none focus:border-gold/60"
+                    className="h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold uppercase tracking-widest text-white outline-none focus:border-neon-pink/60"
                     type="text"
                     value={couponCodeInput}
                     onChange={(event) => setCouponCodeInput(event.target.value)}
@@ -1441,7 +1441,7 @@ export default function CampaignTab() {
                   {couponCodeMode === 'auto' ? (
                     <button
                       type="button"
-                      className="h-11 rounded-md border border-gold/30 bg-gold/10 px-3 text-xs font-bold uppercase tracking-wide text-gold"
+                      className="h-11 rounded-md border border-neon-pink/30 bg-neon-pink/10 px-3 text-xs font-bold uppercase tracking-wide text-neon-pink"
                       onClick={handleGenerateCouponCode}
                     >
                       Gerar
@@ -1531,7 +1531,7 @@ export default function CampaignTab() {
             {hasCampaignChanges ? 'Alteracoes pendentes para salvar.' : 'Nenhuma alteracao pendente.'}
           </p>
           <button
-            className="inline-flex h-11 items-center rounded-lg bg-gold px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition-colors hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex h-11 items-center rounded-lg bg-neon-pink px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
             type="button"
             disabled={isLoading || isSaving || !hasCampaignChanges}
             onClick={handleSaveCampaignSettings}

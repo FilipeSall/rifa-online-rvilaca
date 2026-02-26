@@ -12,7 +12,7 @@ export default function AdminMobileTabs({ activeTab, onTabChange }: AdminMobileT
         <button
           key={tab.id}
           className={`min-w-[108px] flex-1 rounded-lg py-2 text-[11px] font-bold uppercase tracking-[0.08em] transition-colors ${
-            activeTab === tab.id ? 'bg-gold text-black' : 'text-gray-400'
+            activeTab === tab.id ? 'bg-neon-pink text-black' : 'text-gray-400'
           }`}
           type="button"
           onClick={() => onTabChange(tab.id)}

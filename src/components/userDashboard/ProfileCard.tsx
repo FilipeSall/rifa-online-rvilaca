@@ -30,7 +30,7 @@ export default function ProfileCard({
 }: ProfileCardProps) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-luxury-border bg-luxury-card p-6 md:p-8">
-      <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-gold/5 blur-3xl" />
+      <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-neon-pink/5 blur-3xl" />
       <div className="relative flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
         <div className="flex flex-col items-center gap-5 text-center md:flex-row md:items-start md:text-left">
           <div className="relative flex-shrink-0">
@@ -47,10 +47,10 @@ export default function ProfileCard({
                 src={user.photoURL}
                 alt={displayName}
                 referrerPolicy="no-referrer"
-                className="h-20 w-20 rounded-full border-2 border-gold/30 object-cover"
+                className="h-20 w-20 rounded-full border-2 border-neon-pink/30 object-cover"
               />
             ) : (
-              <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-gold/30 bg-gold/10 text-2xl font-bold text-gold">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-neon-pink/30 bg-neon-pink/10 text-2xl font-bold text-neon-pink">
                 {initials}
               </div>
             )}
@@ -60,7 +60,7 @@ export default function ProfileCard({
               onClick={() => photoInputRef.current?.click()}
               disabled={isUploadingPhoto}
               title="Alterar foto"
-              className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-luxury-card bg-gold text-black shadow-sm transition-transform hover:scale-110 disabled:cursor-not-allowed disabled:opacity-60"
+              className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-luxury-card bg-neon-pink text-black shadow-sm transition-transform hover:scale-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isUploadingPhoto ? (
                 <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-black border-t-transparent" />
@@ -104,7 +104,7 @@ export default function ProfileCard({
             </div>
 
             {!firestoreCpf && (
-              <div className="mt-3 max-w-[260px] rounded-lg border border-gold/20 bg-gold/10 px-3 py-2 text-[11px] text-gold/90 md:max-w-[320px]">
+              <div className="mt-3 max-w-[260px] rounded-lg border border-neon-pink/20 bg-neon-pink/10 px-3 py-2 text-[11px] text-neon-pink/90 md:max-w-[320px]">
                 Para melhor rastreamento de premio e seguranca, informe seu CPF em editar dados.
               </div>
             )}
@@ -115,7 +115,7 @@ export default function ProfileCard({
           <button
             type="button"
             onClick={onOpenEdit}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-luxury-border px-5 py-2.5 text-sm font-semibold text-text-muted transition-colors hover:border-gold/40 hover:text-gold"
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-luxury-border px-5 py-2.5 text-sm font-semibold text-text-muted transition-colors hover:border-neon-pink/40 hover:text-neon-pink"
           >
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
               edit
@@ -125,7 +125,7 @@ export default function ProfileCard({
 
           <Link
             to="/#comprar-numeros"
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-gold px-5 py-2.5 text-sm font-bold text-black transition-colors hover:bg-gold-hover"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-neon-pink px-5 py-2.5 text-sm font-bold text-black transition-colors hover:bg-primary-hover"
           >
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
               add

@@ -39,7 +39,7 @@ export default function WinnerCard({ winner }: WinnerCardProps) {
   return (
     <article className="rounded-2xl border border-white/10 bg-[linear-gradient(145deg,rgba(255,255,255,0.07),rgba(0,0,0,0.35))] p-4 shadow-[0_14px_35px_rgba(0,0,0,0.35)]">
       <div className="flex items-start gap-3">
-        <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-full border border-gold/50 bg-black/40">
+        <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-full border border-neon-pink/50 bg-black/40">
           {winner.winnerPhotoUrl ? (
             <img
               src={winner.winnerPhotoUrl}
@@ -63,11 +63,11 @@ export default function WinnerCard({ winner }: WinnerCardProps) {
           <div className="mt-3 grid gap-2 text-xs text-gray-200 sm:grid-cols-2">
             <p>
               Número premiado:{' '}
-              <span className="font-semibold text-gold">{winner.winningNumber}</span>
+              <span className="font-semibold text-neon-pink">{winner.winningNumber}</span>
             </p>
             <p>
               Número da lotérica:{' '}
-              <span className="font-semibold text-gold">{winner.lotteryNumber}</span>
+              <span className="font-semibold text-neon-pink">{winner.lotteryNumber}</span>
             </p>
             <p className="sm:col-span-2">
               Prêmio:{' '}

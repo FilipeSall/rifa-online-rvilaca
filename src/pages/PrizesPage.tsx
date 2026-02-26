@@ -181,7 +181,7 @@ export default function PrizesPage() {
   }, [latestMainResult, mainHistory])
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-luxury-bg font-display text-white selection:bg-gold selection:text-black">
+    <div className="min-h-screen overflow-x-hidden bg-luxury-bg font-display text-white selection:bg-neon-pink selection:text-black">
       <Header />
 
       <main>
@@ -232,7 +232,7 @@ export default function PrizesPage() {
                     <article key={item.drawId} className="rounded-xl border border-white/10 bg-black/30 p-4">
                       <p className="text-lg font-black text-white">{item.drawPrize}</p>
                       <p className="mt-1 text-sm text-gray-200">
-                        Numero vencedor: <span className="font-mono font-bold text-gold">{item.winningNumberFormatted}</span> (
+                        Numero vencedor: <span className="font-mono font-bold text-neon-pink">{item.winningNumberFormatted}</span> (
                         {item.winner.name})
                       </p>
                       <p className="mt-1 text-xs text-gray-300">
@@ -325,11 +325,11 @@ export default function PrizesPage() {
                             Cálculo exato: <span className="font-semibold text-white">{buildWinnerCalculationLabel(item)}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-300">
-                            Posição do jogador premiado: <span className="font-bold text-gold">{formatWinnerUserCode(item)}</span>
+                            Posição do jogador premiado: <span className="font-bold text-neon-pink">{formatWinnerUserCode(item)}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-300">
                             Número premiado:{' '}
-                            <span className="font-bold text-gold">{pickComparableWinnerTicket(item) || '-'}</span>
+                            <span className="font-bold text-neon-pink">{pickComparableWinnerTicket(item) || '-'}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-300">
                             Códigos da Loteria informados: <span className="font-mono text-white">{formatLoteriaInputs(item.extractionNumbers)}</span>
@@ -377,7 +377,7 @@ export default function PrizesPage() {
                                 {isFallback ? 'Fallback de segurança' : attempt.extractionNumber}
                               </p>
                               <p className="mt-1 text-gray-300">
-                                Código <span className="font-bold text-gold">{attempt.candidateCode}</span>
+                                Código <span className="font-bold text-neon-pink">{attempt.candidateCode}</span>
                               </p>
                               {formatNearestPath(attempt) ? (
                                 <p className="mt-1 text-gray-300">

@@ -273,7 +273,7 @@ export default function PixCheckout({
     <div className="rounded-2xl border border-white/15 bg-luxury-card/70 p-5 backdrop-blur-sm text-white">
       <h3 className="text-xl font-bold">Pagamento via PIX</h3>
       <p className="mt-2 text-sm text-gray-300">
-        Valor: <strong className="text-gold">R$ {Number(amount || 0).toFixed(2)}</strong>
+        Valor: <strong className="text-neon-pink">R$ {Number(amount || 0).toFixed(2)}</strong>
       </p>
 
       {status === 'idle' && (
@@ -314,7 +314,7 @@ export default function PixCheckout({
               <p className="mb-2 text-xs uppercase tracking-wider text-gray-300">PIX Copia e Cola</p>
               <p className="break-all text-xs text-gray-100">{order.copyPaste}</p>
               <button
-                className="mt-3 inline-flex h-10 items-center justify-center rounded-lg bg-gold px-4 text-xs font-bold uppercase tracking-wider text-black transition hover:brightness-105"
+                className="mt-3 inline-flex h-10 items-center justify-center rounded-lg bg-neon-pink px-4 text-xs font-bold uppercase tracking-wider text-black transition hover:brightness-105"
                 onClick={handleCopy}
                 type="button"
               >

@@ -212,7 +212,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
 
       <button
         aria-label="Abrir carrinho"
-        className="fixed bottom-4 right-4 z-[72] flex h-16 w-16 items-center justify-center rounded-full border border-gold/70 bg-[radial-gradient(circle_at_35%_30%,#ffd568,#f5a800_56%,#b87900_100%)] text-black shadow-[0_14px_35px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-gold/75 xl:hidden"
+        className="fixed bottom-4 right-4 z-[72] flex h-16 w-16 items-center justify-center rounded-full border border-neon-pink/70 bg-[radial-gradient(circle_at_35%_30%,#ff66e8,#ff00cc_56%,#d600ab_100%)] text-black shadow-[0_14px_35px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-neon-pink/75 xl:hidden"
         type="button"
         onClick={() => {
           setMobileModalView('cart')

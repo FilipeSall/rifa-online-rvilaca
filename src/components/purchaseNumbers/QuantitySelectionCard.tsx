@@ -30,8 +30,8 @@ export default function QuantitySelectionCard({
             key={pack}
             className={`rounded-lg border px-4 py-4 text-left transition-all ${
               quantity === pack
-                ? 'border-gold bg-gold/10 text-gold shadow-glow-gold'
-                : 'border-white/10 bg-luxury-bg text-white hover:border-gold/50'
+                ? 'border-neon-pink bg-neon-pink/10 text-neon-pink shadow-glow-pink'
+                : 'border-white/10 bg-luxury-bg text-white hover:border-neon-pink/50'
             }`}
             type="button"
             onClick={() => onSetQuantity(pack)}
@@ -57,7 +57,7 @@ export default function QuantitySelectionCard({
           </button>
           <input
             id="quantity-input"
-            className="h-10 w-24 rounded border border-white/15 bg-luxury-card text-center font-bold text-white outline-none focus:border-gold"
+            className="h-10 w-24 rounded border border-white/15 bg-luxury-card text-center font-bold text-white outline-none focus:border-neon-pink"
             min={minQuantity}
             max={maxSelectable}
             type="number"

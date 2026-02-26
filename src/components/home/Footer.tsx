@@ -19,13 +19,13 @@ export default function Footer() {
             </p>
             <div className="flex gap-4">
               <a
-                className="w-8 h-8 rounded bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gold transition-colors"
+                className="w-8 h-8 rounded bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white hover:bg-neon-pink transition-colors"
                 href="#"
               >
                 <span className="material-symbols-outlined text-sm">alternate_email</span>
               </a>
               <a
-                className="w-8 h-8 rounded bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gold transition-colors"
+                className="w-8 h-8 rounded bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white hover:bg-neon-pink transition-colors"
                 href="#"
               >
                 <span className="material-symbols-outlined text-sm">chat</span>
@@ -38,7 +38,7 @@ export default function Footer() {
             <ul className="space-y-3 text-sm text-gray-500">
               {FOOTER_NAV_LINKS.map((item) => (
                 <li key={item.label}>
-                  <Link className="hover:text-gold transition-colors" to={item.href}>
+                  <Link className="hover:text-neon-pink transition-colors" to={item.href}>
                     {item.label}
                   </Link>
                 </li>
@@ -51,7 +51,7 @@ export default function Footer() {
             <ul className="space-y-3 text-sm text-gray-500">
               {FOOTER_SUPPORT_LINKS.map((item) => (
                 <li key={item.label}>
-                  <Link className="hover:text-gold transition-colors" to={item.href}>
+                  <Link className="hover:text-neon-pink transition-colors" to={item.href}>
                     {item.label}
                   </Link>
                 </li>
@@ -78,7 +78,7 @@ export default function Footer() {
             © 2024 JonnyBarber. Todos os direitos reservados.
           </p>
           <p className="text-xs text-gray-600 flex items-center gap-1">
-            Feito com <span className="text-gold">♥</span> para vencedores.
+            Feito com <span className="text-neon-pink">♥</span> para vencedores.
           </p>
         </div>
       </div>

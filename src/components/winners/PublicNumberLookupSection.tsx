@@ -96,13 +96,13 @@ export default function PublicNumberLookupSection() {
               value={numberInput}
               onChange={(event) => setNumberInput(normalizeLookupInput(event.target.value))}
               placeholder="Ex: 0183420"
-              className="h-11 w-full rounded-lg border border-white/15 bg-black/30 px-3 font-mono text-sm text-white placeholder:text-gray-500 focus:border-gold/40 focus:outline-none focus:ring-1 focus:ring-gold/25 sm:max-w-xs"
+              className="h-11 w-full rounded-lg border border-white/15 bg-black/30 px-3 font-mono text-sm text-white placeholder:text-gray-500 focus:border-neon-pink/40 focus:outline-none focus:ring-1 focus:ring-neon-pink/25 sm:max-w-xs"
               inputMode="numeric"
             />
             <button
               type="submit"
               disabled={isLoading}
-              className="inline-flex h-11 items-center justify-center rounded-lg bg-gold px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition-colors hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center rounded-lg bg-neon-pink px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoading ? 'Consultando...' : 'Consultar numero'}
             </button>

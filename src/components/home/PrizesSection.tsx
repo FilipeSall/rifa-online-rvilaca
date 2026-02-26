@@ -19,7 +19,7 @@ function PrizeCard({ badge, badgeClassName, title, description, imageSrc, imageA
           />
         ) : (
           <>
-            <span className="material-symbols-outlined text-6xl text-gold transform-gpu transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-110">
+            <span className="material-symbols-outlined text-6xl text-neon-pink transform-gpu transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-110">
               {icon}
             </span>
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
@@ -56,7 +56,7 @@ export default function PrizesSection() {
     <section className="py-16 bg-luxury-card border-y border-white/5">
       <div className="container mx-auto px-4 lg:px-8">
         <div className="text-center mb-12">
-          <span className="text-gold font-bold text-xs uppercase tracking-[0.2em] mb-2 block">
+          <span className="text-neon-pink font-bold text-xs uppercase tracking-[0.2em] mb-2 block">
             O que você pode ganhar
           </span>
           <h2 className="text-3xl font-luxury font-bold text-white">Prêmios da Edição</h2>

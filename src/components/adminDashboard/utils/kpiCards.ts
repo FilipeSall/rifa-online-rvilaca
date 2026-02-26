@@ -33,7 +33,7 @@ export const KPI_CARDS: KpiCardConfig[] = [
     icon: 'confirmation_number',
     metricKey: 'soldNumbers',
     value: (value: number) => formatInteger(Math.round(value)),
-    tone: 'from-gold/30 to-gold/5',
+    tone: 'from-neon-pink/30 to-neon-pink/5',
   },
   {
     id: 'pedidos-pagos',

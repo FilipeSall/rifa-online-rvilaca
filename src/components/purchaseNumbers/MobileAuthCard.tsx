@@ -119,10 +119,10 @@ export default function MobileAuthCard({ onBackToCart }: MobileAuthCardProps) {
   }, [emailValue, passwordValue])
 
   return (
-    <div className="rounded-2xl border border-gold/25 bg-luxury-card p-5 shadow-2xl">
+    <div className="rounded-2xl border border-neon-pink/25 bg-luxury-card p-5 shadow-2xl">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold">Autenticação</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon-pink">Autenticação</p>
           <h2 className="mt-2 text-lg font-bold text-white">Entre para finalizar sua compra</h2>
         </div>
         <button
@@ -141,7 +141,7 @@ export default function MobileAuthCard({ onBackToCart }: MobileAuthCardProps) {
       </p>
 
       <button
-        className="group mt-4 flex h-11 w-full items-center gap-3 rounded-lg border border-white/10 bg-luxury-bg px-3 text-left text-sm font-semibold text-white transition-all hover:border-gold/50 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+        className="group mt-4 flex h-11 w-full items-center gap-3 rounded-lg border border-white/10 bg-luxury-bg px-3 text-left text-sm font-semibold text-white transition-all hover:border-neon-pink/50 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
         type="button"
         onClick={() => void handleGoogleSignIn()}
         disabled={isSigningIn || isEmailSubmitting || isPasswordResetSubmitting}
@@ -150,7 +150,7 @@ export default function MobileAuthCard({ onBackToCart }: MobileAuthCardProps) {
           <FcGoogle className="text-lg" />
         </span>
         <span className="flex-1">{isSigningIn ? 'Conectando...' : 'Entrar com Google'}</span>
-        <HiOutlineArrowRight className="text-base text-gold/80 transition-transform group-hover:translate-x-0.5" />
+        <HiOutlineArrowRight className="text-base text-neon-pink/80 transition-transform group-hover:translate-x-0.5" />
       </button>
       {googleAuthError ? <p className="mt-2 text-[11px] text-red-300">{googleAuthError}</p> : null}
 
@@ -161,7 +161,7 @@ export default function MobileAuthCard({ onBackToCart }: MobileAuthCardProps) {
       </div>
 
       <button
-        className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-3 text-left text-sm font-semibold text-white transition-all hover:border-gold/50 hover:bg-black/60"
+        className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-3 text-left text-sm font-semibold text-white transition-all hover:border-neon-pink/50 hover:bg-black/60"
         type="button"
         onClick={() => setIsEmailFormOpen((current) => !current)}
         disabled={isBusy}
@@ -179,7 +179,7 @@ export default function MobileAuthCard({ onBackToCart }: MobileAuthCardProps) {
           <div className="space-y-2">
             <label className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/50">Email</label>
             <input
-              className="w-full rounded-lg border border-white/10 bg-luxury-bg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30"
+              className="w-full rounded-lg border border-white/10 bg-luxury-bg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-neon-pink/60 focus:outline-none focus:ring-1 focus:ring-neon-pink/30"
               type="email"
               placeholder="Digite seu email"
               value={emailValue}
@@ -192,7 +192,7 @@ export default function MobileAuthCard({ onBackToCart }: MobileAuthCardProps) {
           <div className="space-y-2">
             <label className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/50">Senha</label>
             <input
-              className="w-full rounded-lg border border-white/10 bg-luxury-bg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-gold/60 focus:outline-none focus:ring-1 focus:ring-gold/30"
+              className="w-full rounded-lg border border-white/10 bg-luxury-bg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-neon-pink/60 focus:outline-none focus:ring-1 focus:ring-neon-pink/30"
               type="password"
               placeholder="Digite sua senha"
               value={passwordValue}
@@ -204,7 +204,7 @@ export default function MobileAuthCard({ onBackToCart }: MobileAuthCardProps) {
           </div>
           <div className="flex justify-end">
             <button
-              className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold/80 transition-colors hover:text-gold disabled:cursor-not-allowed disabled:opacity-60"
+              className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-neon-pink/80 transition-colors hover:text-neon-pink disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
               onClick={() => void handlePasswordResetRequest()}
               disabled={isBusy}
@@ -213,7 +213,7 @@ export default function MobileAuthCard({ onBackToCart }: MobileAuthCardProps) {
             </button>
           </div>
           <button
-            className="flex h-10 w-full items-center justify-center rounded bg-gold px-4 text-xs font-black uppercase tracking-widest text-black transition-all hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex h-10 w-full items-center justify-center rounded bg-neon-pink px-4 text-xs font-black uppercase tracking-widest text-black transition-all hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
             type="submit"
             disabled={isBusy}
           >

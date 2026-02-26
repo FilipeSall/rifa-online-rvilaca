@@ -58,7 +58,7 @@ export default function AdminDashboardPage() {
   if (!isAuthReady || !isRoleReady || !isLoggedIn || userRole !== 'admin') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-luxury-bg">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-gold border-t-transparent" />
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-neon-pink border-t-transparent" />
       </div>
     )
   }

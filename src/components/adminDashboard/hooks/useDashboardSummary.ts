@@ -161,7 +161,7 @@ export function useDashboardSummary() {
 
     if (total <= 0) {
       return [
-        { stage: 'Pedidos pagos', value: 0, fill: '#f5a800' },
+        { stage: 'Pedidos pagos', value: 0, fill: '#ff00cc' },
         { stage: 'Numeros vendidos', value: 0, fill: '#22c55e' },
       ]
     }
@@ -170,7 +170,7 @@ export function useDashboardSummary() {
       {
         stage: 'Pedidos pagos',
         value: Number(((paidOrders / total) * 100).toFixed(1)),
-        fill: '#f5a800',
+        fill: '#ff00cc',
       },
       {
         stage: 'Numeros vendidos',

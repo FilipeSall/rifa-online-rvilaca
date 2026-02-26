@@ -10,8 +10,8 @@ export default function ConversionTooltip({ active, payload }: TooltipContentPro
   const value = Number(entry.value ?? 0)
 
   return (
-    <div className="rounded-xl border border-gold/35 bg-[rgba(20,20,20,0.96)] px-3 py-2">
-      <p className="text-[10px] uppercase tracking-[0.14em] text-gold">{stage}</p>
+    <div className="rounded-xl border border-neon-pink/35 bg-[rgba(20,20,20,0.96)] px-3 py-2">
+      <p className="text-[10px] uppercase tracking-[0.14em] text-neon-pink">{stage}</p>
       <p className="mt-1 text-lg font-bold text-white">{value}%</p>
     </div>
   )

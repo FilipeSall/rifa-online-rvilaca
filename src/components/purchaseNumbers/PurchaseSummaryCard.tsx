@@ -54,8 +54,8 @@ export default function PurchaseSummaryCard({
   const isAutomaticSelection = selectionMode === 'automatico'
 
   return (
-    <div className={`${isSticky ? 'sticky top-24 ' : ''}rounded-2xl border border-gold/25 bg-luxury-card p-6 shadow-2xl`}>
-      <p className="text-[10px] uppercase tracking-[0.22em] text-gold">3. Carrinho</p>
+    <div className={`${isSticky ? 'sticky top-24 ' : ''}rounded-2xl border border-neon-pink/25 bg-luxury-card p-6 shadow-2xl`}>
+      <p className="text-[10px] uppercase tracking-[0.22em] text-neon-pink">3. Carrinho</p>
       <h2 className="mt-3 text-xl font-bold text-white">Resumo da compra</h2>
 
       <div className="mt-5 space-y-3 text-sm">
@@ -84,14 +84,14 @@ export default function PurchaseSummaryCard({
         <div className="mt-2 flex gap-2 max-[419px]:flex-col">
           <input
             id="coupon-code"
-            className="h-10 flex-1 rounded border border-white/15 bg-luxury-card px-3 text-sm text-white outline-none focus:border-gold max-[419px]:w-full"
+            className="h-10 flex-1 rounded border border-white/15 bg-luxury-card px-3 text-sm text-white outline-none focus:border-neon-pink max-[419px]:w-full"
             type="text"
             placeholder="Ex: PIX10"
             value={couponCode}
             onChange={(event) => onCouponCodeChange(event.target.value)}
           />
           <button
-            className="h-10 rounded bg-gold px-4 text-xs font-black uppercase tracking-widest text-black hover:bg-gold-hover disabled:opacity-40 disabled:cursor-not-allowed max-[419px]:w-full"
+            className="h-10 rounded bg-neon-pink px-4 text-xs font-black uppercase tracking-widest text-black hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed max-[419px]:w-full"
             type="button"
             onClick={onApplyCoupon}
             disabled={!couponCode.trim() || selectedCount === 0}
@@ -109,7 +109,7 @@ export default function PurchaseSummaryCard({
       <div className="mt-5 rounded-lg border border-white/10 bg-black/20 p-4">
         <div className="flex items-center justify-between">
           <span className="text-xs uppercase tracking-[0.18em] text-gray-500">Valor total</span>
-          <span className="text-2xl font-black text-gold">{formatCurrency(totalAmount)}</span>
+          <span className="text-2xl font-black text-neon-pink">{formatCurrency(totalAmount)}</span>
         </div>
         <p className="mt-2 text-xs text-gray-400">
           Compra minima de {minQuantity} cotas. Numeros confirmados apos pagamento aprovado.
@@ -135,12 +135,12 @@ export default function PurchaseSummaryCard({
 
       <div className="mt-6 border-t border-white/10 pt-4">
         <div className="flex items-start justify-between gap-3">
-          <p className={`text-[10px] uppercase tracking-[0.18em] ${isAutomaticSelection ? 'text-gold md:text-gray-500' : 'text-gray-500'}`}>
+          <p className={`text-[10px] uppercase tracking-[0.18em] ${isAutomaticSelection ? 'text-neon-pink md:text-gray-500' : 'text-gray-500'}`}>
             Numeros selecionados
           </p>
           {isAutomaticSelection ? (
             <button
-              className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-gold transition-colors hover:text-gold-hover md:hidden"
+              className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-neon-pink transition-colors hover:text-primary-hover md:hidden"
               type="button"
               onClick={onSwitchToManual}
             >
@@ -152,7 +152,7 @@ export default function PurchaseSummaryCard({
           <p className="mt-2 text-[11px] leading-relaxed text-gray-300 md:hidden">
             Os numeros foram selecionados automaticamente. Prefere escolher manualmente?{' '}
             <button
-              className="font-semibold text-gold underline underline-offset-2 transition-colors hover:text-gold-hover"
+              className="font-semibold text-neon-pink underline underline-offset-2 transition-colors hover:text-primary-hover"
               type="button"
               onClick={onSwitchToManual}
             >

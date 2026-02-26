@@ -44,7 +44,7 @@ export function createCountdownItems(countdown: Countdown, labels: readonly stri
 
 export function getRankingPositionClass(position: number): string {
   if (position === 1) {
-    return 'bg-gold text-black'
+    return 'bg-neon-pink text-black'
   }
 
   if (position === 2) {

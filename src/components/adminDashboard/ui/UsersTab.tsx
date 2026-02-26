@@ -102,7 +102,7 @@ export default function UsersTab() {
       <section className="rounded-2xl border border-white/10 bg-luxury-card p-5 md:p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold">Gestão de usuários</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon-pink">Gestão de usuários</p>
             <h2 className="mt-2 font-luxury text-3xl font-bold text-white">Usuários</h2>
             <p className="mt-2 max-w-2xl text-sm text-gray-400">
               Busca otimizada por prefixo em campos indexados (email, CPF, número e nome) com limite controlado para reduzir leituras.
@@ -110,12 +110,12 @@ export default function UsersTab() {
           </div>
         </div>
 
-        <div className="mt-5 rounded-xl border border-gold/30 bg-black/25 p-4">
-          <label htmlFor="admin-users-search" className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/90">
+        <div className="mt-5 rounded-xl border border-neon-pink/30 bg-black/25 p-4">
+          <label htmlFor="admin-users-search" className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon-pink/90">
             Buscar por email, cpf, número ou nome
           </label>
           <div className="mt-2 flex items-center gap-2 rounded-lg border border-white/10 bg-luxury-bg px-3">
-            <span className="material-symbols-outlined text-base text-gold/90">search</span>
+            <span className="material-symbols-outlined text-base text-neon-pink/90">search</span>
             <input
               id="admin-users-search"
               className="h-11 w-full bg-transparent text-sm text-white outline-none placeholder:text-gray-500"
@@ -127,7 +127,7 @@ export default function UsersTab() {
               spellCheck={false}
             />
             {isSearching ? (
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-gold border-t-transparent" />
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-neon-pink border-t-transparent" />
             ) : null}
           </div>
           <p className="mt-2 text-xs text-gray-500">
@@ -161,7 +161,7 @@ export default function UsersTab() {
             {results.map((user) => (
               <button
                 key={user.uid}
-                className="group w-full rounded-xl border border-white/10 bg-black/20 p-4 text-left transition-all hover:border-gold/30 hover:bg-black/35"
+                className="group w-full rounded-xl border border-white/10 bg-black/20 p-4 text-left transition-all hover:border-neon-pink/30 hover:bg-black/35"
                 type="button"
                 onClick={() => void openUserDetails(user.uid)}
               >
@@ -173,7 +173,7 @@ export default function UsersTab() {
                     <div className="min-w-0">
                       <p className="truncate text-base font-bold text-white">{user.name}</p>
                       <p className="truncate text-xs text-gray-400">{user.email || 'Sem email'}</p>
-                      <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-gold/80">
+                      <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-neon-pink/80">
                         Match: {user.matchedFields.join(', ') || '-'}
                       </p>
                     </div>
@@ -209,7 +209,7 @@ export default function UsersTab() {
           >
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-gold">Detalhes do usuário</p>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-neon-pink">Detalhes do usuário</p>
                 <h3 className="mt-1 font-luxury text-2xl font-bold text-white">Painel de perfil</h3>
               </div>
               <button
@@ -225,7 +225,7 @@ export default function UsersTab() {
             <div className="max-h-[calc(92vh-78px)] overflow-y-auto px-5 py-5">
               {isLoadingDetails ? (
                 <div className="flex min-h-[240px] items-center justify-center">
-                  <div className="h-9 w-9 animate-spin rounded-full border-4 border-gold border-t-transparent" />
+                  <div className="h-9 w-9 animate-spin rounded-full border-4 border-neon-pink border-t-transparent" />
                 </div>
               ) : null}
 
@@ -240,7 +240,7 @@ export default function UsersTab() {
                   <section className="grid grid-cols-1 gap-3 lg:grid-cols-12">
                     <article className="rounded-xl border border-white/10 bg-luxury-card p-4 lg:col-span-4">
                       <div className="flex items-center gap-3">
-                        <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gold/35 bg-black/35">
+                        <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-neon-pink/35 bg-black/35">
                           <AvatarImage
                             photoURL={details.user.photoURL}
                             alt={details.user.name}
@@ -261,7 +261,7 @@ export default function UsersTab() {
                     </article>
 
                     <article className="rounded-xl border border-white/10 bg-luxury-card p-4 lg:col-span-4">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-gold">Papel e permissões</p>
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-neon-pink">Papel e permissões</p>
                       <div className="mt-3 flex flex-col gap-2">
                         <label className="text-xs text-gray-400" htmlFor="admin-user-role-select">
                           Role atual
@@ -278,7 +278,7 @@ export default function UsersTab() {
                           className="mt-0"
                         />
                         <button
-                          className="mt-2 h-10 rounded-lg bg-gold px-4 text-xs font-black uppercase tracking-[0.15em] text-black hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-60"
+                          className="mt-2 h-10 rounded-lg bg-neon-pink px-4 text-xs font-black uppercase tracking-[0.15em] text-black hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
                           type="button"
                           onClick={() => void saveRole()}
                           disabled={isSavingRole || roleValue === details.user.role}
@@ -299,7 +299,7 @@ export default function UsersTab() {
                       </div>
                       <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                         <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Números comprados</p>
-                        <p className="mt-1 text-xl font-black text-gold">{formatInteger(details.stats.totalPurchasedNumbers)}</p>
+                        <p className="mt-1 text-xl font-black text-neon-pink">{formatInteger(details.stats.totalPurchasedNumbers)}</p>
                       </div>
                       <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                         <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Prêmios</p>
@@ -310,7 +310,7 @@ export default function UsersTab() {
 
                   <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
                     <article className="rounded-xl border border-white/10 bg-luxury-card p-4 xl:col-span-6">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-gold">Pedidos realizados</p>
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-neon-pink">Pedidos realizados</p>
                       <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
                         {details.orders.length === 0 ? (
                           <p className="text-sm text-gray-500">Nenhum pedido encontrado.</p>
@@ -334,7 +334,7 @@ export default function UsersTab() {
                     </article>
 
                     <article className="rounded-xl border border-white/10 bg-luxury-card p-4 xl:col-span-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-gold">Números comprados</p>
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-neon-pink">Números comprados</p>
                       <div className="mt-3 max-h-72 overflow-y-auto pr-1">
                         {details.purchasedNumbers.length === 0 ? (
                           <p className="text-sm text-gray-500">Nenhum número pago.</p>
@@ -347,13 +347,13 @@ export default function UsersTab() {
                     </article>
 
                     <article className="rounded-xl border border-white/10 bg-luxury-card p-4 xl:col-span-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-gold">Prêmios ganhos</p>
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-neon-pink">Prêmios ganhos</p>
                       <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
                         {details.wins.length === 0 ? (
                           <p className="text-sm text-gray-500">Nenhuma premiação encontrada.</p>
                         ) : details.wins.map((win) => (
                           <div key={`${win.drawType}-${win.drawId}`} className="rounded-lg border border-white/10 bg-black/20 p-3">
-                            <p className="text-xs uppercase tracking-[0.14em] text-gold/85">
+                            <p className="text-xs uppercase tracking-[0.14em] text-neon-pink/85">
                               {win.drawType === 'main_raffle' ? 'Sorteio principal' : 'Top compradores'}
                             </p>
                             <p className="mt-1 text-sm font-bold text-white">{win.drawPrize}</p>

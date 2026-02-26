@@ -67,7 +67,7 @@ export default function EditProfileModal({
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="h-7 w-7 animate-spin rounded-full border-4 border-gold border-t-transparent" />
+            <div className="h-7 w-7 animate-spin rounded-full border-4 border-neon-pink border-t-transparent" />
           </div>
         ) : (
           <form onSubmit={handleSave} className="flex flex-col gap-5 p-6">
@@ -80,7 +80,7 @@ export default function EditProfileModal({
                 type="text"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                className="rounded-lg border border-luxury-border bg-luxury-bg px-4 py-3 text-sm text-white placeholder:text-text-muted focus:border-gold/50 focus:outline-none focus:ring-1 focus:ring-gold/30"
+                className="rounded-lg border border-luxury-border bg-luxury-bg px-4 py-3 text-sm text-white placeholder:text-text-muted focus:border-neon-pink/50 focus:outline-none focus:ring-1 focus:ring-neon-pink/30"
                 placeholder="Seu nome"
                 autoComplete="name"
               />
@@ -95,7 +95,7 @@ export default function EditProfileModal({
                 type="tel"
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}
-                className="rounded-lg border border-luxury-border bg-luxury-bg px-4 py-3 text-sm text-white placeholder:text-text-muted focus:border-gold/50 focus:outline-none focus:ring-1 focus:ring-gold/30"
+                className="rounded-lg border border-luxury-border bg-luxury-bg px-4 py-3 text-sm text-white placeholder:text-text-muted focus:border-neon-pink/50 focus:outline-none focus:ring-1 focus:ring-neon-pink/30"
                 placeholder="(11) 99999-9999"
                 autoComplete="tel"
               />
@@ -115,7 +115,7 @@ export default function EditProfileModal({
                 type="text"
                 value={formatCpfInput(cpf)}
                 onChange={(event) => setCpf(event.target.value.replace(/\D/g, '').slice(0, 11))}
-                className="rounded-lg border border-luxury-border bg-luxury-bg px-4 py-3 text-sm text-white placeholder:text-text-muted focus:border-gold/50 focus:outline-none focus:ring-1 focus:ring-gold/30 disabled:cursor-not-allowed disabled:opacity-70"
+                className="rounded-lg border border-luxury-border bg-luxury-bg px-4 py-3 text-sm text-white placeholder:text-text-muted focus:border-neon-pink/50 focus:outline-none focus:ring-1 focus:ring-neon-pink/30 disabled:cursor-not-allowed disabled:opacity-70"
                 placeholder="000.000.000-00"
                 inputMode="numeric"
                 disabled={hasCpf}
@@ -158,7 +158,7 @@ export default function EditProfileModal({
               <button
                 type="submit"
                 disabled={isSaving}
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-gold px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-gold-hover disabled:opacity-60"
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-neon-pink px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-primary-hover disabled:opacity-60"
               >
                 {isSaving ? (
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-black border-t-transparent" />

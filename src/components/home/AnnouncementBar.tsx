@@ -21,7 +21,7 @@ export default function AnnouncementBar() {
       : ANNOUNCEMENT_MARKETING_TEXT
 
   return (
-    <div className="bg-luxury-card border-b border-white/5 text-center py-2 px-4 text-xs font-medium tracking-widest text-gold uppercase hidden md:block">
+    <div className="bg-luxury-card border-b border-white/5 text-center py-2 px-4 text-xs font-medium tracking-widest text-neon-pink uppercase hidden md:block">
       {announcementText}
     </div>
   )

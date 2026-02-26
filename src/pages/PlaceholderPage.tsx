@@ -11,7 +11,7 @@ export default function PlaceholderPage({ title, description }: PlaceholderPageP
       <section className="space-y-3 text-center">
         <h1 className="text-3xl font-bold text-white">{title}</h1>
         {description ? <p className="text-gray-400">{description}</p> : null}
-        <Link className="text-sm font-semibold text-gold underline" to="/">
+        <Link className="text-sm font-semibold text-neon-pink underline" to="/">
           Voltar para home
         </Link>
       </section>

@@ -7,7 +7,7 @@ export default function StatsCards({ paidCount, nextDrawDateLabel }: StatsCardsP
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <div className="flex items-center gap-4 rounded-xl border border-luxury-border bg-luxury-card p-4">
-        <div className="rounded-lg bg-gold/10 p-2.5 text-gold">
+        <div className="rounded-lg bg-neon-pink/10 p-2.5 text-neon-pink">
           <span className="material-symbols-outlined">confirmation_number</span>
         </div>
         <div>
