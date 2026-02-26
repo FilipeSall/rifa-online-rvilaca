@@ -20,8 +20,8 @@ export default function WinnersModal({
   onClose,
   onRetry,
 }: WinnersModalProps) {
-  const overlayRef = useRef<HTMLDivElement | null>(null)
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!isOpen) {
