@@ -1,5 +1,5 @@
 import { signOut } from 'firebase/auth'
-import { collection, doc, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore'
+import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -243,7 +243,6 @@ export function useUserDashboard() {
       collection(db, 'orders'),
       where('userId', '==', user.uid),
       orderBy('createdAt', 'desc'),
-      limit(120),
     )
 
     const unsubscribe = onSnapshot(

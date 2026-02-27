@@ -56,12 +56,6 @@ service cloud.firestore {
       return isValidUserProfileBase() && roleKeptUnchanged;
     }
 
-    function hasSafeListLimit(maxLimit) {
-      return request.query.limit != null
-        && request.query.limit > 0
-        && request.query.limit <= maxLimit;
-    }
-
     // Dados públicos de campanha usados pela landing page.
     match /campaigns/{campaignId} {
       allow get: if true;
@@ -121,8 +115,7 @@ service cloud.firestore {
     match /orders/{orderId} {
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow list: if isSignedIn()
-        && resource.data.userId == request.auth.uid
-        && hasSafeListLimit(120);
+        && resource.data.userId == request.auth.uid;
       allow write: if false;
     }
 
