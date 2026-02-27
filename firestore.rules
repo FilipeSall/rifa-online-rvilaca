@@ -123,10 +123,6 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    match /auditLogs/{logId} {
-      allow read, write: if false;
-    }
-
     // Negar tudo que não foi explicitamente permitido acima.
     match /{document=**} {
       allow read, write: if false;

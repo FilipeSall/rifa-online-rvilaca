@@ -206,22 +206,6 @@ async function run() {
     { merge: true },
   )
 
-  batch.set(
-    db.doc('auditLogs/bootstrap_campaign_seed'),
-    {
-      type: 'bootstrap_seed',
-      entity: 'campaign',
-      entityId: campaignId,
-      actor: 'seed-script',
-      createdAt: FieldValue.serverTimestamp(),
-      details: {
-        totalCotas: TOTAL_COTAS,
-        soldCotas: SOLD_COTAS,
-      },
-    },
-    { merge: true },
-  )
-
   if (createExamples) {
     const exampleUid = 'example-user'
     const exampleOrderId = 'example-order'

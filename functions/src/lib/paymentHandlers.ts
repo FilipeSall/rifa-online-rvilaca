@@ -504,7 +504,6 @@ async function runPaidDepositBusinessLogic(
   const metricsSummaryRef = db.collection('metrics').doc('sales_summary')
   const dateKey = getBrazilDateKey()
   const dailyMetricsRef = db.collection('salesMetricsDaily').doc(dateKey)
-  const paymentAuditLogRef = db.collection('auditLogs').doc(`payment_paid_${order.externalId}`)
   const reservationRef = order.userId ? db.collection('numberReservations').doc(order.userId) : null
   const normalizedAmount = sanitizeOptionalAmount(order.amount)
   const soldNumbers = order.reservedNumbers.length
@@ -577,19 +576,6 @@ async function runPaidDepositBusinessLogic(
         )
       }
 
-      transaction.set(
-        paymentAuditLogRef,
-        {
-          type: 'payment_paid',
-          externalId: order.externalId,
-          userId: order.userId,
-          amount: normalizedAmount,
-          soldNumbers,
-          source: 'horsepay_webhook',
-          createdAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      )
     }
 
     if (!order.userId || order.reservedNumbers.length === 0) {
