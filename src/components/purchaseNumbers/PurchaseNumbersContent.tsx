@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { OPEN_PURCHASE_CART_EVENT } from '../../const/purchaseNumbers'
 import type { usePurchaseNumbers } from '../../hooks/usePurchaseNumbers'
 import { useAuthStore } from '../../stores/authStore'
 import MobileAuthCard from './MobileAuthCard'
@@ -11,6 +13,8 @@ type PurchaseNumbersContentProps = {
 }
 
 export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumbersContentProps) {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false)
   const [mobileModalView, setMobileModalView] = useState<'cart' | 'auth'>('cart')
   const [shouldProceedAfterMobileAuth, setShouldProceedAfterMobileAuth] = useState(false)
@@ -70,6 +74,10 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     setMobileModalView('cart')
     setShouldProceedAfterMobileAuth(false)
   }, [])
+  const openCartOverlay = useCallback(() => {
+    setMobileModalView('cart')
+    setIsMobileCartOpen(true)
+  }, [])
 
   const isSmallViewport = () => {
     if (typeof window === 'undefined') {
@@ -98,6 +106,57 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
       window.removeEventListener('keydown', handleEscape)
     }
   }, [closeMobileOverlay, isMobileCartOpen])
+
+  useEffect(() => {
+    const handleOpenCart = () => {
+      openCartOverlay()
+    }
+
+    window.addEventListener(OPEN_PURCHASE_CART_EVENT, handleOpenCart)
+    return () => {
+      window.removeEventListener(OPEN_PURCHASE_CART_EVENT, handleOpenCart)
+    }
+  }, [openCartOverlay])
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search)
+    if (searchParams.get('openCart') !== '1') {
+      return
+    }
+
+    openCartOverlay()
+    searchParams.delete('openCart')
+
+    const nextSearch = searchParams.toString()
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch ? `?${nextSearch}` : '',
+      },
+      { replace: true },
+    )
+  }, [location.pathname, location.search, navigate, openCartOverlay])
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search)
+    if (searchParams.get('mode') !== 'manual') {
+      return
+    }
+
+    if (selectionMode !== 'manual') {
+      setSelectionMode('manual')
+    }
+
+    searchParams.delete('mode')
+    const nextSearch = searchParams.toString()
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch ? `?${nextSearch}` : '',
+      },
+      { replace: true },
+    )
+  }, [location.pathname, location.search, navigate, selectionMode, setSelectionMode])
 
   useEffect(() => {
     if (!isMobileCartOpen || mobileModalView !== 'auth' || !shouldProceedAfterMobileAuth || !isLoggedIn) {
@@ -214,32 +273,15 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
         </div>
       </section>
 
-      <button
-        aria-label="Abrir carrinho"
-        className="fixed bottom-4 right-4 z-[72] flex h-16 w-16 items-center justify-center rounded-full border border-neon-pink/70 bg-[radial-gradient(circle_at_35%_30%,#ff66e8,#ff00cc_56%,#d600ab_100%)] text-black shadow-[0_14px_35px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-neon-pink/75 xl:hidden"
-        type="button"
-        onClick={() => {
-          setMobileModalView('cart')
-          setIsMobileCartOpen(true)
-        }}
-      >
-        <span className="material-symbols-outlined text-[31px]">shopping_cart</span>
-        {selectedCount > 0 ? (
-          <span className="pointer-events-none absolute -right-0.5 -top-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-red-200/70 bg-red-500 px-1 text-[11px] font-black leading-none text-white shadow-[0_6px_12px_rgba(0,0,0,0.35)]">
-            !
-          </span>
-        ) : null}
-      </button>
-
       {isMobileCartOpen ? (
         <div
           aria-modal="true"
-          className="fixed inset-0 z-[95] flex items-end bg-black/75 p-3 xl:hidden"
+          className="fixed inset-0 z-[95] flex items-end bg-black/75 p-3 sm:items-center sm:justify-center sm:p-6"
           role="dialog"
           onClick={closeMobileOverlay}
         >
           <div
-            className="relative w-full max-h-[92vh] overflow-y-auto rounded-2xl border border-white/15 bg-luxury-bg p-1 shadow-2xl"
+            className="relative w-full max-h-[92vh] overflow-y-auto rounded-2xl border border-white/15 bg-luxury-bg p-1 shadow-2xl sm:max-w-xl"
             onClick={(event) => event.stopPropagation()}
           >
             {mobileModalView !== 'auth' ? (

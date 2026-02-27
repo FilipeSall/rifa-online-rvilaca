@@ -1,4 +1,5 @@
 import {
+  CAMPAIGN_PACK_QUANTITIES,
   DEFAULT_ADDITIONAL_PRIZES,
   DEFAULT_BONUS_PRIZE,
   DEFAULT_MIN_PURCHASE_QUANTITY,
@@ -7,13 +8,16 @@ import {
   DEFAULT_SECOND_PRIZE,
   DEFAULT_SUPPORT_WHATSAPP_NUMBER,
   DEFAULT_TOTAL_NUMBERS,
+  buildDefaultCampaignPackPrices,
 } from '../../../const/campaign'
 import { MAX_QUANTITY } from '../../../const/purchaseNumbers'
 import type {
+  CampaignFeaturedPromotion,
   CampaignFeaturedVideoMedia,
   CampaignCoupon,
   CampaignHeroCarouselMedia,
   CampaignMidias,
+  CampaignPackPrice,
   UpsertCampaignSettingsInput,
 } from '../../../types/campaign'
 import { parseCampaignDateTime, resolveCampaignScheduleStatus } from '../../../utils/campaignSchedule'
@@ -33,6 +37,8 @@ export type CampaignFormState = {
   startsAtTime: string
   endsAt: string
   endsAtTime: string
+  packPrices: CampaignPackPrice[]
+  featuredPromotion: CampaignFeaturedPromotion | null
   coupons: CampaignCoupon[]
   midias: CampaignMidias
 }
@@ -127,6 +133,77 @@ function sanitizeCampaignMidias(value: unknown): CampaignMidias {
   }
 }
 
+function sanitizePackPrices(value: unknown, unitPrice: number): CampaignPackPrice[] {
+  const items = Array.isArray(value)
+    ? value
+    : []
+  const byQuantity = new Map<number, CampaignPackPrice>()
+
+  for (const rawItem of items) {
+    if (!rawItem || typeof rawItem !== 'object') {
+      continue
+    }
+
+    const item = rawItem as Partial<CampaignPackPrice>
+    const quantity = Number(item.quantity)
+    if (!Number.isInteger(quantity) || !CAMPAIGN_PACK_QUANTITIES.includes(quantity as (typeof CAMPAIGN_PACK_QUANTITIES)[number])) {
+      continue
+    }
+
+    const price = Number(item.price)
+    if (!Number.isFinite(price) || price <= 0) {
+      continue
+    }
+
+    byQuantity.set(quantity, {
+      quantity,
+      price: Number(price.toFixed(2)),
+      active: item.active !== false,
+    })
+  }
+
+  return CAMPAIGN_PACK_QUANTITIES.map((quantity) => (
+    byQuantity.get(quantity) || {
+      quantity,
+      price: Number((quantity * unitPrice).toFixed(2)),
+      active: true,
+    }
+  ))
+}
+
+function sanitizeFeaturedPromotion(value: unknown): CampaignFeaturedPromotion | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const payload = value as Partial<CampaignFeaturedPromotion>
+  const targetQuantity = Number(payload.targetQuantity)
+  if (!Number.isInteger(targetQuantity) || !CAMPAIGN_PACK_QUANTITIES.includes(targetQuantity as (typeof CAMPAIGN_PACK_QUANTITIES)[number])) {
+    return null
+  }
+
+  const discountType = payload.discountType === 'fixed' ? 'fixed' : 'percent'
+  const rawValue = Number(payload.discountValue)
+  if (!Number.isFinite(rawValue) || rawValue <= 0) {
+    return null
+  }
+
+  const discountValue = discountType === 'percent'
+    ? Number(Math.min(rawValue, 100).toFixed(2))
+    : Number(rawValue.toFixed(2))
+  if (discountValue <= 0) {
+    return null
+  }
+
+  return {
+    active: payload.active === true,
+    targetQuantity,
+    discountType,
+    discountValue,
+    label: `${payload.label ?? ''}`.trim().slice(0, 80),
+  }
+}
+
 export function buildCampaignSettingsInput(formState: CampaignFormState): CampaignValidationResult {
   const normalizedTitle = formState.title.trim() || DEFAULT_CAMPAIGN_TITLE
   const normalizedMainPrize = formState.mainPrize.trim() || DEFAULT_MAIN_PRIZE
@@ -185,6 +262,11 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
     endsAt: formState.endsAt.trim() || null,
     endsAtTime: normalizedEndsAtTime || null,
   })
+  const normalizedPackPrices = sanitizePackPrices(
+    formState.packPrices,
+    Number(normalizedPrice.toFixed(2)),
+  )
+  const normalizedFeaturedPromotion = sanitizeFeaturedPromotion(formState.featuredPromotion)
 
   return {
     errorToastId: null,
@@ -205,6 +287,10 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
       startsAtTime: normalizedStartsAtTime,
       endsAt: formState.endsAt.trim() ? formState.endsAt : null,
       endsAtTime: normalizedEndsAtTime,
+      packPrices: normalizedPackPrices.length > 0
+        ? normalizedPackPrices
+        : buildDefaultCampaignPackPrices(Number(normalizedPrice.toFixed(2))),
+      featuredPromotion: normalizedFeaturedPromotion,
       coupons: formState.coupons,
       midias: sanitizeCampaignMidias(formState.midias),
     },

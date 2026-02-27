@@ -3,6 +3,7 @@ import { Route, Routes, useLocation } from 'react-router-dom'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import FeaturedVideoFloatingButton from './components/home/FeaturedVideoFloatingButton'
+import FloatingCartQuickPanel from './components/purchaseNumbers/FloatingCartQuickPanel'
 import WinnersFloatingButton from './components/winnersNotification/WinnersFloatingButton'
 import WinnersModal from './components/winnersNotification/WinnersModal'
 import { PLACEHOLDER_ROUTES } from './const/app'
@@ -12,6 +13,7 @@ import CheckoutPage from './pages/CheckoutPage'
 import HomePage from './pages/HomePage'
 import PlaceholderPage from './pages/PlaceholderPage'
 import PrizesPage from './pages/PrizesPage'
+import PurchaseNumbersPage from './pages/PurchaseNumbersPage'
 import RegulationPage from './pages/RegulationPage'
 import ResultsPage from './pages/ResultsPage'
 import UserDashboardPage from './pages/UserDashboardPage'
@@ -28,6 +30,7 @@ export default function App() {
   const { pathname } = useLocation()
   const isDashboardOrAccountRoute = pathname.startsWith('/dashboard') || pathname.startsWith('/minha-conta')
   const shouldRenderFeaturedVideoFloatingButton = !isDashboardOrAccountRoute
+  const shouldRenderFloatingCartQuickPanel = pathname === '/' || pathname === '/comprar'
   const shouldRenderWinnersNotifications = pathname === '/'
   const winnersNotification = useWinnersNotification(shouldRenderWinnersNotifications)
 
@@ -45,6 +48,7 @@ export default function App() {
       />
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/comprar" element={<PurchaseNumbersPage />} />
         <Route path="/minha-conta" element={<UserDashboardPage />} />
         <Route path="/dashboard" element={<AdminDashboardPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
@@ -63,6 +67,7 @@ export default function App() {
       />
       {shouldRenderFeaturedVideoFloatingButton ? (
         <FeaturedVideoFloatingButton
+          middleSlot={shouldRenderFloatingCartQuickPanel ? <FloatingCartQuickPanel /> : null}
           topSlot={winnersNotification.isFabVisible
             ? <WinnersFloatingButton onClick={winnersNotification.openModal} />
             : null}

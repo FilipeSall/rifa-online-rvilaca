@@ -9,6 +9,20 @@ export type CampaignCoupon = {
   createdAt: string
 }
 
+export type CampaignPackPrice = {
+  quantity: number
+  price: number
+  active: boolean
+}
+
+export type CampaignFeaturedPromotion = {
+  active: boolean
+  targetQuantity: number
+  discountType: CampaignCouponDiscountType
+  discountValue: number
+  label: string
+}
+
 export type CampaignHeroCarouselMedia = {
   id: string
   url: string
@@ -49,6 +63,8 @@ export type CampaignSettings = {
   startsAtTime: string | null
   endsAt: string | null
   endsAtTime: string | null
+  packPrices: CampaignPackPrice[]
+  featuredPromotion: CampaignFeaturedPromotion | null
   coupons: CampaignCoupon[]
   midias: CampaignMidias
 }
@@ -69,6 +85,8 @@ export type UpsertCampaignSettingsInput = {
   startsAtTime?: string | null
   endsAt?: string | null
   endsAtTime?: string | null
+  packPrices?: CampaignPackPrice[]
+  featuredPromotion?: CampaignFeaturedPromotion | null
   coupons?: CampaignCoupon[]
   midias?: CampaignMidias
 }
@@ -90,6 +108,8 @@ export type UpsertCampaignSettingsOutput = {
   startsAtTime: string | null
   endsAt: string | null
   endsAtTime: string | null
+  packPrices: CampaignPackPrice[]
+  featuredPromotion: CampaignFeaturedPromotion | null
   coupons: CampaignCoupon[]
   midias: CampaignMidias
 }

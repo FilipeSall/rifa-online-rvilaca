@@ -10,9 +10,15 @@ import {
   DEFAULT_SUPPORT_WHATSAPP_NUMBER,
   DEFAULT_TICKET_PRICE,
   DEFAULT_TOTAL_NUMBERS,
+  buildDefaultCampaignPackPrices,
 } from '../../../const/campaign'
 import { useCampaignSettings } from '../../../hooks/useCampaignSettings'
-import type { CampaignCoupon, CampaignMidias } from '../../../types/campaign'
+import type {
+  CampaignCoupon,
+  CampaignFeaturedPromotion,
+  CampaignMidias,
+  CampaignPackPrice,
+} from '../../../types/campaign'
 import { buildCampaignSettingsInput } from '../services/campaignSettingsFormService'
 
 export function useCampaignForm() {
@@ -38,6 +44,8 @@ export function useCampaignForm() {
   const [startsAtTime, setStartsAtTime] = useState('')
   const [endsAt, setEndsAt] = useState('')
   const [endsAtTime, setEndsAtTime] = useState('')
+  const [packPrices, setPackPrices] = useState<CampaignPackPrice[]>(buildDefaultCampaignPackPrices(DEFAULT_TICKET_PRICE))
+  const [featuredPromotion, setFeaturedPromotion] = useState<CampaignFeaturedPromotion | null>(null)
   const [coupons, setCoupons] = useState<CampaignCoupon[]>([])
   const [midias, setMidias] = useState<CampaignMidias>({ heroCarousel: [], featuredVideo: null })
   const hasEnsuredCampaignRef = useRef(false)
@@ -57,6 +65,8 @@ export function useCampaignForm() {
     setStartsAtTime(campaign.startsAtTime ?? '')
     setEndsAt(campaign.endsAt ?? '')
     setEndsAtTime(campaign.endsAtTime ?? '')
+    setPackPrices(campaign.packPrices)
+    setFeaturedPromotion(campaign.featuredPromotion)
     setCoupons(campaign.coupons)
     setMidias(campaign.midias)
   }, [
@@ -75,6 +85,8 @@ export function useCampaignForm() {
     campaign.startsAtTime,
     campaign.endsAt,
     campaign.endsAtTime,
+    campaign.packPrices,
+    campaign.featuredPromotion,
     campaign.title,
   ])
 
@@ -107,6 +119,8 @@ export function useCampaignForm() {
       startsAtTime,
       endsAt,
       endsAtTime,
+      packPrices,
+      featuredPromotion,
       coupons,
       midias,
     })
@@ -145,6 +159,8 @@ export function useCampaignForm() {
     startsAtTime,
     title,
     endsAtTime,
+    packPrices,
+    featuredPromotion,
     midias,
   ])
 
@@ -165,6 +181,8 @@ export function useCampaignForm() {
         startsAtTime,
         endsAt,
         endsAtTime,
+        packPrices,
+        featuredPromotion,
         coupons: nextCoupons,
         midias,
       })
@@ -205,6 +223,8 @@ export function useCampaignForm() {
       startsAtTime,
       title,
       endsAtTime,
+      packPrices,
+      featuredPromotion,
       midias,
     ],
   )
@@ -226,6 +246,8 @@ export function useCampaignForm() {
         startsAtTime,
         endsAt,
         endsAtTime,
+        packPrices,
+        featuredPromotion,
         coupons,
         midias: nextMidias,
       })
@@ -267,6 +289,8 @@ export function useCampaignForm() {
       startsAtTime,
       title,
       endsAtTime,
+      packPrices,
+      featuredPromotion,
     ],
   )
 
@@ -288,6 +312,8 @@ export function useCampaignForm() {
     startsAtTime,
     endsAt,
     endsAtTime,
+    packPrices,
+    featuredPromotion,
     coupons,
     midias,
     setTitle,
@@ -304,6 +330,8 @@ export function useCampaignForm() {
     setStartsAtTime,
     setEndsAt,
     setEndsAtTime,
+    setPackPrices,
+    setFeaturedPromotion,
     setCoupons,
     setMidias,
     handleSaveCampaignSettings,

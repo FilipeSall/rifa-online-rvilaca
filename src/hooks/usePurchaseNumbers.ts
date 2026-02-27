@@ -19,7 +19,9 @@ import {
   validateCouponCode,
 } from '../services/purchaseNumbers/purchaseNumbersService'
 import { useAuthStore } from '../stores/authStore'
+import { usePurchaseSummaryStore } from '../stores/purchaseSummaryStore'
 import type { CouponFeedback, NumberSlot, SelectionMode } from '../types/purchaseNumbers'
+import { calculateCampaignPricing } from '../utils/campaignPricing'
 import { getSafeQuantity } from '../utils/purchaseNumbers'
 import { formatTicketNumber } from '../utils/ticketNumber'
 
@@ -207,6 +209,7 @@ function pickRandomUniqueNumbersFromRange(
 export function usePurchaseNumbers() {
   const navigate = useNavigate()
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
+  const setPurchaseSummary = usePurchaseSummaryStore((state) => state.setSummary)
   const { campaign } = useCampaignSettings()
 
   const totalNumbers =
@@ -232,6 +235,7 @@ export function usePurchaseNumbers() {
   const [isReserving, setIsReserving] = useState(false)
   const [isAutoSelecting, setIsAutoSelecting] = useState(false)
   const [isManualAdding, setIsManualAdding] = useState(false)
+  const [isQuickCheckoutPending, setIsQuickCheckoutPending] = useState(false)
   const [shouldHighlightSelectedNumbers, setShouldHighlightSelectedNumbers] = useState(false)
   const [shouldHighlightAutoButton, setShouldHighlightAutoButton] = useState(false)
   const [conflictResolution, setConflictResolution] = useState<ConflictResolutionState | null>(null)
@@ -239,6 +243,7 @@ export function usePurchaseNumbers() {
   const selectedNumbersRef = useRef<number[]>(selectedNumbers)
   selectedNumbersRef.current = selectedNumbers
   const lastReserveAttemptRef = useRef<{ fingerprint: string; atMs: number } | null>(null)
+  const hasPromptedAuthForQuickCheckoutRef = useRef(false)
 
   const callables = useMemo(
     () => ({
@@ -309,14 +314,42 @@ export function usePurchaseNumbers() {
   const unitPrice = Number.isFinite(campaign.pricePerCota) && campaign.pricePerCota > 0
     ? campaign.pricePerCota
     : DEFAULT_TICKET_PRICE
-  const subtotal = selectedCount * unitPrice
-  const discountAmount = calculateCouponDiscount(
-    subtotal,
+  const pricingWithoutCoupon = useMemo(
+    () => calculateCampaignPricing(selectedCount, campaign, null),
+    [campaign, selectedCount],
+  )
+  const subtotal = pricingWithoutCoupon.subtotalBase
+  const promotionDiscountAmount = pricingWithoutCoupon.promotionDiscount
+  const subtotalAfterPromotion = pricingWithoutCoupon.subtotalAfterPromotion
+  const couponDiscountAmount = calculateCouponDiscount(
+    subtotalAfterPromotion,
     appliedCouponDiscountType,
     appliedCouponDiscountValue,
   )
-  const totalAmount = Math.max(subtotal - discountAmount, 0)
+  const discountAmount = couponDiscountAmount
+  const totalAmount = Math.max(subtotalAfterPromotion - couponDiscountAmount, 0)
   const canProceed = selectedCount >= minPurchaseQuantity && !isReserving && !isAutoSelecting
+
+  useEffect(() => {
+    setPurchaseSummary({
+      quantity,
+      selectedCount,
+      selectedNumbers,
+      couponCode: appliedCoupon,
+      totalAmount,
+      subtotalAmount: subtotal,
+      promotionDiscountAmount,
+    })
+  }, [
+    appliedCoupon,
+    promotionDiscountAmount,
+    quantity,
+    selectedCount,
+    selectedNumbers,
+    setPurchaseSummary,
+    subtotal,
+    totalAmount,
+  ])
 
   useEffect(() => {
     setQuantity((current) => getSafeQuantity(current, maxSelectable, minPurchaseQuantity))
@@ -602,7 +635,7 @@ export function usePurchaseNumbers() {
   )
 
   const handleApplyCoupon = useCallback(() => {
-    const validation = validateCouponCode(couponCode, campaign.coupons, subtotal)
+    const validation = validateCouponCode(couponCode, campaign.coupons, subtotalAfterPromotion)
 
     setCouponFeedback({
       message: validation.message,
@@ -619,7 +652,7 @@ export function usePurchaseNumbers() {
     setAppliedCoupon(validation.code)
     setAppliedCouponDiscountType(validation.discountType)
     setAppliedCouponDiscountValue(validation.discountValue)
-  }, [campaign.coupons, couponCode, subtotal])
+  }, [campaign.coupons, couponCode, subtotalAfterPromotion])
 
   const handleProceed = useCallback(async () => {
     if (!canProceed) {
@@ -683,6 +716,7 @@ export function usePurchaseNumbers() {
           quantity: payload.numbers.length,
           selectedNumbers: payload.numbers,
           couponCode: appliedCoupon || undefined,
+          isAutomaticSelection: selectionMode === 'automatico',
         },
       })
     } catch (error) {
@@ -721,9 +755,47 @@ export function usePurchaseNumbers() {
     quantity,
     rangeEnd,
     rangeStart,
+    selectionMode,
     selectedNumbers,
     totalAmount,
   ])
+
+  const handleQuickCheckout = useCallback(() => {
+    if (selectionMode !== 'automatico') {
+      setSelectionMode('automatico')
+    }
+
+    setIsQuickCheckoutPending(true)
+  }, [selectionMode])
+
+  useEffect(() => {
+    if (!isQuickCheckoutPending) {
+      hasPromptedAuthForQuickCheckoutRef.current = false
+      return
+    }
+
+    if (!isLoggedIn) {
+      if (!hasPromptedAuthForQuickCheckoutRef.current) {
+        hasPromptedAuthForQuickCheckoutRef.current = true
+        toast.info('Entre na conta para continuar sua compra no checkout.', {
+          position: 'bottom-right',
+          toastId: 'quick-checkout-login-required',
+        })
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        window.dispatchEvent(new Event(OPEN_AUTH_MODAL_EVENT))
+      }
+      return
+    }
+
+    hasPromptedAuthForQuickCheckoutRef.current = false
+
+    if (!canProceed || isReserving || isAutoSelecting) {
+      return
+    }
+
+    setIsQuickCheckoutPending(false)
+    void handleProceed()
+  }, [canProceed, handleProceed, isAutoSelecting, isLoggedIn, isQuickCheckoutPending, isReserving])
 
   const closeConflictResolutionModal = useCallback(() => {
     setConflictResolution(null)
@@ -833,10 +905,13 @@ export function usePurchaseNumbers() {
     reservationSeconds,
     hasExpiredReservation,
     subtotal,
+    promotionDiscountAmount,
+    subtotalAfterPromotion,
     discountAmount,
     totalAmount,
     canProceed,
     isReserving,
+    isQuickCheckoutPending,
     shouldHighlightSelectedNumbers,
     shouldHighlightAutoButton,
     conflictResolution,
@@ -846,6 +921,7 @@ export function usePurchaseNumbers() {
     handleGoToPage,
     handleAddManualNumber,
     handleApplyCoupon,
+    handleQuickCheckout,
     handleLoadPreviousPage,
     handleLoadNextPage,
     handleProceed,

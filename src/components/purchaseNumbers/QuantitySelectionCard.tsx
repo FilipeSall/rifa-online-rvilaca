@@ -18,7 +18,7 @@ export default function QuantitySelectionCard({
     ...PURCHASE_PACKS.filter((pack) => pack > minQuantity && pack <= maxSelectable),
     maxSelectable,
   ])).sort((left, right) => left - right)
-  const effectivePacks = suggestedPacks.slice(0, 4)
+  const effectivePacks = suggestedPacks.slice(0, 8)
 
   return (
     <article className="rounded-2xl border border-white/10 bg-luxury-card/70 p-6">

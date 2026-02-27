@@ -2,6 +2,7 @@ import { FieldValue, type DocumentData, type Firestore } from 'firebase-admin/fi
 import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
 import {
+  CAMPAIGN_PACK_QUANTITIES,
   CAMPAIGN_DOC_ID,
   CAMPAIGN_STATUS_VALUES,
   DEFAULT_ADDITIONAL_PRIZES,
@@ -28,6 +29,20 @@ interface CampaignCoupon {
   discountValue: number
   active: boolean
   createdAt: string
+}
+
+interface CampaignPackPrice {
+  quantity: number
+  price: number
+  active: boolean
+}
+
+interface CampaignFeaturedPromotion {
+  active: boolean
+  targetQuantity: number
+  discountType: CampaignCouponDiscountType
+  discountValue: number
+  label: string
 }
 
 interface CampaignHeroCarouselMedia {
@@ -69,6 +84,8 @@ interface UpsertCampaignSettingsInput {
   startsAtTime?: string | null
   endsAt?: string | null
   endsAtTime?: string | null
+  packPrices?: CampaignPackPrice[]
+  featuredPromotion?: CampaignFeaturedPromotion | null
   coupons?: CampaignCoupon[]
   midias?: CampaignMidias
 }
@@ -90,6 +107,8 @@ interface UpsertCampaignSettingsOutput {
   startsAtTime: string | null
   endsAt: string | null
   endsAtTime: string | null
+  packPrices: CampaignPackPrice[]
+  featuredPromotion: CampaignFeaturedPromotion | null
   coupons: CampaignCoupon[]
   midias: CampaignMidias
 }
@@ -127,6 +146,14 @@ function sanitizeCampaignPrice(value: unknown): number | null {
   }
 
   return Number(numeric.toFixed(2))
+}
+
+function buildDefaultPackPrices(unitPrice: number): CampaignPackPrice[] {
+  return CAMPAIGN_PACK_QUANTITIES.map((quantity) => ({
+    quantity,
+    price: Number((quantity * unitPrice).toFixed(2)),
+    active: true,
+  }))
 }
 
 function sanitizeMinPurchaseQuantity(value: unknown): number | null {
@@ -299,6 +326,88 @@ function sanitizeCoupons(value: unknown): CampaignCoupon[] | null {
   }
 
   return Array.from(deduplicated.values()).slice(0, 100)
+}
+
+function sanitizeCampaignPackPrices(value: unknown, unitPriceFallback: number): CampaignPackPrice[] | null {
+  if (value === undefined) {
+    return null
+  }
+
+  if (value === null) {
+    return buildDefaultPackPrices(unitPriceFallback)
+  }
+
+  const items = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? Object.values(value as Record<string, unknown>)
+      : null
+  if (!items) {
+    throw new HttpsError('invalid-argument', 'packPrices deve ser uma lista.')
+  }
+
+  const byQuantity = new Map<number, CampaignPackPrice>()
+
+  for (const rawItem of items) {
+    const item = asRecord(rawItem)
+    const quantity = Number(item.quantity)
+    if (!Number.isInteger(quantity) || !CAMPAIGN_PACK_QUANTITIES.includes(quantity as (typeof CAMPAIGN_PACK_QUANTITIES)[number])) {
+      continue
+    }
+
+    const parsedPrice = Number(item.price)
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      throw new HttpsError('invalid-argument', `packPrices[${quantity}] possui preco invalido.`)
+    }
+
+    byQuantity.set(quantity, {
+      quantity,
+      price: Number(parsedPrice.toFixed(2)),
+      active: item.active !== false,
+    })
+  }
+
+  return CAMPAIGN_PACK_QUANTITIES.map((quantity) => (
+    byQuantity.get(quantity) || {
+      quantity,
+      price: Number((quantity * unitPriceFallback).toFixed(2)),
+      active: true,
+    }
+  ))
+}
+
+function sanitizeCampaignFeaturedPromotion(value: unknown): CampaignFeaturedPromotion | null | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (value === null || value === '') {
+    return null
+  }
+
+  const payload = asRecord(value)
+  const targetQuantity = Number(payload.targetQuantity)
+  if (!Number.isInteger(targetQuantity) || !CAMPAIGN_PACK_QUANTITIES.includes(targetQuantity as (typeof CAMPAIGN_PACK_QUANTITIES)[number])) {
+    throw new HttpsError('invalid-argument', 'featuredPromotion.targetQuantity invalido.')
+  }
+
+  const discountType = payload.discountType === 'fixed' ? 'fixed' : 'percent'
+  const rawDiscountValue = Number(payload.discountValue)
+  if (!Number.isFinite(rawDiscountValue) || rawDiscountValue <= 0) {
+    throw new HttpsError('invalid-argument', 'featuredPromotion.discountValue invalido.')
+  }
+
+  if (discountType === 'percent' && rawDiscountValue > 100) {
+    throw new HttpsError('invalid-argument', 'featuredPromotion percentual nao pode exceder 100%.')
+  }
+
+  return {
+    active: payload.active === true,
+    targetQuantity,
+    discountType,
+    discountValue: Number(rawDiscountValue.toFixed(2)),
+    label: sanitizeString(payload.label).slice(0, 80),
+  }
 }
 
 function getDefaultCampaignMidias(): CampaignMidias {
@@ -550,6 +659,34 @@ export function readCampaignCoupons(data: DocumentData | undefined): CampaignCou
   }
 }
 
+export function readCampaignPackPrices(data: DocumentData | undefined): CampaignPackPrice[] {
+  try {
+    const unitPrice = readCampaignPricePerCota(data)
+    const sanitized = sanitizeCampaignPackPrices(data?.packPrices, unitPrice)
+    return sanitized || buildDefaultPackPrices(unitPrice)
+  } catch (error) {
+    logger.warn('readCampaignPackPrices fallback to defaults due to malformed data', {
+      error: String(error),
+    })
+    return buildDefaultPackPrices(readCampaignPricePerCota(data))
+  }
+}
+
+export function readCampaignFeaturedPromotion(data: DocumentData | undefined): CampaignFeaturedPromotion | null {
+  try {
+    const sanitized = sanitizeCampaignFeaturedPromotion(data?.featuredPromotion)
+    if (sanitized === undefined) {
+      return null
+    }
+    return sanitized
+  } catch (error) {
+    logger.warn('readCampaignFeaturedPromotion fallback to null due to malformed data', {
+      error: String(error),
+    })
+    return null
+  }
+}
+
 function readCampaignMidias(data: DocumentData | undefined): CampaignMidias {
   try {
     const sanitized = sanitizeCampaignMidias(data?.midias)
@@ -675,11 +812,15 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       const nextStartsAtTime = sanitizeCampaignTime(payload.startsAtTime, 'startsAtTime')
       const nextEndsAt = sanitizeCampaignDate(payload.endsAt, 'endsAt')
       const nextEndsAtTime = sanitizeCampaignTime(payload.endsAtTime, 'endsAtTime')
-      const nextCoupons = sanitizeCoupons(payload.coupons)
-      const nextMidias = sanitizeCampaignMidias(payload.midias)
       const campaignRef = db.collection('campaigns').doc(CAMPAIGN_DOC_ID)
       const campaignSnapshot = await campaignRef.get()
       const currentData = campaignSnapshot.exists ? (campaignSnapshot.data() as DocumentData | undefined) : undefined
+      const currentPricePerCota = readCampaignPricePerCota(currentData)
+      const priceForPackFallback = nextPricePerCota ?? currentPricePerCota
+      const nextPackPrices = sanitizeCampaignPackPrices(payload.packPrices, priceForPackFallback)
+      const nextFeaturedPromotion = sanitizeCampaignFeaturedPromotion(payload.featuredPromotion)
+      const nextCoupons = sanitizeCoupons(payload.coupons)
+      const nextMidias = sanitizeCampaignMidias(payload.midias)
 
       const updateData: DocumentData = {
         updatedAt: FieldValue.serverTimestamp(),
@@ -747,6 +888,14 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         updateData.endsAtTime = nextEndsAtTime
       }
 
+      if (nextPackPrices !== null) {
+        updateData.packPrices = nextPackPrices
+      }
+
+      if (nextFeaturedPromotion !== undefined) {
+        updateData.featuredPromotion = nextFeaturedPromotion
+      }
+
       if (nextCoupons !== null) {
         updateData.coupons = nextCoupons
       }
@@ -811,6 +960,14 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
           updateData.coupons = []
         }
 
+        if (!updateData.packPrices) {
+          updateData.packPrices = buildDefaultPackPrices(readCampaignPricePerCota(updateData))
+        }
+
+        if (updateData.featuredPromotion === undefined) {
+          updateData.featuredPromotion = null
+        }
+
         if (!updateData.midias) {
           updateData.midias = getDefaultCampaignMidias()
         }
@@ -831,6 +988,8 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         nextStartsAtTime === undefined &&
         nextEndsAt === undefined &&
         nextEndsAtTime === undefined &&
+        nextPackPrices === null &&
+        nextFeaturedPromotion === undefined &&
         nextCoupons === null &&
         nextMidias === null
       ) {
@@ -841,6 +1000,9 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         uid,
         hasNewCoupons: Array.isArray(nextCoupons),
         nextCouponsCount: Array.isArray(nextCoupons) ? nextCoupons.length : null,
+        hasNewPackPrices: Array.isArray(nextPackPrices),
+        nextPackPricesCount: Array.isArray(nextPackPrices) ? nextPackPrices.length : null,
+        hasNewFeaturedPromotion: nextFeaturedPromotion !== undefined,
         hasNewMidias: nextMidias !== null,
         nextHeroCarouselCount: nextMidias ? nextMidias.heroCarousel.length : null,
         hasFeaturedVideo: Boolean(nextMidias?.featuredVideo?.url),
@@ -869,6 +1031,8 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         startsAtTime: readCampaignTime(campaignData, 'startsAtTime'),
         endsAt: readCampaignDate(campaignData, 'endsAt'),
         endsAtTime: readCampaignTime(campaignData, 'endsAtTime'),
+        packPrices: readCampaignPackPrices(campaignData),
+        featuredPromotion: readCampaignFeaturedPromotion(campaignData),
         coupons: readCampaignCoupons(campaignData),
         midias: readCampaignMidias(campaignData),
       } satisfies UpsertCampaignSettingsOutput
@@ -877,6 +1041,8 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         uid,
         campaignId: CAMPAIGN_DOC_ID,
         minPurchaseQuantity: output.minPurchaseQuantity,
+        packPricesCount: output.packPrices.length,
+        hasFeaturedPromotion: Boolean(output.featuredPromotion?.active),
         couponsCount: output.coupons.length,
         heroCarouselCount: output.midias.heroCarousel.length,
         hasFeaturedVideo: Boolean(output.midias.featuredVideo?.url),

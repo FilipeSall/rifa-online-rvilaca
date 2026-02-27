@@ -6,7 +6,7 @@ import Header from '../components/home/Header'
 import HeroSection from '../components/home/HeroSection'
 import TrustBadgesSection from '../components/home/TrustBadgesSection'
 import WinnersFaqSection from '../components/home/WinnersFaqSection'
-import { PurchaseHeroSection, PurchaseNumbersContent } from '../components/purchaseNumbers'
+import { PurchaseHeroSection } from '../components/purchaseNumbers'
 import { usePurchaseNumbers } from '../hooks/usePurchaseNumbers'
 import { applyCampaignShareMeta, buildCampaignShareMeta } from '../utils/shareMeta'
 
@@ -42,14 +42,17 @@ export default function HomePage() {
             quantity={purchaseState.quantity}
             minQuantity={purchaseState.minPurchaseQuantity}
             onSetQuantity={purchaseState.handleSetQuantity}
+            onQuickCheckout={purchaseState.handleQuickCheckout}
+            isQuickCheckoutLoading={
+              purchaseState.isQuickCheckoutPending
+              || purchaseState.isAutoSelecting
+              || purchaseState.isReserving
+            }
           />
-          <div id="comprar-numeros">
-            <PurchaseHeroSection
-              unitPrice={purchaseState.unitPrice}
-              minQuantity={purchaseState.minPurchaseQuantity}
-            />
-            <PurchaseNumbersContent purchaseState={purchaseState} />
-          </div>
+          <PurchaseHeroSection
+            unitPrice={purchaseState.unitPrice}
+            minQuantity={purchaseState.minPurchaseQuantity}
+          />
           <WinnersFaqSection />
           <TrustBadgesSection />
         </main>

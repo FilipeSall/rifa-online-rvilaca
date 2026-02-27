@@ -5,8 +5,12 @@ import PixCheckout from '../components/PixCheckout'
 import AnnouncementBar from '../components/home/AnnouncementBar'
 import Footer from '../components/home/Footer'
 import Header from '../components/home/Header'
+import { useCampaignSettings } from '../hooks/useCampaignSettings'
 import { db } from '../lib/firebase'
 import { useAuthStore } from '../stores/authStore'
+import type { CouponFeedback } from '../types/purchaseNumbers'
+import { validateCouponCode } from '../services/purchaseNumbers/purchaseNumbersService'
+import { calculateCampaignPricing, resolveCouponByCode } from '../utils/campaignPricing'
 import { formatCpfInput } from '../utils/cpf'
 import { formatCurrency } from '../utils/purchaseNumbers'
 import { formatTicketNumbers } from '../utils/ticketNumber'
@@ -17,6 +21,7 @@ type CheckoutNavigationState = {
   quantity?: number
   selectedNumbers?: number[]
   couponCode?: string
+  isAutomaticSelection?: boolean
 }
 
 function parsePositiveAmount(value: unknown) {
@@ -59,6 +64,18 @@ function parseOptionalCpf(value: unknown) {
   return cpf || null
 }
 
+function parseOptionalNumberList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return Array.from(new Set(
+    value
+      .map((item) => Number(item))
+      .filter((item) => Number.isInteger(item) && item > 0),
+  )).sort((left, right) => left - right)
+}
+
 function formatPhoneInput(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 11)
   if (digits.length <= 10) {
@@ -83,6 +100,7 @@ export default function CheckoutPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, isLoggedIn, isAuthReady } = useAuthStore()
+  const { campaign } = useCampaignSettings()
   const navigationState = (location.state || {}) as CheckoutNavigationState
   const [accountName, setAccountName] = useState('')
   const [accountPhone, setAccountPhone] = useState<string | null>(null)
@@ -90,6 +108,11 @@ export default function CheckoutPage() {
   const [payerPhone, setPayerPhone] = useState('')
   const [payerCpf, setPayerCpf] = useState('')
   const [isReturningToSelection, setIsReturningToSelection] = useState(false)
+  const [isGoingToManualSelection, setIsGoingToManualSelection] = useState(false)
+  const [reservedNumbers, setReservedNumbers] = useState<number[]>([])
+  const [couponInput, setCouponInput] = useState('')
+  const [appliedCouponCode, setAppliedCouponCode] = useState<string | null>(null)
+  const [couponFeedback, setCouponFeedback] = useState<CouponFeedback | null>(null)
   const routeOrderId = useMemo(() => {
     const queryOrderId = new URLSearchParams(location.search).get('orderId')
     const fromQuery = parseOptionalText(queryOrderId)
@@ -110,6 +133,7 @@ export default function CheckoutPage() {
 
     return parsePositiveAmount(navigationState.amount)
   }, [location.search, navigationState.amount])
+  const cameFromAutomaticSelection = navigationState.isAutomaticSelection === true
 
   const [payerName, setPayerName] = useState(user?.displayName?.trim() || '')
 
@@ -151,6 +175,31 @@ export default function CheckoutPage() {
   }, [isAuthReady, user?.displayName, user?.phoneNumber, user?.uid])
 
   useEffect(() => {
+    if (!isAuthReady || !user?.uid) {
+      setReservedNumbers([])
+      return
+    }
+
+    const reservationRef = doc(db, 'numberReservations', user.uid)
+    const unsubscribe = onSnapshot(
+      reservationRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          setReservedNumbers([])
+          return
+        }
+
+        setReservedNumbers(parseOptionalNumberList(snapshot.get('numbers')))
+      },
+      () => {
+        setReservedNumbers([])
+      },
+    )
+
+    return unsubscribe
+  }, [isAuthReady, user?.uid])
+
+  useEffect(() => {
     if (accountName) {
       setPayerName(accountName)
       return
@@ -175,12 +224,67 @@ export default function CheckoutPage() {
     }
   }, [accountCpf, payerCpf])
 
-  const amount = routeAmount
-
-  const selectedNumbers = navigationState.selectedNumbers || []
+  const routeSelectedNumbers = useMemo(
+    () => parseOptionalNumberList(navigationState.selectedNumbers),
+    [navigationState.selectedNumbers],
+  )
+  const selectedNumbers = routeSelectedNumbers.length > 0 ? routeSelectedNumbers : reservedNumbers
   const formattedSelectedNumbers = useMemo(() => formatTicketNumbers(selectedNumbers), [selectedNumbers])
-  const selectedCount = navigationState.quantity || selectedNumbers.length || 0
+  const selectedCount = selectedNumbers.length > 0
+    ? selectedNumbers.length
+    : Number(navigationState.quantity || 0)
+  const hasSelection = selectedNumbers.length > 0
   const selectedCouponCode = parseOptionalText(navigationState.couponCode) || null
+  const appliedCoupon = resolveCouponByCode(campaign.coupons, appliedCouponCode)
+  const pricing = calculateCampaignPricing(selectedCount, campaign, appliedCoupon)
+  const amount = pricing.total > 0 ? pricing.total : routeAmount
+
+  useEffect(() => {
+    if (!selectedCouponCode) {
+      setCouponInput('')
+      setAppliedCouponCode(null)
+      setCouponFeedback(null)
+      return
+    }
+
+    setCouponInput(selectedCouponCode)
+    const resolved = resolveCouponByCode(campaign.coupons, selectedCouponCode)
+    if (!resolved) {
+      setAppliedCouponCode(null)
+      setCouponFeedback({
+        tone: 'neutral',
+        message: 'Cupom recebido no checkout nao esta ativo no momento.',
+      })
+      return
+    }
+
+    setAppliedCouponCode(resolved.code)
+    setCouponFeedback({
+      tone: 'success',
+      message: `Cupom ${resolved.code} aplicado no checkout.`,
+    })
+  }, [campaign.coupons, selectedCouponCode])
+
+  const handleApplyCheckoutCoupon = useCallback(() => {
+    const validation = validateCouponCode(couponInput, campaign.coupons, pricing.subtotalAfterPromotion)
+    setCouponFeedback({
+      tone: validation.status === 'valid' ? 'success' : 'neutral',
+      message: validation.message,
+    })
+
+    if (validation.status !== 'valid') {
+      setAppliedCouponCode(null)
+      return
+    }
+
+    setAppliedCouponCode(validation.code)
+  }, [campaign.coupons, couponInput, pricing.subtotalAfterPromotion])
+
+  const handleRemoveCheckoutCoupon = useCallback(() => {
+    setCouponInput('')
+    setAppliedCouponCode(null)
+    setCouponFeedback(null)
+  }, [])
 
   const handleBackToSelection = useCallback(async () => {
     if (isReturningToSelection) {
@@ -188,8 +292,17 @@ export default function CheckoutPage() {
     }
 
     setIsReturningToSelection(true)
-    navigate('/#comprar-numeros')
+    navigate('/comprar')
   }, [isReturningToSelection, navigate])
+
+  const handleGoToManualSelection = useCallback(() => {
+    if (isGoingToManualSelection) {
+      return
+    }
+
+    setIsGoingToManualSelection(true)
+    navigate('/comprar?mode=manual')
+  }, [isGoingToManualSelection, navigate])
 
   const handlePaymentConfirmed = useCallback((paidOrderId: string) => {
     navigate('/minha-conta?section=comprovantes', {
@@ -234,16 +347,75 @@ export default function CheckoutPage() {
                       <span className="font-black text-white">{selectedCount || '-'}</span>
                     </div>
                     <div className="flex items-center justify-between text-gray-300">
-                      <span>Total para pagar</span>
-                      <span className="font-black text-neon-pink">
-                        {amount > 0 ? formatCurrency(amount) : 'Informar valor'}
-                      </span>
+                      <span>Subtotal base</span>
+                      <span className="font-black text-white">{formatCurrency(pricing.subtotalBase)}</span>
                     </div>
-                    {selectedCouponCode ? (
-                      <div className="flex items-center justify-between text-gray-300">
-                        <span>Cupom aplicado</span>
-                        <span className="font-black text-cyan-200">{selectedCouponCode}</span>
-                      </div>
+                    <div className="flex items-center justify-between text-gray-300">
+                      <span>Promoção destacada</span>
+                      <span className="font-black text-emerald-300">- {formatCurrency(pricing.promotionDiscount)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-gray-300">
+                      <span>Subtotal após promoção</span>
+                      <span className="font-black text-white">{formatCurrency(pricing.subtotalAfterPromotion)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-gray-300">
+                      <span>Desconto cupom</span>
+                      <span className="font-black text-cyan-200">- {formatCurrency(pricing.couponDiscount)}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-xl border border-neon-pink/35 bg-neon-pink/10 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-neon-pink">Total para pagar</p>
+                    <p className="mt-1 text-4xl font-black text-white">
+                      {amount > 0 ? formatCurrency(amount) : 'Informar valor'}
+                    </p>
+                    {pricing.appliedPromotion?.label ? (
+                      <p className="mt-1 text-xs text-amber-100">
+                        Promoção ativa: {pricing.appliedPromotion.label}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-white/10 bg-luxury-bg p-4">
+                    <label className="text-[10px] uppercase tracking-[0.18em] text-gray-500" htmlFor="checkout-coupon">
+                      Cupom de desconto
+                    </label>
+                    <div className="mt-2 flex gap-2 max-[419px]:flex-col">
+                      <input
+                        id="checkout-coupon"
+                        className="h-10 flex-1 rounded border border-white/15 bg-luxury-card px-3 text-sm text-white outline-none focus:border-neon-pink"
+                        type="text"
+                        placeholder="Ex: PIX10"
+                        value={couponInput}
+                        onChange={(event) => setCouponInput(event.target.value)}
+                      />
+                      <button
+                        className="h-10 rounded bg-neon-pink px-4 text-xs font-black uppercase tracking-widest text-black hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
+                        type="button"
+                        onClick={handleApplyCheckoutCoupon}
+                        disabled={!couponInput.trim() || !hasSelection}
+                      >
+                        Aplicar
+                      </button>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <p className="text-xs text-cyan-100">
+                        {appliedCouponCode ? `Cupom ativo: ${appliedCouponCode}` : 'Nenhum cupom ativo'}
+                      </p>
+                      {appliedCouponCode ? (
+                        <button
+                          className="text-[11px] font-semibold uppercase tracking-[0.12em] text-red-200 transition hover:text-red-100"
+                          type="button"
+                          onClick={handleRemoveCheckoutCoupon}
+                        >
+                          Remover
+                        </button>
+                      ) : null}
+                    </div>
+                    {couponFeedback ? (
+                      <p className={`mt-2 text-xs ${couponFeedback.tone === 'success' ? 'text-emerald-300' : 'text-gray-400'}`}>
+                        {couponFeedback.message}
+                      </p>
                     ) : null}
                   </div>
 
@@ -305,21 +477,46 @@ export default function CheckoutPage() {
                         {selectedNumbers.length > 20 ? ` ... +${selectedNumbers.length - 20}` : ''}
                       </p>
                     </div>
-                  ) : null}
+                  ) : (
+                    <div className="mt-5 rounded-lg border border-amber-300/30 bg-amber-500/10 p-4">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-amber-200">Sem reserva ativa</p>
+                      <p className="mt-2 text-xs text-amber-100/90">
+                        Nao encontramos numeros reservados para gerar o PIX. Volte e selecione seus numeros.
+                      </p>
+                    </div>
+                  )}
 
-                  <button
-                    className="mt-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-neon-pink hover:text-neon-pink-light disabled:cursor-not-allowed disabled:opacity-70"
-                    type="button"
-                    onClick={handleBackToSelection}
-                    disabled={isReturningToSelection}
-                  >
-                    {isReturningToSelection ? (
-                      <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-neon-pink border-t-transparent" />
-                    ) : (
-                      <span className="material-symbols-outlined text-sm">arrow_back</span>
-                    )}
-                    Voltar para selecao
-                  </button>
+                  <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+                    <button
+                      className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-neon-pink hover:text-neon-pink-light disabled:cursor-not-allowed disabled:opacity-70"
+                      type="button"
+                      onClick={handleBackToSelection}
+                      disabled={isReturningToSelection}
+                    >
+                      {isReturningToSelection ? (
+                        <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-neon-pink border-t-transparent" />
+                      ) : (
+                        <span className="material-symbols-outlined text-sm">arrow_back</span>
+                      )}
+                      Voltar para selecao
+                    </button>
+
+                    {cameFromAutomaticSelection ? (
+                      <button
+                        className="inline-flex items-center gap-2 rounded-lg border border-cyan-300/35 bg-cyan-500/10 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-cyan-100 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+                        type="button"
+                        onClick={handleGoToManualSelection}
+                        disabled={isGoingToManualSelection}
+                      >
+                        {isGoingToManualSelection ? (
+                          <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-100 border-t-transparent" />
+                        ) : (
+                          <span className="material-symbols-outlined text-sm">touch_app</span>
+                        )}
+                        Escolher numeros manualmente
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </aside>
 
@@ -341,14 +538,32 @@ export default function CheckoutPage() {
                   </div>
                 ) : null}
 
-                {isAuthReady && isLoggedIn ? (
+                {isAuthReady && isLoggedIn && !hasSelection ? (
+                  <div className="rounded-2xl border border-amber-300/30 bg-amber-500/10 p-6">
+                    <p className="text-sm font-semibold text-amber-100">
+                      Sua reserva nao foi encontrada.
+                    </p>
+                    <p className="mt-2 text-xs text-amber-50/80">
+                      Volte para selecionar numeros e tente novamente.
+                    </p>
+                    <button
+                      className="mt-4 inline-flex h-10 items-center justify-center rounded-lg border border-amber-300/35 bg-amber-500/20 px-4 text-xs font-bold uppercase tracking-[0.12em] text-amber-100 transition hover:bg-amber-500/30"
+                      type="button"
+                      onClick={handleBackToSelection}
+                    >
+                      Voltar para seleção
+                    </button>
+                  </div>
+                ) : null}
+
+                {isAuthReady && isLoggedIn && hasSelection ? (
                   <PixCheckout
                     amount={amount}
                     payerName={payerName}
                     phone={payerPhone}
                     cpf={payerCpf}
                     existingOrderId={routeOrderId || null}
-                    couponCode={selectedCouponCode}
+                    couponCode={appliedCouponCode}
                     onPaymentConfirmed={handlePaymentConfirmed}
                   />
                 ) : null}

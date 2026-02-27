@@ -8,6 +8,7 @@ const BADGE_DISMISSED_STORAGE_KEY = 'rifa-online:featured-video-badge-dismissed'
 
 type FeaturedVideoFloatingButtonProps = {
   topSlot?: ReactNode
+  middleSlot?: ReactNode
 }
 
 function isHttpUrl(value: string) {
@@ -19,7 +20,10 @@ function isHttpUrl(value: string) {
   }
 }
 
-export default function FeaturedVideoFloatingButton({ topSlot = null }: FeaturedVideoFloatingButtonProps) {
+export default function FeaturedVideoFloatingButton({
+  topSlot = null,
+  middleSlot = null,
+}: FeaturedVideoFloatingButtonProps) {
   const { campaign } = useCampaignSettings()
   const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -102,7 +106,7 @@ export default function FeaturedVideoFloatingButton({ topSlot = null }: Featured
     event.stopPropagation()
   }
 
-  if (!resolvedVideoUrl && !whatsappLink && !topSlot) {
+  if (!resolvedVideoUrl && !whatsappLink && !topSlot && !middleSlot) {
     return null
   }
 
@@ -131,6 +135,8 @@ export default function FeaturedVideoFloatingButton({ topSlot = null }: Featured
             </button>
           </div>
         ) : null}
+
+        {middleSlot}
 
         {whatsappLink ? (
           <a

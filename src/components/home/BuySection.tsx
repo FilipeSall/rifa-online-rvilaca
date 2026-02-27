@@ -41,7 +41,7 @@ export default function BuySection() {
             </div>
             <Link
               className="w-full md:w-auto px-10 py-4 bg-neon-pink hover:bg-primary-hover text-black font-black uppercase tracking-widest rounded transition-all shadow-glow-pink flex items-center justify-center gap-2"
-              to="/#comprar-numeros"
+              to="/comprar"
             >
               Participar Agora <span className="material-symbols-outlined text-lg">arrow_forward</span>
             </Link>

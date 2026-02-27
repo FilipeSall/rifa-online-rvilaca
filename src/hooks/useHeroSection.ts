@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { HERO_CONFIG, HERO_COUNTDOWN_LABELS } from '../const/home'
 import { useCampaignSettings } from './useCampaignSettings'
 import { createCountdownItems, getCountdown } from '../utils/home'
@@ -70,7 +70,6 @@ function resolveCountdownDisplayState(
 
 export function useHeroSection(targetSoldPercentage: number = HERO_CONFIG.targetSoldPercentage) {
   const { campaign } = useCampaignSettings()
-  const location = useLocation()
   const navigate = useNavigate()
   const [nowMs, setNowMs] = useState(() => Date.now())
   const countdownDisplayState = useMemo(
@@ -132,20 +131,8 @@ export function useHeroSection(targetSoldPercentage: number = HERO_CONFIG.target
   }, [])
 
   const handleOpenBuyModal = useCallback(() => {
-    const targetId = 'comprar-numeros'
-    const isHomePage = location.pathname === '/'
-    const isSameHash = location.hash === `#${targetId}`
-
-    if (isHomePage && isSameHash) {
-      const targetElement = document.getElementById(targetId)
-      if (targetElement) {
-        targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }
-      return
-    }
-
-    navigate(`/#${targetId}`)
-  }, [location.hash, location.pathname, navigate])
+    navigate('/comprar')
+  }, [navigate])
 
   const handleOpenCampaignSettings = useCallback(() => {
     navigate('/dashboard?tab=campanha', {

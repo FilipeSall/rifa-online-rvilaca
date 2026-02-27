@@ -22,7 +22,7 @@ export default function AnnouncementBar() {
   const announcementTextColorClassName = isCampaignNotStarted ? 'text-amber-300' : 'text-neon-pink'
 
   return (
-    <div className={`bg-luxury-card border-b border-white/5 text-center py-2 px-4 text-xs font-medium tracking-widest uppercase hidden md:block ${announcementTextColorClassName}`}>
+    <div className={`bg-luxury-card border-b border-white/5 text-center h-8 px-4 text-xs font-medium tracking-widest uppercase hidden md:flex md:items-center md:justify-center ${announcementTextColorClassName}`}>
       {announcementText}
     </div>
   )

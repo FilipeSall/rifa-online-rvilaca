@@ -164,7 +164,7 @@ export const TRUST_BADGES: TrustBadge[] = [
 ]
 
 export const FOOTER_NAV_LINKS: FooterLinkItem[] = [
-  { label: 'Sorteios Ativos', href: '/#comprar-numeros' },
+  { label: 'Sorteios Ativos', href: '/comprar' },
   { label: 'Ganhadores', href: '/resultado' },
   { label: 'Termos de Uso', href: '/regulamento' },
   { label: 'Política de Privacidade', href: '/regulamento' },

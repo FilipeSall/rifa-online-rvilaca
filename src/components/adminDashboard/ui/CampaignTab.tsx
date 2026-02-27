@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import {
+  CAMPAIGN_PACK_QUANTITIES,
   DEFAULT_BONUS_PRIZE,
   DEFAULT_CAMPAIGN_TITLE,
   DEFAULT_MAIN_PRIZE,
@@ -9,6 +10,7 @@ import {
   DEFAULT_TOTAL_NUMBERS,
 } from '../../../const/campaign'
 import type {
+  CampaignFeaturedPromotion,
   CampaignFeaturedVideoMedia,
   CampaignCoupon,
   CampaignCouponDiscountType,
@@ -24,6 +26,7 @@ import {
 import { buildCampaignSettingsInput } from '../services/campaignSettingsFormService'
 import { formatCurrency } from '../utils/formatters'
 import { getScheduleStatusLabel, resolveCampaignScheduleStatus } from '../../../utils/campaignSchedule'
+import { calculateCampaignPricing } from '../../../utils/campaignPricing'
 
 function applyPhoneMask(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 13)
@@ -49,6 +52,16 @@ function formatCouponValue(coupon: CampaignCoupon) {
   return formatCurrency(coupon.discountValue)
 }
 
+function createDefaultFeaturedPromotion(): CampaignFeaturedPromotion {
+  return {
+    active: false,
+    targetQuantity: CAMPAIGN_PACK_QUANTITIES[0],
+    discountType: 'percent',
+    discountValue: 10,
+    label: 'Oferta especial',
+  }
+}
+
 function normalizeHeroCarouselOrder(items: CampaignHeroCarouselMedia[]) {
   return [...items]
     .sort((a, b) => a.order - b.order)
@@ -68,6 +81,13 @@ function parseErrorMessage(error: unknown, fallback: string) {
 
   return fallback
 }
+
+const FEATURED_PROMOTION_LABEL_SUGGESTIONS = [
+  'Melhor escolha',
+  'Mais vantajoso',
+  'Oferta inteligente',
+  'O que mais compensa',
+]
 
 export default function CampaignTab() {
   const location = useLocation()
@@ -90,6 +110,8 @@ export default function CampaignTab() {
     startsAtTime,
     endsAt,
     endsAtTime,
+    packPrices,
+    featuredPromotion,
     coupons,
     midias,
     setTitle,
@@ -106,6 +128,8 @@ export default function CampaignTab() {
     setStartsAtTime,
     setEndsAt,
     setEndsAtTime,
+    setPackPrices,
+    setFeaturedPromotion,
     setMidias,
     handleSaveCampaignSettings,
     persistCoupons,
@@ -126,8 +150,10 @@ export default function CampaignTab() {
   const [isUploadingFeaturedVideo, setIsUploadingFeaturedVideo] = useState(false)
   const [isRemovingFeaturedVideo, setIsRemovingFeaturedVideo] = useState(false)
   const [shouldHighlightScheduleInputs, setShouldHighlightScheduleInputs] = useState(false)
+  const [activeCommercialPanel, setActiveCommercialPanel] = useState<'pricing' | 'promotion'>('pricing')
 
   const activeCoupons = useMemo(() => coupons.filter((item) => item.active).length, [coupons])
+  const activePackPrices = useMemo(() => packPrices.filter((item) => item.active).length, [packPrices])
   const heroCarouselItems = useMemo(
     () => normalizeHeroCarouselOrder(midias.heroCarousel),
     [midias.heroCarousel],
@@ -165,6 +191,8 @@ export default function CampaignTab() {
       startsAtTime,
       endsAt,
       endsAtTime,
+      packPrices,
+      featuredPromotion,
       coupons,
       midias,
     }).payload
@@ -180,6 +208,8 @@ export default function CampaignTab() {
     secondPrize,
     startsAt,
     startsAtTime,
+    packPrices,
+    featuredPromotion,
     supportWhatsappNumber,
     whatsappContactMessage,
     title,
@@ -202,6 +232,8 @@ export default function CampaignTab() {
       startsAtTime: campaign.startsAtTime ?? '',
       endsAt: campaign.endsAt ?? '',
       endsAtTime: campaign.endsAtTime ?? '',
+      packPrices: campaign.packPrices,
+      featuredPromotion: campaign.featuredPromotion,
       coupons: campaign.coupons,
       midias: campaign.midias,
     }).payload
@@ -213,6 +245,8 @@ export default function CampaignTab() {
     campaign.mainPrize,
     campaign.midias,
     campaign.minPurchaseQuantity,
+    campaign.packPrices,
+    campaign.featuredPromotion,
     campaign.pricePerCota,
     campaign.secondPrize,
     campaign.startsAt,
@@ -255,6 +289,37 @@ export default function CampaignTab() {
     : 'rounded-xl border border-white/10 bg-black/25 px-4 py-3'
   const isEndOnSameDayAsStart = Boolean(startsAt && endsAt && startsAt === endsAt)
   const minEndTime = isEndOnSameDayAsStart && startsAtTime ? startsAtTime : undefined
+  const hasActiveFeaturedPromotion = Boolean(featuredPromotion?.active)
+  const safePricePerCota = useMemo(() => {
+    const parsed = Number(pricePerCotaInput.replace(',', '.'))
+    return Number.isFinite(parsed) && parsed > 0 ? Number(parsed.toFixed(2)) : campaign.pricePerCota
+  }, [campaign.pricePerCota, pricePerCotaInput])
+  const featuredPromotionPreview = useMemo(() => {
+    const promotion = featuredPromotion || createDefaultFeaturedPromotion()
+    const pricing = calculateCampaignPricing(promotion.targetQuantity, {
+      pricePerCota: safePricePerCota,
+      packPrices,
+      featuredPromotion: {
+        ...promotion,
+        active: true,
+      },
+    })
+
+    const normalizedLabel = promotion.label.trim().slice(0, 80)
+    const label = normalizedLabel || FEATURED_PROMOTION_LABEL_SUGGESTIONS[0]
+    const savings = Number((pricing.subtotalBase - pricing.subtotalAfterPromotion).toFixed(2))
+    const copy = promotion.discountType === 'percent'
+      ? `Economize ${promotion.discountValue}% e pague ${formatCurrency(pricing.subtotalAfterPromotion)}`
+      : `Economize ${formatCurrency(savings)} e pague ${formatCurrency(pricing.subtotalAfterPromotion)}`
+
+    return {
+      label,
+      copy,
+      promotion,
+      pricing,
+      savings,
+    }
+  }, [featuredPromotion, packPrices, safePricePerCota])
 
   useEffect(() => {
     if (!heroAltInput.trim()) {
@@ -298,6 +363,93 @@ export default function CampaignTab() {
     const parsedValue = Number(couponValueInput.replace(',', '.'))
     return normalizedCode.length > 0 && Number.isFinite(parsedValue) && parsedValue > 0
   }, [couponCodeInput, couponValueInput])
+
+  const handlePackPriceInputChange = (quantity: number, rawValue: string) => {
+    const normalized = rawValue.replace(',', '.')
+    const parsed = Number(normalized)
+
+    setPackPrices((current) => current.map((item) => (
+      item.quantity === quantity
+        ? {
+            ...item,
+            price: Number.isFinite(parsed) && parsed > 0 ? Number(parsed.toFixed(2)) : item.price,
+          }
+        : item
+    )))
+  }
+
+  const handlePackPriceActiveToggle = (quantity: number) => {
+    setPackPrices((current) => current.map((item) => (
+      item.quantity === quantity
+        ? {
+            ...item,
+            active: !item.active,
+          }
+        : item
+    )))
+  }
+
+  const handleTogglePackPromotion = (quantity: number) => {
+    const isPromotionAlreadyActive = Boolean(featuredPromotion?.active && featuredPromotion.targetQuantity === quantity)
+    const nextPromotionBase = featuredPromotion || createDefaultFeaturedPromotion()
+
+    setActiveCommercialPanel('promotion')
+    setFeaturedPromotion({
+      ...nextPromotionBase,
+      targetQuantity: quantity,
+      active: !isPromotionAlreadyActive,
+      label: nextPromotionBase.label.trim() || FEATURED_PROMOTION_LABEL_SUGGESTIONS[0],
+    })
+
+    if (isPromotionAlreadyActive) {
+      toast.info(`Promocao do pacote ${quantity} foi desativada.`, {
+        toastId: 'campaign-promotion-row-deactivated',
+      })
+      return
+    }
+
+    toast.success(`Pacote de ${quantity} numeros agora esta em destaque.`, {
+      toastId: 'campaign-promotion-row-activated',
+      icon: (
+        <span className="material-symbols-outlined text-[18px] leading-none text-amber-300">
+          trending_up
+        </span>
+      ),
+      style: {
+        border: '1px solid rgba(251, 191, 36, 0.65)',
+        background: 'linear-gradient(135deg, rgba(38,31,10,0.95) 0%, rgba(72,55,10,0.92) 100%)',
+        boxShadow: '0 0 0 1px rgba(251,191,36,0.2), 0 12px 30px rgba(245,158,11,0.22)',
+        color: '#fef3c7',
+      },
+    })
+  }
+
+  const handleFeaturedPromotionFieldChange = (
+    field: keyof CampaignFeaturedPromotion,
+    value: string | number | boolean,
+  ) => {
+    setFeaturedPromotion((current) => {
+      const base = current || createDefaultFeaturedPromotion()
+      if (field === 'targetQuantity') {
+        return { ...base, targetQuantity: Number(value) }
+      }
+      if (field === 'discountValue') {
+        const parsed = Number(value)
+        return { ...base, discountValue: Number.isFinite(parsed) && parsed > 0 ? Number(parsed.toFixed(2)) : base.discountValue }
+      }
+      if (field === 'active') {
+        return { ...base, active: Boolean(value) }
+      }
+      if (field === 'discountType') {
+        return { ...base, discountType: value === 'fixed' ? 'fixed' : 'percent' }
+      }
+      if (field === 'label') {
+        return { ...base, label: `${value}`.slice(0, 80) }
+      }
+
+      return base
+    })
+  }
 
   const handleGenerateCouponCode = () => {
     setCouponCodeInput(generateCouponCode())
@@ -794,6 +946,242 @@ export default function CampaignTab() {
                     onChange={(event) => setMinPurchaseQuantityInput(event.target.value.replace(/[^0-9]/g, ''))}
                   />
                 </div>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">Tabela de 8 precos e promocao</p>
+                  <span className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-100">
+                    {activePackPrices} ativos
+                  </span>
+                </div>
+
+                <div className="mt-3 inline-flex rounded-lg border border-white/10 bg-black/35 p-1">
+                  <button
+                    type="button"
+                    className={`rounded-md px-3 py-2 text-[11px] font-bold uppercase tracking-[0.1em] ${
+                      activeCommercialPanel === 'pricing'
+                        ? 'bg-cyan-300 text-black'
+                        : 'text-gray-300 hover:text-white'
+                    }`}
+                    onClick={() => setActiveCommercialPanel('pricing')}
+                  >
+                    Selecao de precos
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-md px-3 py-2 text-[11px] font-bold uppercase tracking-[0.1em] ${
+                      activeCommercialPanel === 'promotion'
+                        ? 'bg-amber-300 text-black'
+                        : 'text-gray-300 hover:text-white'
+                    }`}
+                    onClick={() => setActiveCommercialPanel('promotion')}
+                  >
+                    Promocao em destaque
+                  </button>
+                </div>
+
+                {activeCommercialPanel === 'pricing' ? (
+                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {CAMPAIGN_PACK_QUANTITIES.map((quantity) => {
+                      const currentPack = packPrices.find((item) => item.quantity === quantity)
+                      const currentPrice = currentPack?.price ?? Number((quantity * safePricePerCota).toFixed(2))
+                      const isPromotionActiveForRow = Boolean(
+                        featuredPromotion?.active && featuredPromotion.targetQuantity === quantity,
+                      )
+
+                      return (
+                        <div
+                          key={quantity}
+                          className={`rounded-lg border p-3 transition-colors ${
+                            isPromotionActiveForRow
+                              ? 'border-amber-300/45 bg-amber-500/10'
+                              : 'border-white/10 bg-black/30'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-bold uppercase tracking-[0.13em] text-white">{quantity} cotas</p>
+                            <button
+                              type="button"
+                              className={`rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${
+                                currentPack?.active
+                                  ? 'border border-emerald-300/40 bg-emerald-500/15 text-emerald-200'
+                                  : 'border border-gray-500/40 bg-gray-500/10 text-gray-300'
+                              }`}
+                              onClick={() => handlePackPriceActiveToggle(quantity)}
+                            >
+                              {currentPack?.active ? 'Ativo' : 'Inativo'}
+                            </button>
+                          </div>
+                          <div className="mt-2 flex items-center gap-2">
+                            <span className="text-xs font-semibold text-cyan-100">R$</span>
+                            <input
+                              className="h-9 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none focus:border-cyan-200/70"
+                              inputMode="decimal"
+                              type="text"
+                              value={currentPrice.toString().replace('.', ',')}
+                              onChange={(event) => handlePackPriceInputChange(quantity, event.target.value)}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            className={`mt-3 inline-flex h-8 w-full items-center justify-center rounded-md border px-2 text-[10px] font-black uppercase tracking-[0.11em] transition ${
+                              isPromotionActiveForRow
+                                ? 'border-amber-300/55 bg-amber-300/25 text-amber-100'
+                                : 'border-amber-300/35 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'
+                            } disabled:cursor-not-allowed disabled:opacity-55`}
+                            onClick={() => handleTogglePackPromotion(quantity)}
+                            disabled={currentPack?.active === false}
+                          >
+                            {isPromotionActiveForRow ? 'Promocao ativa' : 'Ativar promocao'}
+                          </button>
+                          {currentPack?.active === false ? (
+                            <p className="mt-2 text-[10px] text-gray-500">
+                              Ative este pacote para permitir promocao.
+                            </p>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div
+                    className={`mt-4 rounded-2xl border p-4 transition-all ${
+                      hasActiveFeaturedPromotion
+                        ? 'border-amber-300/50 bg-[linear-gradient(130deg,rgba(120,90,8,0.22),rgba(10,10,10,0.55))] shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_0_40px_rgba(245,158,11,0.12)]'
+                        : 'border-amber-300/20 bg-amber-500/5'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-amber-200">Promocao em destaque</p>
+                        <p className="mt-1 text-xs text-amber-100/85">
+                          Defina qual pacote recebe destaque e veja o preview em tempo real.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className={`rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${
+                          hasActiveFeaturedPromotion
+                            ? 'border border-emerald-300/35 bg-emerald-500/15 text-emerald-200'
+                            : 'border border-gray-500/40 bg-gray-500/10 text-gray-300'
+                        }`}
+                        onClick={() => handleFeaturedPromotionFieldChange('active', !featuredPromotion?.active)}
+                      >
+                        {hasActiveFeaturedPromotion ? 'Ativa' : 'Inativa'}
+                      </button>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                      <div className="rounded-xl border border-amber-300/25 bg-black/30 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-amber-100">Selecao de pacote</p>
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          {CAMPAIGN_PACK_QUANTITIES.map((quantity) => (
+                            <button
+                              key={quantity}
+                              type="button"
+                              className={`rounded-md border px-2 py-2 text-xs font-bold transition ${
+                                (featuredPromotion?.targetQuantity ?? CAMPAIGN_PACK_QUANTITIES[0]) === quantity
+                                  ? 'border-amber-200/70 bg-amber-300 text-black'
+                                  : 'border-white/15 bg-black/30 text-gray-200 hover:border-amber-200/40'
+                              }`}
+                              onClick={() => handleFeaturedPromotionFieldChange('targetQuantity', quantity)}
+                            >
+                              {quantity} cotas
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-amber-300/25 bg-black/30 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-amber-100">Tipo de promocao</p>
+                        <div className="mt-3 inline-flex rounded-md border border-amber-300/30 bg-black/35 p-1">
+                          <button
+                            type="button"
+                            className={`rounded px-3 py-1.5 text-xs font-bold ${
+                              (featuredPromotion?.discountType ?? 'percent') === 'percent' ? 'bg-amber-300 text-black' : 'text-gray-300'
+                            }`}
+                            onClick={() => handleFeaturedPromotionFieldChange('discountType', 'percent')}
+                          >
+                            %
+                          </button>
+                          <button
+                            type="button"
+                            className={`rounded px-3 py-1.5 text-xs font-bold ${
+                              (featuredPromotion?.discountType ?? 'percent') === 'fixed' ? 'bg-amber-300 text-black' : 'text-gray-300'
+                            }`}
+                            onClick={() => handleFeaturedPromotionFieldChange('discountType', 'fixed')}
+                          >
+                            Fixo
+                          </button>
+                        </div>
+                        <label className="mt-3 block text-[10px] uppercase tracking-[0.13em] text-amber-100">Valor</label>
+                        <input
+                          className="mt-2 h-10 w-full rounded-md border border-amber-300/30 bg-black/35 px-3 text-sm font-semibold text-white outline-none focus:border-amber-200/80"
+                          inputMode="decimal"
+                          type="text"
+                          value={(featuredPromotion?.discountValue ?? 10).toString().replace('.', ',')}
+                          onChange={(event) => handleFeaturedPromotionFieldChange('discountValue', Number(event.target.value.replace(',', '.')))}
+                        />
+                      </div>
+
+                      <div className="rounded-xl border border-amber-300/25 bg-black/30 p-3 lg:col-span-2">
+                        <label className="text-[10px] uppercase tracking-[0.13em] text-amber-100">Texto do banner na home</label>
+                        <input
+                          className="mt-2 h-10 w-full rounded-md border border-amber-300/30 bg-black/35 px-3 text-sm font-semibold text-white outline-none focus:border-amber-200/80"
+                          type="text"
+                          value={featuredPromotion?.label ?? ''}
+                          onChange={(event) => handleFeaturedPromotionFieldChange('label', event.target.value)}
+                          placeholder="Ex: Melhor escolha"
+                        />
+                        <p className="mt-2 text-[11px] text-gray-300">
+                          Esse texto aparece diretamente no selo de promocao da home. Mantenha curto para gerar impacto.
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {FEATURED_PROMOTION_LABEL_SUGGESTIONS.map((suggestion) => (
+                            <button
+                              key={suggestion}
+                              type="button"
+                              className="rounded-full border border-amber-300/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.11em] text-amber-100 transition hover:bg-amber-500/20"
+                              onClick={() => handleFeaturedPromotionFieldChange('label', suggestion)}
+                            >
+                              {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-cyan-300/25 bg-cyan-500/10 p-3 lg:col-span-2">
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-100">Preview ao vivo na home</p>
+                        <div className="mt-3 rounded-lg border border-white/15 bg-black/35 p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="rounded-full border border-amber-300/45 bg-amber-400/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-amber-100">
+                              {featuredPromotionPreview.label}
+                            </span>
+                            <span className="text-xs font-semibold text-white">
+                              {featuredPromotionPreview.promotion.targetQuantity} cotas
+                            </span>
+                          </div>
+                          <p className="mt-3 text-sm font-semibold text-cyan-50">{featuredPromotionPreview.copy}</p>
+                          <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+                            <div className="rounded-md border border-white/10 bg-black/30 px-2.5 py-2">
+                              <p className="text-[10px] uppercase tracking-[0.11em] text-gray-400">Base</p>
+                              <p className="mt-1 font-bold text-white">{formatCurrency(featuredPromotionPreview.pricing.subtotalBase)}</p>
+                            </div>
+                            <div className="rounded-md border border-emerald-300/20 bg-emerald-500/10 px-2.5 py-2">
+                              <p className="text-[10px] uppercase tracking-[0.11em] text-emerald-200">Desconto</p>
+                              <p className="mt-1 font-bold text-emerald-100">- {formatCurrency(featuredPromotionPreview.savings)}</p>
+                            </div>
+                            <div className="rounded-md border border-amber-300/25 bg-amber-500/10 px-2.5 py-2">
+                              <p className="text-[10px] uppercase tracking-[0.11em] text-amber-100">Preco final</p>
+                              <p className="mt-1 font-bold text-amber-50">{formatCurrency(featuredPromotionPreview.pricing.subtotalAfterPromotion)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
           </article>

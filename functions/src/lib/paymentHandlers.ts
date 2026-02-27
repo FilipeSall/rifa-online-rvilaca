@@ -14,7 +14,13 @@ import {
   type OrderType,
   type PixType,
 } from './constants.js'
-import { readCampaignCoupons, readCampaignMinPurchaseQuantity, readCampaignPricePerCota } from './campaignHandlers.js'
+import {
+  readCampaignCoupons,
+  readCampaignFeaturedPromotion,
+  readCampaignMinPurchaseQuantity,
+  readCampaignPackPrices,
+  readCampaignPricePerCota,
+} from './campaignHandlers.js'
 import {
   buildNumberStateView,
   buildPaidNumberStateData,
@@ -64,6 +70,19 @@ type CouponResolution = {
   discountType: 'percent' | 'fixed'
   discountValue: number
   discountAmount: number
+}
+
+type PricingSummary = {
+  quantity: number
+  unitPriceAtCheckout: number
+  matchedPackQuantity: number | null
+  subtotalBaseAmount: number
+  promotionDiscountAmount: number
+  subtotalAfterPromotionAmount: number
+  expectedAmount: number
+  appliedPromotionLabel: string | null
+  appliedPromotionType: 'percent' | 'fixed' | null
+  appliedPromotionValue: number | null
 }
 
 interface RequestWithdrawInput {
@@ -338,6 +357,64 @@ function resolveCoupon(params: {
     discountType: matchedCoupon.discountType,
     discountValue: matchedCoupon.discountValue,
     discountAmount,
+  }
+}
+
+function calculatePromotionDiscount(
+  subtotalBase: number,
+  quantity: number,
+  featuredPromotion: ReturnType<typeof readCampaignFeaturedPromotion>,
+) {
+  if (!featuredPromotion || !featuredPromotion.active || featuredPromotion.targetQuantity !== quantity) {
+    return {
+      discount: 0,
+      label: null as string | null,
+      discountType: null as 'percent' | 'fixed' | null,
+      discountValue: null as number | null,
+    }
+  }
+
+  if (featuredPromotion.discountType === 'percent') {
+    const discount = Number(Math.min(subtotalBase, subtotalBase * (featuredPromotion.discountValue / 100)).toFixed(2))
+    return {
+      discount,
+      label: featuredPromotion.label || null,
+      discountType: featuredPromotion.discountType,
+      discountValue: featuredPromotion.discountValue,
+    }
+  }
+
+  const discount = Number(Math.min(subtotalBase, featuredPromotion.discountValue).toFixed(2))
+  return {
+    discount,
+    label: featuredPromotion.label || null,
+    discountType: featuredPromotion.discountType,
+    discountValue: featuredPromotion.discountValue,
+  }
+}
+
+function calculatePricingSummary(campaignData: DocumentData | undefined, quantity: number): PricingSummary {
+  const unitPriceAtCheckout = readCampaignPricePerCota(campaignData)
+  const packPrices = readCampaignPackPrices(campaignData)
+  const featuredPromotion = readCampaignFeaturedPromotion(campaignData)
+  const matchedPack = packPrices.find((pack) => pack.active && pack.quantity === quantity) || null
+  const subtotalBaseAmount = matchedPack
+    ? Number(matchedPack.price.toFixed(2))
+    : Number((quantity * unitPriceAtCheckout).toFixed(2))
+  const promotion = calculatePromotionDiscount(subtotalBaseAmount, quantity, featuredPromotion)
+  const subtotalAfterPromotionAmount = Number(Math.max(subtotalBaseAmount - promotion.discount, 0).toFixed(2))
+
+  return {
+    quantity,
+    unitPriceAtCheckout,
+    matchedPackQuantity: matchedPack?.quantity || null,
+    subtotalBaseAmount,
+    promotionDiscountAmount: promotion.discount,
+    subtotalAfterPromotionAmount,
+    expectedAmount: subtotalAfterPromotionAmount,
+    appliedPromotionLabel: promotion.label,
+    appliedPromotionType: promotion.discountType,
+    appliedPromotionValue: promotion.discountValue,
   }
 }
 
@@ -676,16 +753,15 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         campaignRange.end,
       )
       const reservationExpiresAtMs = readTimestampMillis(reservationSnapshot.get('expiresAt'))
-      const unitPriceAtCheckout = readCampaignPricePerCota(campaignData)
-      const subtotalAmount = Number((reservationNumbers.length * unitPriceAtCheckout).toFixed(2))
+      const pricing = calculatePricingSummary(campaignData, reservationNumbers.length)
       const campaignCoupons = readCampaignCoupons(campaignData)
       const coupon = resolveCoupon({
         rawCouponCode: payload.couponCode,
         campaignCoupons,
-        subtotal: subtotalAmount,
+        subtotal: pricing.subtotalAfterPromotionAmount,
       })
       const discountAmount = coupon ? coupon.discountAmount : 0
-      const expectedAmount = Number(Math.max(subtotalAmount - discountAmount, 0).toFixed(2))
+      const expectedAmount = Number(Math.max(pricing.subtotalAfterPromotionAmount - discountAmount, 0).toFixed(2))
 
       if (expectedAmount <= 0) {
         throw new HttpsError(
@@ -712,7 +788,8 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
           requestedAmount,
           expectedAmount,
           quantity: reservationNumbers.length,
-          unitPriceAtCheckout,
+          unitPriceAtCheckout: pricing.unitPriceAtCheckout,
+          matchedPackQuantity: pricing.matchedPackQuantity,
         })
       }
 
@@ -732,10 +809,15 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         uid: maskUid(uid),
         requestedAmount,
         expectedAmount,
-        subtotalAmount,
+        subtotalBaseAmount: pricing.subtotalBaseAmount,
+        promotionDiscountAmount: pricing.promotionDiscountAmount,
+        subtotalAmount: pricing.subtotalAfterPromotionAmount,
         discountAmount,
         couponCode: coupon?.code || null,
         couponDiscountType: coupon?.discountType || null,
+        featuredPromotionLabel: pricing.appliedPromotionLabel,
+        featuredPromotionType: pricing.appliedPromotionType,
+        featuredPromotionValue: pricing.appliedPromotionValue,
         payerNameMasked: maskName(payerName),
         phoneMasked: maskPhoneNumber(phone),
         hasPhone: Boolean(phone),
@@ -747,7 +829,8 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         maxAttempts: MAX_DEPOSIT_ORDER_ATTEMPTS,
         reservationQuantity: reservationNumbers.length,
         minPurchaseQuantity,
-        unitPriceAtCheckout,
+        unitPriceAtCheckout: pricing.unitPriceAtCheckout,
+        matchedPackQuantity: pricing.matchedPackQuantity,
         hasAmountMismatch,
       })
 
@@ -852,13 +935,19 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
               type: 'deposit',
               amount: expectedAmount,
               expectedAmount,
-              subtotalAmount,
+              subtotalBaseAmount: pricing.subtotalBaseAmount,
+              promotionDiscountAmount: pricing.promotionDiscountAmount,
+              subtotalAmount: pricing.subtotalAfterPromotionAmount,
               discountAmount,
               payerName,
               payerPhone: phone,
               payerCpf: cpf,
               requestedAmount,
-              unitPriceAtCheckout,
+              unitPriceAtCheckout: pricing.unitPriceAtCheckout,
+              matchedPackQuantity: pricing.matchedPackQuantity,
+              appliedPromotionLabel: pricing.appliedPromotionLabel,
+              appliedPromotionDiscountType: pricing.appliedPromotionType,
+              appliedPromotionDiscountValue: pricing.appliedPromotionValue,
               minPurchaseQuantity,
               quantity: reservationNumbers.length,
               reservedNumbers: reservationNumbers,
@@ -898,14 +987,20 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
           externalId,
           type: 'deposit',
           amount: expectedAmount,
-          subtotalAmount,
+          subtotalBaseAmount: pricing.subtotalBaseAmount,
+          promotionDiscountAmount: pricing.promotionDiscountAmount,
+          subtotalAmount: pricing.subtotalAfterPromotionAmount,
           discountAmount,
           payerName,
           payerPhone: phone,
           payerCpf: cpf,
           expectedAmount,
           requestedAmount,
-          unitPriceAtCheckout,
+          unitPriceAtCheckout: pricing.unitPriceAtCheckout,
+          matchedPackQuantity: pricing.matchedPackQuantity,
+          appliedPromotionLabel: pricing.appliedPromotionLabel,
+          appliedPromotionDiscountType: pricing.appliedPromotionType,
+          appliedPromotionDiscountValue: pricing.appliedPromotionValue,
           minPurchaseQuantity,
           quantity: reservationNumbers.length,
           reservedNumbers: reservationNumbers,
@@ -930,7 +1025,9 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
           hasCopyPaste: Boolean(copyPaste),
           hasQrCode: Boolean(qrCode),
           expectedAmount,
-          subtotalAmount,
+          subtotalBaseAmount: pricing.subtotalBaseAmount,
+          promotionDiscountAmount: pricing.promotionDiscountAmount,
+          subtotalAmount: pricing.subtotalAfterPromotionAmount,
           discountAmount,
           appliedCouponCode: coupon?.code || null,
           clientReferenceId,
