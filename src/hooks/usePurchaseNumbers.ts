@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { OPEN_AUTH_MODAL_EVENT } from '../const/auth'
 import {
   DEFAULT_INITIAL_QUANTITY,
+  MAX_QUANTITY,
   MIN_QUANTITY,
   RAFFLE_NUMBER_END,
   RAFFLE_NUMBER_START,
@@ -30,6 +31,11 @@ type ReserveNumbersResponse = {
   numbers: number[]
   expiresAtMs: number
   reservationSeconds: number
+}
+
+type ConflictResolutionState = {
+  conflictedNumbers: number[]
+  filteredSelection: number[]
 }
 
 type CallableEnvelope<T> = T | { result?: T }
@@ -59,7 +65,15 @@ function getReserveErrorMessage(error: unknown) {
     return 'Nao foi possivel reservar os numeros agora. Tente novamente.'
   }
 
-  const candidate = error as { code?: string; message?: string }
+  const candidate = error as { code?: string; details?: unknown; message?: string }
+  if (candidate.code === 'functions/invalid-argument' && candidate.details && typeof candidate.details === 'object') {
+    const details = candidate.details as { maxAllowed?: unknown }
+    const maxAllowed = Number(details.maxAllowed)
+    if (Number.isInteger(maxAllowed) && maxAllowed > 0) {
+      return `Voce pode reservar no maximo ${maxAllowed} numeros por tentativa.`
+    }
+  }
+
   if (candidate.message) {
     const cleanMessage = candidate.message
       .replace(/^Firebase:\s*/i, '')
@@ -86,6 +100,43 @@ function extractConflictedNumber(message: string) {
 
   const parsed = Number(matched[1])
   return Number.isInteger(parsed) ? parsed : null
+}
+
+function toIntegerList(value: unknown): number[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return Array.from(new Set(
+    value
+      .map((item) => Number(item))
+      .filter((item) => Number.isInteger(item) && item > 0),
+  )).sort((a, b) => a - b)
+}
+
+function extractConflictedNumbers(error: unknown, message: string): number[] {
+  if (error && typeof error === 'object') {
+    const candidate = error as { details?: unknown }
+    if (candidate.details && typeof candidate.details === 'object') {
+      const details = candidate.details as { conflictedNumbers?: unknown }
+      const fromDetails = toIntegerList(details.conflictedNumbers)
+      if (fromDetails.length > 0) {
+        return fromDetails
+      }
+    }
+  }
+
+  const single = extractConflictedNumber(message)
+  if (single !== null) {
+    return [single]
+  }
+
+  const maybeList = message.match(/(\d+)/g) || []
+  return Array.from(new Set(
+    maybeList
+      .map((item) => Number(item))
+      .filter((item) => Number.isInteger(item) && item > 0),
+  )).sort((a, b) => a - b)
 }
 
 function clampPageStart(value: number, rangeStart: number, rangeEnd: number) {
@@ -168,7 +219,7 @@ export function usePurchaseNumbers() {
   const [pageStartState, setPageStartState] = useState(rangeStart)
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('automatico')
   const [quantity, setQuantity] = useState(
-    getSafeQuantity(DEFAULT_INITIAL_QUANTITY, RAFFLE_NUMBER_END, MIN_QUANTITY),
+    getSafeQuantity(DEFAULT_INITIAL_QUANTITY, MAX_QUANTITY, MIN_QUANTITY),
   )
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>([])
   const [couponCode, setCouponCode] = useState('')
@@ -183,9 +234,11 @@ export function usePurchaseNumbers() {
   const [isManualAdding, setIsManualAdding] = useState(false)
   const [shouldHighlightSelectedNumbers, setShouldHighlightSelectedNumbers] = useState(false)
   const [shouldHighlightAutoButton, setShouldHighlightAutoButton] = useState(false)
+  const [conflictResolution, setConflictResolution] = useState<ConflictResolutionState | null>(null)
 
   const selectedNumbersRef = useRef<number[]>(selectedNumbers)
   selectedNumbersRef.current = selectedNumbers
+  const lastReserveAttemptRef = useRef<{ fingerprint: string; atMs: number } | null>(null)
 
   const callables = useMemo(
     () => ({
@@ -242,11 +295,15 @@ export function usePurchaseNumbers() {
   const smallestAvailableNumber = rangeStart
   const isPageLoading = false
 
-  const maxSelectable = totalNumbers > 0 ? totalNumbers : RAFFLE_NUMBER_END
-  const minPurchaseQuantity =
+  const maxSelectable = Math.max(
+    1,
+    Math.min(totalNumbers > 0 ? totalNumbers : RAFFLE_NUMBER_END, MAX_QUANTITY),
+  )
+  const minPurchaseQuantityRaw =
     Number.isInteger(campaign.minPurchaseQuantity) && campaign.minPurchaseQuantity > 0
       ? campaign.minPurchaseQuantity
       : MIN_QUANTITY
+  const minPurchaseQuantity = Math.min(minPurchaseQuantityRaw, maxSelectable)
 
   const selectedCount = selectedNumbers.length
   const unitPrice = Number.isFinite(campaign.pricePerCota) && campaign.pricePerCota > 0
@@ -579,6 +636,27 @@ export function usePurchaseNumbers() {
       return
     }
 
+    const reserveFingerprint = selectedNumbers.slice().sort((left, right) => left - right).join(',')
+    const nowMs = Date.now()
+    const lastAttempt = lastReserveAttemptRef.current
+
+    if (
+      lastAttempt
+      && lastAttempt.fingerprint === reserveFingerprint
+      && (nowMs - lastAttempt.atMs) < 1200
+    ) {
+      toast.info('Aguarde um instante antes de tentar reservar os mesmos numeros novamente.', {
+        position: 'bottom-right',
+        toastId: 'reserve-same-selection-throttle',
+      })
+      return
+    }
+
+    lastReserveAttemptRef.current = {
+      fingerprint: reserveFingerprint,
+      atMs: nowMs,
+    }
+
     setIsReserving(true)
 
     try {
@@ -609,58 +687,23 @@ export function usePurchaseNumbers() {
       })
     } catch (error) {
       const errorMessage = getReserveErrorMessage(error)
-      const conflictedNumber = extractConflictedNumber(errorMessage)
+      const conflictedNumbers = extractConflictedNumbers(error, errorMessage)
+        .filter((number) => number >= rangeStart && number <= rangeEnd)
       const normalized = errorMessage.toLowerCase()
 
       if (
-        conflictedNumber !== null
+        conflictedNumbers.length > 0
         && (normalized.includes('nao esta mais disponivel') || normalized.includes('ja foi pago'))
       ) {
         const filteredSelection = selectedNumbersRef.current
-          .filter((number) => number !== conflictedNumber)
+          .filter((number) => !conflictedNumbers.includes(number))
           .sort((left, right) => left - right)
 
         setSelectedNumbers(filteredSelection)
-
-        const shouldAutoReplace = (
-          filteredSelection.length < quantity
-          && typeof window !== 'undefined'
-          && window.confirm(
-            `O numero ${formatTicketNumber(conflictedNumber)} ja foi reservado ou comprado. Deseja gerar automaticamente outro numero para substituir?`,
-          )
-        )
-
-        if (shouldAutoReplace) {
-          const missingQuantity = quantity - filteredSelection.length
-          const replacements = pickRandomUniqueNumbersFromRange(
-            rangeStart,
-            rangeEnd,
-            missingQuantity,
-            filteredSelection,
-          )
-
-          if (replacements.length > 0) {
-            const mergedSelection = Array.from(new Set([...filteredSelection, ...replacements]))
-              .sort((left, right) => left - right)
-              .slice(0, quantity)
-            setSelectedNumbers(mergedSelection)
-
-            toast.info(
-              `Substituimos ${replacements.length} numero(s) automaticamente. Confira a selecao e clique em comprar novamente.`,
-              { position: 'bottom-right' },
-            )
-          } else {
-            toast.warning(
-              'Nao foi possivel gerar substituicao automatica no momento. Escolha outro numero e tente novamente.',
-              { position: 'bottom-right' },
-            )
-          }
-        } else {
-          toast.warning(
-            `O numero ${formatTicketNumber(conflictedNumber)} foi reservado por outro usuario durante o processo. Selecione outro numero e tente novamente.`,
-            { position: 'bottom-right' },
-          )
-        }
+        setConflictResolution({
+          conflictedNumbers,
+          filteredSelection,
+        })
       } else {
         toast.error(errorMessage, {
           position: 'bottom-right',
@@ -681,6 +724,65 @@ export function usePurchaseNumbers() {
     selectedNumbers,
     totalAmount,
   ])
+
+  const closeConflictResolutionModal = useCallback(() => {
+    setConflictResolution(null)
+  }, [])
+
+  const resolveConflictWithAutomaticNumber = useCallback(() => {
+    if (!conflictResolution) {
+      return
+    }
+
+    const missingQuantity = quantity - conflictResolution.filteredSelection.length
+    if (missingQuantity <= 0) {
+      setConflictResolution(null)
+      return
+    }
+
+    const replacements = pickRandomUniqueNumbersFromRange(
+      rangeStart,
+      rangeEnd,
+      missingQuantity,
+      conflictResolution.filteredSelection,
+    )
+
+    if (replacements.length > 0) {
+      const mergedSelection = Array.from(new Set([...conflictResolution.filteredSelection, ...replacements]))
+        .sort((left, right) => left - right)
+        .slice(0, quantity)
+      setSelectedNumbers(mergedSelection)
+      toast.info(
+        `Substituimos ${replacements.length} numero(s) automaticamente. Confira a selecao e clique em comprar novamente.`,
+        { position: 'bottom-right' },
+      )
+    } else {
+      toast.warning(
+        'Nao foi possivel gerar substituicao automatica no momento. Escolha outro numero manualmente.',
+        { position: 'bottom-right' },
+      )
+    }
+
+    setConflictResolution(null)
+  }, [conflictResolution, quantity, rangeEnd, rangeStart])
+
+  const resolveConflictManually = useCallback(() => {
+    if (!conflictResolution) {
+      return
+    }
+
+    setSelectionMode('manual')
+    setConflictResolution(null)
+    const preview = conflictResolution.conflictedNumbers
+      .slice(0, 3)
+      .map((number) => formatTicketNumber(number))
+      .join(', ')
+    const suffix = conflictResolution.conflictedNumbers.length > 3 ? '...' : ''
+    toast.info(
+      `Escolha manualmente novos numeros para substituir: ${preview}${suffix}`,
+      { position: 'bottom-right' },
+    )
+  }, [conflictResolution])
 
   const handleLoadPreviousPage = useCallback(() => {
     if (previousPageStart === null) {
@@ -737,6 +839,7 @@ export function usePurchaseNumbers() {
     isReserving,
     shouldHighlightSelectedNumbers,
     shouldHighlightAutoButton,
+    conflictResolution,
     handleSetQuantity,
     handleClearSelectedNumbers,
     handleToggleNumber,
@@ -746,5 +849,8 @@ export function usePurchaseNumbers() {
     handleLoadPreviousPage,
     handleLoadNextPage,
     handleProceed,
+    closeConflictResolutionModal,
+    resolveConflictWithAutomaticNumber,
+    resolveConflictManually,
   }
 }

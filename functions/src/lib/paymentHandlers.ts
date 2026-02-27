@@ -479,12 +479,25 @@ async function runPaidDepositBusinessLogic(
     reservedNumbers: number[]
   },
 ) {
+  const transactionStats = {
+    requestedCount: order.reservedNumbers.length,
+    previousCount: 0,
+    uniqueStateReads: 0,
+    transactionAttempts: 0,
+    conflictsCount: 0,
+  }
+
   logger.info('runPaidDepositBusinessLogic started', {
     externalId: order.externalId,
     campaignId: order.campaignId,
     userId: order.userId ? maskUid(order.userId) : null,
     reservedNumbersCount: order.reservedNumbers.length,
     amount: sanitizeOptionalAmount(order.amount),
+    requestedCount: transactionStats.requestedCount,
+    previousCount: transactionStats.previousCount,
+    uniqueStateReads: transactionStats.uniqueStateReads,
+    transactionAttempts: transactionStats.transactionAttempts,
+    conflictsCount: transactionStats.conflictsCount,
   })
   const paymentRef = db.collection('payments').doc(order.externalId)
   const salesLedgerRef = db.collection('salesLedger').doc(order.externalId)
@@ -498,9 +511,11 @@ async function runPaidDepositBusinessLogic(
   const nowMs = Date.now()
 
   await db.runTransaction(async (transaction) => {
+    transactionStats.transactionAttempts += 1
     const numberStateRefs = new Map(
       order.reservedNumbers.map((number) => [number, getNumberStateRef(db, order.campaignId, number)]),
     )
+    transactionStats.uniqueStateReads = numberStateRefs.size
     const numberStateSnapshots = await Promise.all(
       order.reservedNumbers.map((number) => {
         const ref = numberStateRefs.get(number)
@@ -596,10 +611,12 @@ async function runPaidDepositBusinessLogic(
       })
 
       if (state.status === 'pago') {
+        transactionStats.conflictsCount += 1
         continue
       }
 
       if (state.reservedBy && state.reservedBy !== order.userId) {
+        transactionStats.conflictsCount += 1
         continue
       }
 
@@ -618,6 +635,7 @@ async function runPaidDepositBusinessLogic(
     const reservationNumbers = reservationSnapshot?.exists
       ? readStoredReservationNumbers(reservationSnapshot.get('numbers'))
       : []
+    transactionStats.previousCount = reservationNumbers.length
 
     if (reservationSnapshot?.exists && sameNumberSet(reservationNumbers, order.reservedNumbers)) {
       transaction.delete(reservationRef)
@@ -628,6 +646,11 @@ async function runPaidDepositBusinessLogic(
     externalId: order.externalId,
     reservedNumbersCount: order.reservedNumbers.length,
     amount: normalizedAmount,
+    requestedCount: transactionStats.requestedCount,
+    previousCount: transactionStats.previousCount,
+    uniqueStateReads: transactionStats.uniqueStateReads,
+    transactionAttempts: transactionStats.transactionAttempts,
+    conflictsCount: transactionStats.conflictsCount,
   })
 }
 

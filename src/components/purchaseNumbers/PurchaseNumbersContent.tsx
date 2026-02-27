@@ -50,6 +50,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     isAutoSelecting,
     shouldHighlightSelectedNumbers,
     shouldHighlightAutoButton,
+    conflictResolution,
     handleSetQuantity,
     handleClearSelectedNumbers,
     handleToggleNumber,
@@ -59,6 +60,9 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     handleLoadPreviousPage,
     handleLoadNextPage,
     handleProceed,
+    closeConflictResolutionModal,
+    resolveConflictWithAutomaticNumber,
+    resolveConflictManually,
   } = purchaseState
 
   const closeMobileOverlay = useCallback(() => {
@@ -253,6 +257,58 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
             ) : (
               <PurchaseSummaryCard {...summaryCardProps} isSticky={false} />
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {conflictResolution ? (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true">
+          <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/15 bg-luxury-card shadow-2xl">
+            <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-neon-pink/20 blur-2xl" />
+            <div className="pointer-events-none absolute -left-10 bottom-0 h-24 w-24 rounded-full bg-cyan-400/20 blur-2xl" />
+
+            <div className="relative z-10 p-6">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-amber-300">Numeros indisponiveis</p>
+              <h3 className="mt-2 text-xl font-black text-white">Alguns numeros acabaram de ser reservados</h3>
+              <p className="mt-3 text-sm leading-relaxed text-gray-300">
+                Identificamos <span className="font-bold text-neon-pink">{conflictResolution.conflictedNumbers.length}</span>{' '}
+                numero(s) que ja foram reservados ou comprados. Deseja preencher todos automaticamente?
+              </p>
+
+              <div className="mt-4 max-h-28 overflow-y-auto rounded-lg border border-white/10 bg-black/20 p-3">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Numeros em conflito</p>
+                <p className="mt-2 break-all text-xs text-gray-200">
+                  {conflictResolution.conflictedNumbers
+                    .map((number) => String(number).padStart(7, '0'))
+                    .join(', ')}
+                </p>
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 gap-3">
+                <button
+                  className="h-11 rounded-lg border border-cyan-300/45 bg-cyan-500/15 px-4 text-sm font-bold uppercase tracking-[0.14em] text-cyan-100 transition hover:bg-cyan-500/25"
+                  type="button"
+                  onClick={resolveConflictManually}
+                >
+                  Escolher manualmente
+                </button>
+                <button
+                  className="h-11 rounded-lg border border-neon-pink/45 bg-neon-pink/15 px-4 text-sm font-bold uppercase tracking-[0.14em] text-neon-pink transition hover:bg-neon-pink/25"
+                  type="button"
+                  onClick={resolveConflictWithAutomaticNumber}
+                >
+                  Preencher todos automatico
+                </button>
+              </div>
+
+              <button
+                className="mt-3 w-full text-xs font-semibold uppercase tracking-[0.14em] text-gray-400 transition hover:text-white"
+                type="button"
+                onClick={closeConflictResolutionModal}
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

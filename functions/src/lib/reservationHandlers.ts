@@ -3,6 +3,7 @@ import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
 import {
   CAMPAIGN_DOC_ID,
+  MAX_PURCHASE_QUANTITY,
   RAFFLE_NUMBER_END,
   RAFFLE_NUMBER_START,
   RESERVATION_DURATION_MS,
@@ -63,7 +64,11 @@ function sanitizeReservationNumbers(
   }
 
   if (parsed.length > maxReservationQuantity) {
-    throw new HttpsError('invalid-argument', `Selecione no maximo ${maxReservationQuantity} numeros`)
+    throw new HttpsError(
+      'invalid-argument',
+      `Selecione no maximo ${maxReservationQuantity} numeros`,
+      { maxAllowed: maxReservationQuantity },
+    )
   }
 
   return parsed
@@ -90,6 +95,13 @@ export function readStoredReservationNumbers(
 export function createReserveNumbersHandler(db: Firestore) {
   return async (request: { auth?: { uid?: string } | null; data: unknown }) => {
     const uid = requireActiveUid(request.auth)
+    const transactionStats = {
+      requestedCount: 0,
+      previousCount: 0,
+      uniqueStateReads: 0,
+      transactionAttempts: 0,
+      conflictsCount: 0,
+    }
 
     try {
       const payload = asRecord(request.data) as Partial<ReserveNumbersInput>
@@ -98,27 +110,36 @@ export function createReserveNumbersHandler(db: Firestore) {
       const campaignData = campaignSnapshot.exists ? campaignSnapshot.data() : undefined
       const campaignRange = readCampaignNumberRange(campaignData, CAMPAIGN_DOC_ID)
       const minPurchaseQuantity = readCampaignMinPurchaseQuantity(campaignData)
+      const maxReservationQuantity = Math.min(campaignRange.total, MAX_PURCHASE_QUANTITY)
       const requestedNumbers = sanitizeReservationNumbers(
         payload.numbers,
         campaignRange.start,
         campaignRange.end,
         minPurchaseQuantity,
-        campaignRange.total,
+        maxReservationQuantity,
       )
       const nowMs = Date.now()
       const expiresAtMs = nowMs + RESERVATION_DURATION_MS
       const expiresAt = Timestamp.fromMillis(expiresAtMs)
       const reservationRef = db.collection('numberReservations').doc(uid)
+      transactionStats.requestedCount = requestedNumbers.length
 
       logger.info('reserveNumbers started', {
         uid: maskUid(uid),
         quantity: requestedNumbers.length,
+        requestedCount: transactionStats.requestedCount,
+        previousCount: transactionStats.previousCount,
+        uniqueStateReads: transactionStats.uniqueStateReads,
+        transactionAttempts: transactionStats.transactionAttempts,
+        conflictsCount: transactionStats.conflictsCount,
         minPurchaseQuantity,
+        maxReservationQuantity,
         firstNumber: requestedNumbers[0],
         lastNumber: requestedNumbers[requestedNumbers.length - 1],
       })
 
       await db.runTransaction(async (transaction) => {
+        transactionStats.transactionAttempts += 1
         const reservationSnapshot = await transaction.get(reservationRef)
         const previousNumbers = reservationSnapshot.exists
           ? readStoredReservationNumbers(
@@ -127,9 +148,11 @@ export function createReserveNumbersHandler(db: Firestore) {
               campaignRange.end,
             )
           : []
+        transactionStats.previousCount = previousNumbers.length
         const requestedSet = new Set(requestedNumbers)
         const numbersToRelease = previousNumbers.filter((number) => !requestedSet.has(number))
         const allNumbers = Array.from(new Set([...requestedNumbers, ...numbersToRelease]))
+        transactionStats.uniqueStateReads = allNumbers.length
         const numberStateRefs = new Map(
           allNumbers.map((number) => [number, getNumberStateRef(db, CAMPAIGN_DOC_ID, number)]),
         )
@@ -143,6 +166,9 @@ export function createReserveNumbersHandler(db: Firestore) {
           allNumbers.map((number, index) => [number, numberStateSnapshots[index]]),
         )
 
+        const conflictedReservedNumbers: number[] = []
+        const conflictedPaidNumbers: number[] = []
+
         for (const number of requestedNumbers) {
           const numberStateSnapshot = numberStateSnapshotByNumber.get(number)
           const state = buildNumberStateView({
@@ -155,15 +181,31 @@ export function createReserveNumbersHandler(db: Firestore) {
             && (state.reservationExpiresAtMs === null || state.reservationExpiresAtMs > nowMs)
 
           if (state.status === 'pago') {
-            throw new HttpsError('failed-precondition', `Numero ${number} ja foi pago`)
+            conflictedPaidNumbers.push(number)
+            continue
           }
 
           if (hasActiveReservation && state.reservedBy !== uid) {
-            throw new HttpsError(
-              'failed-precondition',
-              `Numero ${number} nao esta mais disponivel. Atualize a selecao e tente novamente.`,
-            )
+            conflictedReservedNumbers.push(number)
+            continue
           }
+        }
+
+        const conflictedNumbers = Array.from(
+          new Set([...conflictedPaidNumbers, ...conflictedReservedNumbers]),
+        ).sort((a, b) => a - b)
+        transactionStats.conflictsCount = conflictedNumbers.length
+
+        if (conflictedNumbers.length > 0) {
+          throw new HttpsError(
+            'failed-precondition',
+            `Alguns numeros nao estao mais disponiveis: ${conflictedNumbers.join(', ')}`,
+            {
+              conflictedNumbers,
+              conflictedReservedNumbers,
+              conflictedPaidNumbers,
+            },
+          )
         }
 
         for (const number of numbersToRelease) {
@@ -224,6 +266,11 @@ export function createReserveNumbersHandler(db: Firestore) {
       logger.info('reserveNumbers succeeded', {
         uid: maskUid(uid),
         quantity: requestedNumbers.length,
+        requestedCount: transactionStats.requestedCount,
+        previousCount: transactionStats.previousCount,
+        uniqueStateReads: transactionStats.uniqueStateReads,
+        transactionAttempts: transactionStats.transactionAttempts,
+        conflictsCount: transactionStats.conflictsCount,
         firstNumber: requestedNumbers[0],
         lastNumber: requestedNumbers[requestedNumbers.length - 1],
         expiresAtMs,
@@ -238,6 +285,12 @@ export function createReserveNumbersHandler(db: Firestore) {
       logger.error('reserveNumbers failed', {
         uid: maskUid(uid),
         error: String(error),
+        code: error instanceof HttpsError ? error.code : null,
+        requestedCount: transactionStats.requestedCount,
+        previousCount: transactionStats.previousCount,
+        uniqueStateReads: transactionStats.uniqueStateReads,
+        transactionAttempts: transactionStats.transactionAttempts,
+        conflictsCount: transactionStats.conflictsCount,
       })
 
       if (error instanceof HttpsError) {

@@ -42,6 +42,18 @@ Fluxo principal:
 - Scripts utilitarios: `scripts/`
 - Este documento: `agents.md`
 
+### 3.1) Documentacao por fluxo (agentes.md local)
+
+- Paginas/roteamento: `src/pages/agentes.md`
+- Home (landing): `src/components/home/agentes.md`
+- Compra e reserva (frontend): `src/components/purchaseNumbers/agentes.md`
+- Hooks e cache/TTL: `src/hooks/agentes.md`
+- Dashboard usuario: `src/components/userDashboard/agentes.md`
+- Dashboard admin: `src/components/adminDashboard/agentes.md`
+- Resultado/ganhadores: `src/components/winners/agentes.md`
+- Notificacoes de ganhadores: `src/components/winnersNotification/agentes.md`
+- Backend functions/lib: `functions/src/lib/agentes.md`
+
 ## 4) Comandos principais
 
 Na raiz do projeto:
