@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useHeroSection } from '../../hooks/useHeroSection'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 import { DEFAULT_BONUS_PRIZE, DEFAULT_CAMPAIGN_TITLE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../const/campaign'
-import { usePublicSalesSnapshot } from '../../hooks/usePublicSalesSnapshot'
-import { useAuthStore } from '../../stores/authStore'
 import Skeleton from 'react-loading-skeleton'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import { Autoplay, Pagination } from 'swiper/modules'
@@ -11,74 +9,25 @@ import 'swiper/css'
 import 'swiper/css/pagination'
 import 'react-loading-skeleton/dist/skeleton.css'
 
-function getDemandMessaging(soldPercentage: number, isCampaignNotStarted: boolean) {
-  if (isCampaignNotStarted) {
-    return {
-      badge: 'Campanha em preparacao',
-      chip: 'Lançamento em breve',
-      helper: 'Em breve iremos comecar uma campanha. Fique atento para garantir seus numeros na abertura oficial.',
-    }
-  }
-
-  if (soldPercentage >= 85) {
-    return {
-      badge: 'Reta final de cotas',
-      chip: 'Fechamento próximo',
-      helper: 'Fase final da campanha: disponibilidade cada vez mais limitada.',
-    }
-  }
-
-  if (soldPercentage >= 65) {
-    return {
-      badge: 'Movimento intenso de compras',
-      chip: 'Disponibilidade reduzindo',
-      helper: 'A seleção ainda está aberta, mas com menos opções a cada atualização.',
-    }
-  }
-
-  if (soldPercentage >= 40) {
-    return {
-      badge: 'Alta procura nesta edição',
-      chip: 'Lote em destaque',
-      helper: 'A campanha entrou no trecho de maior tração de vendas.',
-    }
-  }
-
-  if (soldPercentage >= 15) {
-    return {
-      badge: 'Procura em crescimento',
-      chip: 'Ritmo consistente',
-      helper: 'As cotas seguem avançando com estabilidade ao longo do dia.',
-    }
-  }
-
-  return {
-    badge: 'Lote aberto para participação',
-    chip: 'Início de campanha',
-    helper: 'Momento favorável para escolher números com mais liberdade.',
-  }
+type HeroSectionProps = {
+  quantity: number
+  minQuantity: number
+  onSetQuantity: (value: number) => void
 }
 
-export default function HeroSection() {
-  const {
-    soldNumbers: soldNumbersRaw,
-    totalNumbers: totalNumbersRaw,
-    soldPercentage,
-  } = usePublicSalesSnapshot()
-  const {
-    animatedSoldPercentage,
-    countdownItems,
-    countdownDisplayState,
-    handleOpenBuyModal,
-    handleOpenCampaignSettings,
-  } = useHeroSection(
-    soldPercentage,
-  )
+export default function HeroSection({ quantity, minQuantity, onSetQuantity }: HeroSectionProps) {
+  const location = useLocation()
+  const navigate = useNavigate()
   const { campaign } = useCampaignSettings()
-  const userRole = useAuthStore((state) => state.userRole)
   const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({})
   const titleRef = useRef<HTMLHeadingElement>(null)
   const [heroSalesCardWidth, setHeroSalesCardWidth] = useState<number | null>(null)
+  const heroQuickQuantityPacks = useMemo(
+    () =>
+      Array.from(new Set([minQuantity, 50, 100, 250, 350, 500, 750, 1000]))
+        .filter((pack) => Number.isInteger(pack) && pack > 0),
+    [minQuantity],
+  )
   const campaignTitle = campaign.title || DEFAULT_CAMPAIGN_TITLE
   const mainPrize = campaign.mainPrize || DEFAULT_MAIN_PRIZE
   const secondPrize = campaign.secondPrize || DEFAULT_SECOND_PRIZE
@@ -87,19 +36,9 @@ export default function HeroSection() {
   const campaignTitlePrefix =
     campaignTitleParts.length > 2 ? campaignTitleParts.slice(0, -2).join(' ') : campaignTitleParts.join(' ')
   const campaignTitleHighlight = campaignTitleParts.length > 2 ? campaignTitleParts.slice(-2).join(' ') : ''
-  const soldNumbers = soldNumbersRaw
-  const totalNumbers = Number.isInteger(campaign.totalNumbers) && campaign.totalNumbers > 0
-    ? campaign.totalNumbers
-    : totalNumbersRaw
-  const soldCotasFormatted = soldNumbers.toLocaleString('pt-BR')
-  const totalCotasFormatted = totalNumbers.toLocaleString('pt-BR')
-  const isCampaignNotStarted = countdownDisplayState.mode === 'start' || campaign.status === 'scheduled'
-  const demandMessaging = getDemandMessaging(soldPercentage, isCampaignNotStarted)
-  const shouldShowAdminCampaignHint = userRole === 'admin'
-    && countdownDisplayState.mode === 'hidden'
-    && !campaign.startsAt
-    && !campaign.endsAt
-  const heroAlignedSectionStyle = heroSalesCardWidth ? { width: `${heroSalesCardWidth}px` } : undefined
+  const heroScaledAlignedSectionStyle = heroSalesCardWidth
+    ? { width: `${Math.round((heroSalesCardWidth / 2) * 1.75)}px` }
+    : undefined
   const heroCarouselImages = useMemo(() => {
     return campaign.midias.heroCarousel
       .filter((item) => item.active && !!item.url)
@@ -122,6 +61,22 @@ export default function HeroSection() {
       }
     })
   }, [])
+
+  const handleOpenBuyModal = useCallback(() => {
+    const targetId = 'comprar-numeros'
+    const isHomePage = location.pathname === '/'
+    const isSameHash = location.hash === `#${targetId}`
+
+    if (isHomePage && isSameHash) {
+      const targetElement = document.getElementById(targetId)
+      if (targetElement) {
+        targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      return
+    }
+
+    navigate(`/#${targetId}`)
+  }, [location.hash, location.pathname, navigate])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -189,67 +144,36 @@ export default function HeroSection() {
               apuração pela Loteria Federal e validação por algoritmo auditável.
             </p>
 
-            {/* Progress bar */}
-            <div
-              className="hero-sales-card mt-2 w-full lg:max-w-lg xl:max-w-none"
-              style={heroAlignedSectionStyle}
-            >
-              <span className="hero-edge-badge hero-edge-badge-left">🔥 {demandMessaging.badge}</span>
-              <span className="hero-edge-badge hero-edge-badge-right">{demandMessaging.chip}</span>
-              <div className="hero-sales-header">
-                <span className="hero-demand-percentage">{animatedSoldPercentage}% vendido</span>
-              </div>
-              <div className="hero-progress-track">
-                <div
-                  className="hero-progress-fill"
-                  style={{ width: `${animatedSoldPercentage}%` }}
-                >
-                  <span className="hero-progress-spark" aria-hidden="true" />
-                  <span className="hero-progress-sheen" aria-hidden="true" />
+            <article className="mt-2 rounded-2xl border border-white/10 bg-luxury-card/70 p-6 lg:max-w-lg xl:max-w-none" style={heroScaledAlignedSectionStyle}>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-white">Defina quantos numeros deseja comprar</h2>
                 </div>
               </div>
-              <p className="hero-demand-helper">
-                {demandMessaging.helper}
-              </p>
-              <p className="hero-demand-footnote">
-                {soldCotasFormatted} de {totalCotasFormatted} cotas já vendidas
-              </p>
-            </div>
 
-            {/* Countdown */}
-            <div className="mt-2 w-full lg:max-w-lg xl:max-w-none" style={heroAlignedSectionStyle}>
-              <p className="text-[11px] uppercase tracking-[0.2em] text-neon-cyan xl:text-center">{countdownDisplayState.title}</p>
-              <p className="mt-1 text-xs text-gray-400 xl:text-center">{countdownDisplayState.helper}</p>
-              {countdownDisplayState.mode !== 'hidden' ? (
-                <div className="mt-3 grid grid-cols-4 gap-4">
-                  {countdownItems.map(({ value, label }) => (
-                    <div key={label} className="hero-countdown-card text-center">
-                      <span className="hero-countdown-value">{value}</span>
-                      <span className="hero-countdown-label">{label}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              {shouldShowAdminCampaignHint ? (
-                <div className="mt-4 rounded-xl border border-cyan-300/35 bg-cyan-500/10 p-4 xl:text-center">
-                  <p className="text-xs font-semibold text-cyan-100">
-                    Admin: defina inicio e fim da campanha para liberar o contador e a comunicacao para os usuarios.
-                  </p>
+              <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+                {heroQuickQuantityPacks.map((pack) => (
                   <button
-                    className="mt-3 inline-flex h-10 items-center rounded-lg border border-cyan-200/60 bg-cyan-300 px-4 text-[11px] font-black uppercase tracking-[0.14em] text-black transition hover:brightness-95 xl:mx-auto"
+                    key={pack}
+                    className={`rounded-lg border px-4 py-4 text-left transition-all ${
+                      quantity === pack
+                        ? 'border-neon-pink bg-neon-pink/10 text-neon-pink'
+                        : 'border-white/10 bg-luxury-bg text-white hover:border-neon-pink/50'
+                    }`}
                     type="button"
-                    onClick={handleOpenCampaignSettings}
+                    onClick={() => onSetQuantity(pack)}
                   >
-                    Configurar campanha no dashboard
+                    <p className="text-lg font-black">+{pack}</p>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Numeros</p>
                   </button>
-                </div>
-              ) : null}
-            </div>
+                ))}
+              </div>
+            </article>
 
             {/* CTA button + secure payment */}
-            <div className="mt-2 flex w-full flex-col gap-3 lg:max-w-lg xl:max-w-none" style={heroAlignedSectionStyle}>
+            <div className="mt-2 flex w-full flex-col gap-3 lg:max-w-lg xl:max-w-none" style={heroScaledAlignedSectionStyle}>
               <button
-                className="inline-flex w-full h-16 items-center justify-center rounded-xl bg-gradient-to-r from-neon-pink to-purple-600 px-8 text-base font-black text-white transition-all hover:brightness-110 hover:scale-[1.02] shadow-glow-pink uppercase tracking-widest gap-3"
+                className="inline-flex w-full h-16 items-center justify-center rounded-xl bg-gradient-to-r from-purple-600 via-violet-500 to-purple-700 px-8 text-base font-black text-white transition-all hover:brightness-110 hover:scale-[1.02] shadow-[0_0_32px_rgba(139,92,246,0.6),0_0_64px_rgba(139,92,246,0.3)] uppercase tracking-widest gap-3"
                 type="button"
                 onClick={handleOpenBuyModal}
               >

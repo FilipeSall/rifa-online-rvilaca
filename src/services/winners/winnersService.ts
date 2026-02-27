@@ -62,8 +62,12 @@ export type WinnersFeedPayload = {
   latestDrawId: string | null
 }
 
-const getPublicTopBuyersDrawHistory = httpsCallable<Record<string, never>, unknown>(functions, 'getPublicTopBuyersDrawHistory')
-const getPublicMainRaffleDrawHistory = httpsCallable<Record<string, never>, unknown>(functions, 'getPublicMainRaffleDrawHistory')
+type DrawHistoryInput = {
+  limit?: number
+}
+
+const getPublicTopBuyersDrawHistory = httpsCallable<DrawHistoryInput, unknown>(functions, 'getPublicTopBuyersDrawHistory')
+const getPublicMainRaffleDrawHistory = httpsCallable<DrawHistoryInput, unknown>(functions, 'getPublicMainRaffleDrawHistory')
 
 function unwrapCallableData<T>(value: CallableEnvelope<T>) {
   if (value && typeof value === 'object' && 'result' in value) {
@@ -219,10 +223,13 @@ function normalizeMainRaffleHistory(payload: unknown): WinnerFeedItem[] {
     .filter((item): item is WinnerFeedItem => Boolean(item))
 }
 
-export async function fetchWinnersFeed(): Promise<WinnersFeedPayload> {
+export async function fetchWinnersFeed(options?: { historyLimit?: number }): Promise<WinnersFeedPayload> {
+  const historyLimit = Number.isInteger(options?.historyLimit) && Number(options?.historyLimit) > 0
+    ? Number(options?.historyLimit)
+    : 12
   const [topHistoryResult, mainHistoryResult] = await Promise.allSettled([
-    getPublicTopBuyersDrawHistory({}),
-    getPublicMainRaffleDrawHistory({}),
+    getPublicTopBuyersDrawHistory({ limit: historyLimit }),
+    getPublicMainRaffleDrawHistory({ limit: historyLimit }),
   ])
 
   const topHistory = topHistoryResult.status === 'fulfilled'

@@ -19,9 +19,10 @@ export default function AnnouncementBar() {
     : soldPercentage >= ANNOUNCEMENT_URGENCY_THRESHOLD_PERCENT
       ? ANNOUNCEMENT_URGENCY_TEXT
       : ANNOUNCEMENT_MARKETING_TEXT
+  const announcementTextColorClassName = isCampaignNotStarted ? 'text-amber-300' : 'text-neon-pink'
 
   return (
-    <div className="bg-luxury-card border-b border-white/5 text-center py-2 px-4 text-xs font-medium tracking-widest text-neon-pink uppercase hidden md:block">
+    <div className={`bg-luxury-card border-b border-white/5 text-center py-2 px-4 text-xs font-medium tracking-widest uppercase hidden md:block ${announcementTextColorClassName}`}>
       {announcementText}
     </div>
   )

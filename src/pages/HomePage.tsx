@@ -38,7 +38,11 @@ export default function HomePage() {
         <Header />
 
         <main className="flex-grow">
-          <HeroSection />
+          <HeroSection
+            quantity={purchaseState.quantity}
+            minQuantity={purchaseState.minPurchaseQuantity}
+            onSetQuantity={purchaseState.handleSetQuantity}
+          />
           <div id="comprar-numeros">
             <PurchaseHeroSection
               unitPrice={purchaseState.unitPrice}

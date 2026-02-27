@@ -6,6 +6,10 @@ import { asRecord, readString, readTimestampMillis, requireActiveUid, sanitizeSt
 
 const TOP_BUYERS_DRAW_HISTORY_COLLECTION = 'topBuyersDrawResults'
 const DEFAULT_RANKING_LIMIT = 50
+const DEFAULT_PUBLIC_HISTORY_LIMIT = 20
+const DEFAULT_ADMIN_HISTORY_LIMIT = 60
+const MAX_PUBLIC_HISTORY_LIMIT = 40
+const MAX_ADMIN_HISTORY_LIMIT = 120
 const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
 const EXTRACTION_COUNT = 5
 const EXTRACTION_DIGITS = 6
@@ -80,6 +84,14 @@ interface GetPublicTopBuyersDrawHistoryOutput {
   results: TopBuyersDrawResult[]
 }
 
+interface GetTopBuyersDrawHistoryInput {
+  limit?: number
+}
+
+interface GetPublicTopBuyersDrawHistoryInput {
+  limit?: number
+}
+
 interface GetMyTopBuyersWinningSummaryOutput {
   hasWins: boolean
   winsCount: number
@@ -110,6 +122,15 @@ function sanitizeRankingLimit(value: unknown): number {
   }
 
   return parsed
+}
+
+function sanitizeHistoryLimit(value: unknown, max: number, fallback: number): number {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return fallback
+  }
+
+  return Math.min(Math.max(1, parsed), max)
 }
 
 function sanitizeExtractionNumber(value: unknown, index: number): string {
@@ -839,8 +860,17 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
 }
 
 export function createGetTopBuyersDrawHistoryHandler(db: Firestore) {
-  return async (request: { auth?: { uid?: string | null } | null }): Promise<GetTopBuyersDrawHistoryOutput> => {
+  return async (request: {
+    auth?: { uid?: string | null } | null
+    data?: unknown
+  }): Promise<GetTopBuyersDrawHistoryOutput> => {
     const uid = requireActiveUid(request.auth)
+    const payload = asRecord(request.data) as GetTopBuyersDrawHistoryInput
+    const historyLimit = sanitizeHistoryLimit(
+      payload.limit,
+      MAX_ADMIN_HISTORY_LIMIT,
+      DEFAULT_ADMIN_HISTORY_LIMIT,
+    )
 
     await assertAdminRole(db, uid)
 
@@ -849,7 +879,7 @@ export function createGetTopBuyersDrawHistoryHandler(db: Firestore) {
       const fallbackMainPrize = sanitizeString(campaignSnapshot.get('mainPrize')) || DEFAULT_MAIN_PRIZE
       const historySnapshot = await db.collection(TOP_BUYERS_DRAW_HISTORY_COLLECTION)
         .orderBy('publishedAtMs', 'desc')
-        .limit(120)
+        .limit(historyLimit)
         .get()
 
       const rawResults = await Promise.all(historySnapshot.docs
@@ -988,13 +1018,20 @@ export function createGetTopBuyersDrawHistoryHandler(db: Firestore) {
 }
 
 export function createGetPublicTopBuyersDrawHistoryHandler(db: Firestore) {
-  return async (): Promise<GetPublicTopBuyersDrawHistoryOutput> => {
+  return async (request: { data?: unknown }): Promise<GetPublicTopBuyersDrawHistoryOutput> => {
+    const payload = asRecord(request.data) as GetPublicTopBuyersDrawHistoryInput
+    const historyLimit = sanitizeHistoryLimit(
+      payload.limit,
+      MAX_PUBLIC_HISTORY_LIMIT,
+      DEFAULT_PUBLIC_HISTORY_LIMIT,
+    )
+
     try {
       const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
       const fallbackMainPrize = sanitizeString(campaignSnapshot.get('mainPrize')) || DEFAULT_MAIN_PRIZE
       const historySnapshot = await db.collection(TOP_BUYERS_DRAW_HISTORY_COLLECTION)
         .orderBy('publishedAtMs', 'desc')
-        .limit(120)
+        .limit(historyLimit)
         .get()
 
       const rawResults = await Promise.all(historySnapshot.docs

@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "dependencies": {
     "@google-cloud/functions-framework": "^3.5.1",

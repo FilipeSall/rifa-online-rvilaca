@@ -13,6 +13,7 @@
     "rules": "storage.rules"
   },
   "hosting": {
+    "site": "rifa-online-395d9",
     "public": "dist",
     "ignore": [
       "firebase.json",

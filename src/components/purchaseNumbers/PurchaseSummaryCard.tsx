@@ -117,7 +117,7 @@ export default function PurchaseSummaryCard({
       </div>
 
       <button
-        className="mt-5 h-12 w-full rounded-xl bg-green-500 px-4 text-sm font-black uppercase tracking-widest text-white transition-all hover:bg-green-400 disabled:cursor-not-allowed disabled:opacity-40"
+        className="mt-5 h-12 w-full rounded-xl bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 px-4 text-sm font-black uppercase tracking-widest text-black transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
         type="button"
         disabled={!canProceed || isReserving || isAutoSelecting}
         onClick={onProceed}

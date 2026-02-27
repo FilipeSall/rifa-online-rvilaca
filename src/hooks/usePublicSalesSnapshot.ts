@@ -2,11 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../lib/firebase'
 import { CAMPAIGN_TOTAL_COTAS } from '../const/home'
+import { markFetchedNow, readCachedJson, shouldFetchAfterDays, writeCachedJson } from '../utils/fetchCache'
 
 type PublicSalesSnapshot = {
   totalNumbers?: number
   soldNumbers?: number
   soldPercentage?: number
+}
+const FETCH_EVERY_DAYS = 5
+const CACHE_KEY = 'rifa-online:cache:public-sales-snapshot:v1'
+const LAST_FETCH_KEY = 'rifa-online:last-fetch:public-sales-snapshot:v1'
+
+type PublicSalesSnapshotCache = {
+  soldNumbers: number
+  totalNumbers: number
+  soldPercentage: number
 }
 
 type CallableEnvelope<T> = T | { result?: T }
@@ -61,6 +71,12 @@ export function usePublicSalesSnapshot() {
       setTotalNumbers(nextTotal)
       setSoldNumbers(nextSold)
       setSoldPercentage(nextPercentage)
+      writeCachedJson(CACHE_KEY, {
+        soldNumbers: nextSold,
+        totalNumbers: nextTotal,
+        soldPercentage: nextPercentage,
+      } satisfies PublicSalesSnapshotCache)
+      markFetchedNow(LAST_FETCH_KEY)
     } catch {
       // Keep previous values on transient network/function errors.
     } finally {
@@ -69,13 +85,32 @@ export function usePublicSalesSnapshot() {
   }, [getPublicSalesSnapshot])
 
   useEffect(() => {
-    void loadSalesSnapshot()
+    const cached = readCachedJson<PublicSalesSnapshotCache>(CACHE_KEY)
+    if (cached) {
+      setSoldNumbers(
+        typeof cached.soldNumbers === 'number' && Number.isFinite(cached.soldNumbers)
+          ? Math.max(0, Math.floor(cached.soldNumbers))
+          : 0,
+      )
+      setTotalNumbers(
+        typeof cached.totalNumbers === 'number' && Number.isFinite(cached.totalNumbers)
+          ? Math.max(1, Math.floor(cached.totalNumbers))
+          : CAMPAIGN_TOTAL_COTAS,
+      )
+      setSoldPercentage(
+        typeof cached.soldPercentage === 'number' && Number.isFinite(cached.soldPercentage)
+          ? Math.max(0, Math.min(100, Number(cached.soldPercentage.toFixed(1))))
+          : 0,
+      )
+    }
 
-    const intervalId = window.setInterval(() => {
+    const shouldFetch = shouldFetchAfterDays(LAST_FETCH_KEY, FETCH_EVERY_DAYS)
+    if (shouldFetch || !cached) {
       void loadSalesSnapshot()
-    }, 20000)
+      return
+    }
 
-    return () => window.clearInterval(intervalId)
+    setIsLoading(false)
   }, [loadSalesSnapshot])
 
   return {

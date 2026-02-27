@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fetchWinnersFeed, type WinnerFeedItem } from '../services/winners/winnersService'
+import { markFetchedNow, readCachedJson, shouldFetchAfterDays, writeCachedJson } from '../utils/fetchCache'
 
 const LAST_VIEWED_DRAW_STORAGE_KEY = 'rifa-online:winners:last-viewed-draw-id'
+const AUTO_REFRESH_INTERVAL_MS = 3 * 60 * 1000
+const FETCH_EVERY_DAYS = 5
+const HISTORY_LIMIT = 12
+const WINNERS_CACHE_KEY = 'rifa-online:cache:winners-feed:v1'
+const WINNERS_LAST_FETCH_KEY = 'rifa-online:last-fetch:winners-feed:v1'
+
+type WinnersFeedCache = {
+  items: WinnerFeedItem[]
+  latestDrawId: string | null
+}
 
 function readLastViewedDrawId() {
   try {
@@ -33,9 +44,14 @@ export function useWinnersNotification(enabled = true) {
     }
 
     try {
-      const payload = await fetchWinnersFeed()
+      const payload = await fetchWinnersFeed({ historyLimit: HISTORY_LIMIT })
       setWinners(payload.items)
       setLatestDrawId(payload.latestDrawId)
+      writeCachedJson(WINNERS_CACHE_KEY, {
+        items: payload.items,
+        latestDrawId: payload.latestDrawId,
+      } satisfies WinnersFeedCache)
+      markFetchedNow(WINNERS_LAST_FETCH_KEY)
       setErrorMessage(null)
     } catch {
       setErrorMessage('Nao foi possivel carregar os ganhadores no momento.')
@@ -76,7 +92,20 @@ export function useWinnersNotification(enabled = true) {
 
     setIsLoading(true)
     setLastViewedDrawId(readLastViewedDrawId())
-    void refreshWinners()
+
+    const cached = readCachedJson<WinnersFeedCache>(WINNERS_CACHE_KEY)
+    if (cached) {
+      setWinners(Array.isArray(cached.items) ? cached.items : [])
+      setLatestDrawId(typeof cached.latestDrawId === 'string' ? cached.latestDrawId : null)
+    }
+
+    const shouldFetch = shouldFetchAfterDays(WINNERS_LAST_FETCH_KEY, FETCH_EVERY_DAYS)
+    if (shouldFetch || !cached) {
+      void refreshWinners()
+      return
+    }
+
+    setIsLoading(false)
   }, [enabled, refreshWinners])
 
   useEffect(() => {
@@ -84,12 +113,30 @@ export function useWinnersNotification(enabled = true) {
       return
     }
 
+    const runRefresh = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return
+      }
+
+      if (shouldFetchAfterDays(WINNERS_LAST_FETCH_KEY, FETCH_EVERY_DAYS)) {
+        void refreshWinners()
+      }
+    }
+
     const intervalId = window.setInterval(() => {
-      void refreshWinners()
-    }, 45000)
+      runRefresh()
+    }, AUTO_REFRESH_INTERVAL_MS)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        runRefresh()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [enabled, refreshWinners])
 

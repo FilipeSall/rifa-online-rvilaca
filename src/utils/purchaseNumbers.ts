@@ -1,4 +1,4 @@
-import { MAX_QUANTITY, MIN_QUANTITY } from '../const/purchaseNumbers'
+import { MIN_QUANTITY } from '../const/purchaseNumbers'
 
 export function formatCurrency(value: number) {
   return value.toLocaleString('pt-BR', {
@@ -26,6 +26,10 @@ export function pickRandomNumbers(pool: number[], quantity: number) {
 }
 
 export function getSafeQuantity(value: number, maxAvailable: number, minQuantity = MIN_QUANTITY) {
-  const nextValue = Number.isFinite(value) ? value : minQuantity
-  return Math.max(minQuantity, Math.min(nextValue, MAX_QUANTITY, maxAvailable))
+  const safeMax = Number.isFinite(maxAvailable) && maxAvailable > 0
+    ? Math.floor(maxAvailable)
+    : Number.MAX_SAFE_INTEGER
+  const safeMin = Math.max(1, Math.min(minQuantity, safeMax))
+  const nextValue = Number.isFinite(value) ? Math.floor(value) : safeMin
+  return Math.max(safeMin, Math.min(nextValue, safeMax))
 }

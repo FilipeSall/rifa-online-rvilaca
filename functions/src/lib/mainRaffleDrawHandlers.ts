@@ -8,6 +8,8 @@ import { asRecord, readTimestampMillis, requireActiveUid, sanitizeString } from 
 const MAIN_RAFFLE_DRAW_HISTORY_COLLECTION = 'mainRaffleDrawResults'
 const EXTRACTION_COUNT = 5
 const MAX_EXTRACTION_VALUE = 9_999_999
+const DEFAULT_PUBLIC_MAIN_HISTORY_LIMIT = 20
+const MAX_PUBLIC_MAIN_HISTORY_LIMIT = 40
 
 interface PublishMainRaffleDrawInput {
   extractionNumbers?: Array<number | string>
@@ -50,6 +52,10 @@ interface GetLatestMainRaffleDrawOutput {
 
 interface GetMainRaffleDrawHistoryOutput {
   results: MainRaffleDrawResult[]
+}
+
+interface GetMainRaffleDrawHistoryInput {
+  limit?: number
 }
 
 const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
@@ -167,6 +173,15 @@ function sanitizeOptionalDrawDate(value: unknown): string {
   }
 
   return normalized
+}
+
+function sanitizeHistoryLimit(value: unknown, max: number, fallback: number): number {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return fallback
+  }
+
+  return Math.min(Math.max(1, parsed), max)
 }
 
 async function assertAdminRole(db: Firestore, uid: string) {
@@ -625,11 +640,18 @@ export function createGetLatestMainRaffleDrawHandler(db: Firestore) {
 }
 
 export function createGetPublicMainRaffleDrawHistoryHandler(db: Firestore) {
-  return async (): Promise<GetMainRaffleDrawHistoryOutput> => {
+  return async (request: { data?: unknown }): Promise<GetMainRaffleDrawHistoryOutput> => {
+    const payload = asRecord(request.data) as GetMainRaffleDrawHistoryInput
+    const historyLimit = sanitizeHistoryLimit(
+      payload.limit,
+      MAX_PUBLIC_MAIN_HISTORY_LIMIT,
+      DEFAULT_PUBLIC_MAIN_HISTORY_LIMIT,
+    )
+
     try {
       const historySnapshot = await db.collection(MAIN_RAFFLE_DRAW_HISTORY_COLLECTION)
         .orderBy('publishedAtMs', 'desc')
-        .limit(120)
+        .limit(historyLimit)
         .get()
 
       const results = historySnapshot.docs

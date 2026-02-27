@@ -28,7 +28,7 @@ export default function App() {
   const { pathname } = useLocation()
   const isDashboardOrAccountRoute = pathname.startsWith('/dashboard') || pathname.startsWith('/minha-conta')
   const shouldRenderFeaturedVideoFloatingButton = !isDashboardOrAccountRoute
-  const shouldRenderWinnersNotifications = !isDashboardOrAccountRoute
+  const shouldRenderWinnersNotifications = pathname === '/'
   const winnersNotification = useWinnersNotification(shouldRenderWinnersNotifications)
 
   return (

@@ -2,10 +2,20 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../lib/firebase'
 import type { RankingItem } from '../const/home'
+import { markFetchedNow, readCachedJson, shouldFetchAfterDays, writeCachedJson } from '../utils/fetchCache'
 
 type GetChampionsRankingOutput = {
   updatedAtMs?: number
   items?: RankingItem[]
+}
+const RANKING_LIMIT = 20
+const FETCH_EVERY_DAYS = 5
+const CACHE_KEY = 'rifa-online:cache:champions-ranking:v1'
+const LAST_FETCH_KEY = 'rifa-online:last-fetch:champions-ranking:v1'
+
+type ChampionsRankingCache = {
+  items: RankingItem[]
+  updatedAtMs: number | null
 }
 
 type CallableEnvelope<T> = T | { result?: T }
@@ -55,14 +65,18 @@ export function useChampionsRanking() {
 
   const refreshRanking = useCallback(async () => {
     try {
-      const response = await getRankingCallable({ limit: 50 })
+      const response = await getRankingCallable({ limit: RANKING_LIMIT })
       const payload = unwrapCallableData(response.data as CallableEnvelope<GetChampionsRankingOutput>)
-      setItems(normalizeRankingItems(payload.items))
-      setUpdatedAtMs(
+      const nextItems = normalizeRankingItems(payload.items)
+      const nextUpdatedAtMs =
         typeof payload.updatedAtMs === 'number' && Number.isFinite(payload.updatedAtMs)
           ? payload.updatedAtMs
-          : Date.now(),
-      )
+          : Date.now()
+
+      setItems(nextItems)
+      setUpdatedAtMs(nextUpdatedAtMs)
+      writeCachedJson(CACHE_KEY, { items: nextItems, updatedAtMs: nextUpdatedAtMs } satisfies ChampionsRankingCache)
+      markFetchedNow(LAST_FETCH_KEY)
       setErrorMessage(null)
     } catch {
       setErrorMessage('Nao foi possivel carregar o ranking agora.')
@@ -72,12 +86,23 @@ export function useChampionsRanking() {
   }, [getRankingCallable])
 
   useEffect(() => {
-    void refreshRanking()
-    const intervalId = window.setInterval(() => {
-      void refreshRanking()
-    }, 30000)
+    const cached = readCachedJson<ChampionsRankingCache>(CACHE_KEY)
+    if (cached) {
+      setItems(Array.isArray(cached.items) ? cached.items : [])
+      setUpdatedAtMs(
+        typeof cached.updatedAtMs === 'number' && Number.isFinite(cached.updatedAtMs)
+          ? cached.updatedAtMs
+          : null,
+      )
+    }
 
-    return () => window.clearInterval(intervalId)
+    const shouldFetch = shouldFetchAfterDays(LAST_FETCH_KEY, FETCH_EVERY_DAYS)
+    if (shouldFetch || !cached) {
+      void refreshRanking()
+      return
+    }
+
+    setIsLoading(false)
   }, [refreshRanking])
 
   return {

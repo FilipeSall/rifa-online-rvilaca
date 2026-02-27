@@ -8,6 +8,7 @@ import {
   DEFAULT_SUPPORT_WHATSAPP_NUMBER,
   DEFAULT_TOTAL_NUMBERS,
 } from '../../../const/campaign'
+import { MAX_QUANTITY } from '../../../const/purchaseNumbers'
 import type {
   CampaignFeaturedVideoMedia,
   CampaignCoupon,
@@ -152,10 +153,10 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
     }
   }
 
-  if (!Number.isInteger(minPurchaseQuantity) || minPurchaseQuantity <= 0 || minPurchaseQuantity > 300) {
+  if (!Number.isInteger(minPurchaseQuantity) || minPurchaseQuantity <= 0 || minPurchaseQuantity > MAX_QUANTITY) {
     return {
       errorToastId: 'campaign-invalid-min-purchase',
-      errorMessage: 'Informe uma compra minima valida (1 a 300).',
+      errorMessage: `Informe uma compra minima valida (1 a ${MAX_QUANTITY}).`,
       payload: null,
     }
   }
@@ -191,7 +192,7 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
     payload: {
       title: normalizedTitle,
       pricePerCota: Number(normalizedPrice.toFixed(2)),
-      minPurchaseQuantity: Math.max(1, Math.min(minPurchaseQuantity || DEFAULT_MIN_PURCHASE_QUANTITY, 300)),
+      minPurchaseQuantity: Math.max(1, Math.min(minPurchaseQuantity || DEFAULT_MIN_PURCHASE_QUANTITY, MAX_QUANTITY)),
       mainPrize: normalizedMainPrize,
       secondPrize: normalizedSecondPrize,
       bonusPrize: normalizedBonusPrize,

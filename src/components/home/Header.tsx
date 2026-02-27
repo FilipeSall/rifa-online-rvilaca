@@ -119,7 +119,7 @@ export default function Header() {
 
           <div className="flex items-center gap-4" ref={authMenuRef}>
             <button
-              className="hidden md:flex h-10 items-center justify-center rounded border border-neon-cyan/60 bg-neon-cyan/10 hover:bg-neon-cyan/20 px-6 text-xs font-black text-neon-cyan transition-all uppercase tracking-widest"
+              className="hidden md:flex h-10 items-center justify-center rounded border border-neon-cyan/60 bg-neon-cyan/10 hover:bg-neon-cyan/20 px-6 text-xs font-black text-neon-cyan transition-all uppercase tracking-widest shadow-none hover:shadow-none"
               type="button"
               onClick={handleAuthButtonClick}
               aria-expanded={isAuthModalOpen}
@@ -295,7 +295,7 @@ export default function Header() {
               ))}
             </nav>
             <button
-              className="h-10 w-full rounded bg-neon-pink px-4 text-xs font-black uppercase tracking-widest text-black"
+              className="h-10 w-full rounded bg-neon-pink px-4 text-xs font-black uppercase tracking-widest text-black shadow-none hover:shadow-none"
               type="button"
               onClick={() => {
                 void handleAuthButtonClick()

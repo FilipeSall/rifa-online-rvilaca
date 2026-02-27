@@ -1,14 +1,49 @@
 import { FirebaseError } from 'firebase/app'
-import { doc, onSnapshot } from 'firebase/firestore'
 import { onIdTokenChanged } from 'firebase/auth'
+import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { auth } from '../lib/firebase'
 import { db } from '../lib/firebase'
 import { upsertUserProfile } from '../services/firestore/userProfile'
 import { useAuthStore, type UserRole } from '../stores/authStore'
+import { markFetchedNow, readCachedJson, shouldFetchAfterDays, writeCachedJson } from '../utils/fetchCache'
 
 type AuthProviderProps = {
   children: ReactNode
+}
+
+type UserRoleCache = {
+  uid: string
+  role: UserRole
+}
+
+const ROLE_FETCH_EVERY_DAYS = 5
+const PROFILE_SYNC_FETCH_EVERY_DAYS = 5
+
+function buildRoleCacheKey(uid: string) {
+  return `rifa-online:cache:user-role:${uid}:v1`
+}
+
+function buildRoleLastFetchKey(uid: string) {
+  return `rifa-online:last-fetch:user-role:${uid}:v1`
+}
+
+function buildProfileSyncLastFetchKey(uid: string) {
+  return `rifa-online:last-fetch:profile-sync:${uid}:v1`
+}
+
+function readCachedUserRole(uid: string): UserRole | null {
+  const cached = readCachedJson<UserRoleCache>(buildRoleCacheKey(uid))
+  if (!cached || cached.uid !== uid) {
+    return null
+  }
+
+  return cached.role === 'admin' ? 'admin' : cached.role === 'user' ? 'user' : null
+}
+
+function cacheUserRole(uid: string, role: UserRole) {
+  writeCachedJson(buildRoleCacheKey(uid), { uid, role } satisfies UserRoleCache)
+  markFetchedNow(buildRoleLastFetchKey(uid))
 }
 
 export default function AuthProvider({ children }: AuthProviderProps) {
@@ -19,8 +54,7 @@ export default function AuthProvider({ children }: AuthProviderProps) {
   const syncingUserIdsRef = useRef<Set<string>>(new Set())
   const deniedUserIdsRef = useRef<Set<string>>(new Set())
   const syncedUserIdsRef = useRef<Set<string>>(new Set())
-  const roleListenerRef = useRef<(() => void) | null>(null)
-  const roleListenerUidRef = useRef<string | null>(null)
+  const fetchingRoleUserIdsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     const unsubscribe = onIdTokenChanged(auth, (user) => {
@@ -37,98 +71,95 @@ export default function AuthProvider({ children }: AuthProviderProps) {
       }
 
       if (!user) {
-        if (roleListenerRef.current) {
-          roleListenerRef.current()
-          roleListenerRef.current = null
-          roleListenerUidRef.current = null
-        }
-
         syncingUserIdsRef.current.clear()
+        fetchingRoleUserIdsRef.current.clear()
         syncedUserIdsRef.current.clear()
         setUserRole(null)
         setRoleReady(true)
         return
       }
 
-      const hasSameRoleListener =
-        roleListenerRef.current !== null && roleListenerUidRef.current === user.uid
-
-      if (!hasSameRoleListener) {
-        if (roleListenerRef.current) {
-          roleListenerRef.current()
-          roleListenerRef.current = null
-          roleListenerUidRef.current = null
+      const uid = user.uid
+      const cachedRole = readCachedUserRole(uid)
+      if (cachedRole) {
+        if (currentState.userRole !== cachedRole || !currentState.isRoleReady) {
+          setUserRole(cachedRole)
+          setRoleReady(true)
         }
-
+      } else {
         setUserRole(null)
         setRoleReady(false)
+      }
 
-        const userDocRef = doc(db, 'users', user.uid)
-        roleListenerRef.current = onSnapshot(
-          userDocRef,
-          (snapshot) => {
-            const currentState = useAuthStore.getState()
+      const shouldRefreshRole =
+        !cachedRole || shouldFetchAfterDays(buildRoleLastFetchKey(uid), ROLE_FETCH_EVERY_DAYS)
+      if (shouldRefreshRole && !fetchingRoleUserIdsRef.current.has(uid)) {
+        fetchingRoleUserIdsRef.current.add(uid)
 
-            if (!snapshot.exists()) {
-              if (currentState.userRole === 'user' && currentState.isRoleReady) {
-                return
-              }
-
-              setUserRole('user')
-              setRoleReady(true)
+        const userDocRef = doc(db, 'users', uid)
+        void getDoc(userDocRef)
+          .then((snapshot) => {
+            if (auth.currentUser?.uid !== uid) {
               return
             }
 
-            const roleValue = snapshot.data().role
+            const roleValue = snapshot.exists() ? snapshot.data().role : null
             const normalizedRole: UserRole = roleValue === 'admin' ? 'admin' : 'user'
+            cacheUserRole(uid, normalizedRole)
 
-            if (currentState.userRole === normalizedRole && currentState.isRoleReady) {
+            const state = useAuthStore.getState()
+            if (state.userRole !== normalizedRole || !state.isRoleReady) {
+              setUserRole(normalizedRole)
+              setRoleReady(true)
+            }
+          })
+          .catch(() => {
+            if (auth.currentUser?.uid !== uid || cachedRole) {
               return
             }
 
-            setUserRole(normalizedRole)
-            setRoleReady(true)
-          },
-          (error) => {
             setUserRole('user')
             setRoleReady(true)
-          },
-        )
-        roleListenerUidRef.current = user.uid
+          })
+          .finally(() => {
+            fetchingRoleUserIdsRef.current.delete(uid)
+          })
       }
 
       if (
-        syncingUserIdsRef.current.has(user.uid) ||
-        deniedUserIdsRef.current.has(user.uid) ||
-        syncedUserIdsRef.current.has(user.uid)
+        syncingUserIdsRef.current.has(uid) ||
+        deniedUserIdsRef.current.has(uid) ||
+        syncedUserIdsRef.current.has(uid)
       ) {
         return
       }
 
-      syncingUserIdsRef.current.add(user.uid)
+      const profileSyncKey = buildProfileSyncLastFetchKey(uid)
+      if (!shouldFetchAfterDays(profileSyncKey, PROFILE_SYNC_FETCH_EVERY_DAYS)) {
+        syncedUserIdsRef.current.add(uid)
+        return
+      }
+
+      syncingUserIdsRef.current.add(uid)
 
       upsertUserProfile(user)
         .then(() => {
-          syncedUserIdsRef.current.add(user.uid)
+          syncedUserIdsRef.current.add(uid)
+          markFetchedNow(profileSyncKey)
         })
         .catch((error) => {
           if (error instanceof FirebaseError && error.code === 'permission-denied') {
-            deniedUserIdsRef.current.add(user.uid)
+            deniedUserIdsRef.current.add(uid)
+            markFetchedNow(profileSyncKey)
             return
           }
         })
         .finally(() => {
-          syncingUserIdsRef.current.delete(user.uid)
+          syncingUserIdsRef.current.delete(uid)
         })
     })
 
     return () => {
-      if (roleListenerRef.current) {
-        roleListenerRef.current()
-        roleListenerRef.current = null
-        roleListenerUidRef.current = null
-      }
-
       unsubscribe()
     }
   }, [setAuthReady, setAuthUser, setRoleReady, setUserRole])

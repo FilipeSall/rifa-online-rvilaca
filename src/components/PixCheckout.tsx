@@ -278,7 +278,7 @@ export default function PixCheckout({
 
       {status === 'idle' && (
         <button
-          className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-xl bg-green-500 px-4 text-sm font-bold uppercase tracking-wider text-white transition hover:bg-green-400 disabled:cursor-not-allowed disabled:opacity-70"
+          className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 px-4 text-sm font-bold uppercase tracking-wider text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
           disabled={isGenerating}
           onClick={handleCreatePix}
           type="button"
@@ -290,7 +290,7 @@ export default function PixCheckout({
       {(status === 'generating' || status === 'pending') && (
         <div className="mt-4 space-y-4">
           <button
-            className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-green-500 px-4 text-sm font-bold uppercase tracking-wider text-white disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 px-4 text-sm font-bold uppercase tracking-wider text-black disabled:cursor-not-allowed disabled:opacity-70"
             disabled
             type="button"
           >

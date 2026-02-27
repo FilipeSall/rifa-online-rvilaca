@@ -1,5 +1,5 @@
 export const MIN_QUANTITY = 10
-export const MAX_QUANTITY = 300
+export const MAX_QUANTITY = 1000
 export const DEFAULT_INITIAL_QUANTITY = 100
 export const RESERVATION_SECONDS = 5 * 60
 export const RAFFLE_NUMBER_START = 1

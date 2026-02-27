@@ -41,7 +41,12 @@ function parseOptionalPhone(value: unknown) {
     return null
   }
 
-  const phone = value.replace(/\D/g, '').slice(0, 11)
+  const rawDigits = value.replace(/\D/g, '')
+  if (!rawDigits) {
+    return null
+  }
+
+  const phone = rawDigits.slice(-11)
   return phone || null
 }
 

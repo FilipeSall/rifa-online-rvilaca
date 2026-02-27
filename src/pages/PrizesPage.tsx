@@ -163,12 +163,12 @@ function buildMainRaffleFallbackPath(item: {
 }
 
 export default function PrizesPage() {
-  const { result, history, isHistoryLoading } = useTopBuyersDraw(true, 'public')
+  const { result, history, isHistoryLoading } = useTopBuyersDraw(false, 'public')
   const {
     result: latestMainResult,
     history: mainHistory,
     isHistoryLoading: isMainHistoryLoading,
-  } = useMainRaffleDraw(true)
+  } = useMainRaffleDraw(false)
   const visibleResults = useMemo(() => {
     const merged = result ? [result, ...history] : history
     const uniqueByDrawId = new Map(merged.map((item) => [item.drawId, item]))

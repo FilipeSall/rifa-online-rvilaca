@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../lib/firebase'
 import type { RankingItem } from '../const/home'
+import { markFetchedNow, readCachedJson, shouldFetchAfterDays, writeCachedJson } from '../utils/fetchCache'
 
 type GetWeeklyTopBuyersRankingOutput = {
   updatedAtMs?: number
@@ -9,6 +10,18 @@ type GetWeeklyTopBuyersRankingOutput = {
   weekStartAtMs?: number
   weekEndAtMs?: number
   items?: RankingItem[]
+}
+const RANKING_LIMIT = 20
+const FETCH_EVERY_DAYS = 5
+const CACHE_KEY = 'rifa-online:cache:weekly-top-buyers-ranking:v1'
+const LAST_FETCH_KEY = 'rifa-online:last-fetch:weekly-top-buyers-ranking:v1'
+
+type WeeklyRankingCache = {
+  items: RankingItem[]
+  updatedAtMs: number | null
+  weekId: string | null
+  weekStartAtMs: number | null
+  weekEndAtMs: number | null
 }
 
 type CallableEnvelope<T> = T | { result?: T }
@@ -61,25 +74,36 @@ export function useWeeklyTopBuyersRanking() {
 
   const refreshRanking = useCallback(async () => {
     try {
-      const response = await getWeeklyRankingCallable({ limit: 50 })
+      const response = await getWeeklyRankingCallable({ limit: RANKING_LIMIT })
       const payload = unwrapCallableData(response.data as CallableEnvelope<GetWeeklyTopBuyersRankingOutput>)
-      setItems(normalizeRankingItems(payload.items))
-      setUpdatedAtMs(
+      const nextItems = normalizeRankingItems(payload.items)
+      const nextUpdatedAtMs =
         typeof payload.updatedAtMs === 'number' && Number.isFinite(payload.updatedAtMs)
           ? payload.updatedAtMs
-          : Date.now(),
-      )
-      setWeekId(typeof payload.weekId === 'string' ? payload.weekId : null)
-      setWeekStartAtMs(
+          : Date.now()
+      const nextWeekId = typeof payload.weekId === 'string' ? payload.weekId : null
+      const nextWeekStartAtMs =
         typeof payload.weekStartAtMs === 'number' && Number.isFinite(payload.weekStartAtMs)
           ? payload.weekStartAtMs
-          : null,
-      )
-      setWeekEndAtMs(
+          : null
+      const nextWeekEndAtMs =
         typeof payload.weekEndAtMs === 'number' && Number.isFinite(payload.weekEndAtMs)
           ? payload.weekEndAtMs
-          : null,
-      )
+          : null
+
+      setItems(nextItems)
+      setUpdatedAtMs(nextUpdatedAtMs)
+      setWeekId(nextWeekId)
+      setWeekStartAtMs(nextWeekStartAtMs)
+      setWeekEndAtMs(nextWeekEndAtMs)
+      writeCachedJson(CACHE_KEY, {
+        items: nextItems,
+        updatedAtMs: nextUpdatedAtMs,
+        weekId: nextWeekId,
+        weekStartAtMs: nextWeekStartAtMs,
+        weekEndAtMs: nextWeekEndAtMs,
+      } satisfies WeeklyRankingCache)
+      markFetchedNow(LAST_FETCH_KEY)
       setErrorMessage(null)
     } catch {
       setErrorMessage('Nao foi possivel carregar o ranking semanal agora.')
@@ -89,12 +113,34 @@ export function useWeeklyTopBuyersRanking() {
   }, [getWeeklyRankingCallable])
 
   useEffect(() => {
-    void refreshRanking()
-    const intervalId = window.setInterval(() => {
-      void refreshRanking()
-    }, 30000)
+    const cached = readCachedJson<WeeklyRankingCache>(CACHE_KEY)
+    if (cached) {
+      setItems(Array.isArray(cached.items) ? cached.items : [])
+      setUpdatedAtMs(
+        typeof cached.updatedAtMs === 'number' && Number.isFinite(cached.updatedAtMs)
+          ? cached.updatedAtMs
+          : null,
+      )
+      setWeekId(typeof cached.weekId === 'string' ? cached.weekId : null)
+      setWeekStartAtMs(
+        typeof cached.weekStartAtMs === 'number' && Number.isFinite(cached.weekStartAtMs)
+          ? cached.weekStartAtMs
+          : null,
+      )
+      setWeekEndAtMs(
+        typeof cached.weekEndAtMs === 'number' && Number.isFinite(cached.weekEndAtMs)
+          ? cached.weekEndAtMs
+          : null,
+      )
+    }
 
-    return () => window.clearInterval(intervalId)
+    const shouldFetch = shouldFetchAfterDays(LAST_FETCH_KEY, FETCH_EVERY_DAYS)
+    if (shouldFetch || !cached) {
+      void refreshRanking()
+      return
+    }
+
+    setIsLoading(false)
   }, [refreshRanking])
 
   return {

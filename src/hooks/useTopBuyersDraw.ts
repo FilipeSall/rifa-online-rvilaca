@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../lib/firebase'
+import { markFetchedNow, readCachedJson, shouldFetchAfterDays, writeCachedJson } from '../utils/fetchCache'
 
 type CallableEnvelope<T> = T | { result?: T }
 
@@ -62,11 +63,23 @@ type GetTopBuyersDrawHistoryOutput = {
 }
 
 type HistoryScope = 'none' | 'admin' | 'public'
+const AUTO_REFRESH_INTERVAL_MS = 3 * 60 * 1000
+const FETCH_EVERY_DAYS = 5
+const PUBLIC_HISTORY_LIMIT = 20
+const ADMIN_HISTORY_LIMIT = 60
+const RESULT_CACHE_KEY = 'rifa-online:cache:top-buyers:result:v1'
+const RESULT_LAST_FETCH_KEY = 'rifa-online:last-fetch:top-buyers:result:v1'
+const HISTORY_CACHE_KEY_PREFIX = 'rifa-online:cache:top-buyers:history'
+const HISTORY_LAST_FETCH_KEY_PREFIX = 'rifa-online:last-fetch:top-buyers:history'
 
 type PublishTopBuyersDrawInput = {
   extractionNumbers: string[]
   rankingLimit?: number
   drawPrize: string
+}
+
+type HistoryFetchInput = {
+  limit?: number
 }
 
 export type TopBuyersDrawWinner = {
@@ -115,6 +128,14 @@ export type TopBuyersDrawResult = {
   winnerTicketNumbers: string[]
   rankingSnapshot: TopBuyersDrawItem[]
   publishedAtMs: number
+}
+
+type TopBuyersDrawCache = {
+  result: TopBuyersDrawResult | null
+}
+
+type TopBuyersDrawHistoryCache = {
+  results: TopBuyersDrawResult[]
 }
 
 function unwrapCallableData<T>(value: CallableEnvelope<T>) {
@@ -266,7 +287,7 @@ function normalizeResult(raw: RawTopBuyersDrawResult | null | undefined): TopBuy
   return result
 }
 
-export function useTopBuyersDraw(autoRefresh = true, historyScope: HistoryScope = 'none') {
+export function useTopBuyersDraw(autoRefresh = false, historyScope: HistoryScope = 'none') {
   const [result, setResult] = useState<TopBuyersDrawResult | null>(null)
   const [history, setHistory] = useState<TopBuyersDrawResult[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -283,13 +304,16 @@ export function useTopBuyersDraw(autoRefresh = true, historyScope: HistoryScope 
     [],
   )
   const getTopBuyersDrawHistory = useMemo(
-    () => httpsCallable<Record<string, never>, unknown>(functions, 'getTopBuyersDrawHistory'),
+    () => httpsCallable<HistoryFetchInput, unknown>(functions, 'getTopBuyersDrawHistory'),
     [],
   )
   const getPublicTopBuyersDrawHistory = useMemo(
-    () => httpsCallable<Record<string, never>, unknown>(functions, 'getPublicTopBuyersDrawHistory'),
+    () => httpsCallable<HistoryFetchInput, unknown>(functions, 'getPublicTopBuyersDrawHistory'),
     [],
   )
+
+  const historyCacheKey = `${HISTORY_CACHE_KEY_PREFIX}:${historyScope}:v1`
+  const historyLastFetchKey = `${HISTORY_LAST_FETCH_KEY_PREFIX}:${historyScope}:v1`
 
   const refreshHistory = useCallback(async () => {
     if (historyScope === 'none') {
@@ -299,20 +323,29 @@ export function useTopBuyersDraw(autoRefresh = true, historyScope: HistoryScope 
 
     setIsHistoryLoading(true)
     try {
+      const historyLimit = historyScope === 'admin' ? ADMIN_HISTORY_LIMIT : PUBLIC_HISTORY_LIMIT
       const response = historyScope === 'admin'
-        ? await getTopBuyersDrawHistory({})
-        : await getPublicTopBuyersDrawHistory({})
+        ? await getTopBuyersDrawHistory({ limit: historyLimit })
+        : await getPublicTopBuyersDrawHistory({ limit: historyLimit })
       const payload = unwrapCallableData(response.data as CallableEnvelope<GetTopBuyersDrawHistoryOutput>)
       const normalizedHistory = Array.isArray(payload?.results)
         ? payload.results.map((item) => normalizeResult(item as RawTopBuyersDrawResult)).filter((item): item is TopBuyersDrawResult => Boolean(item))
         : []
       setHistory(normalizedHistory)
+      writeCachedJson(historyCacheKey, { results: normalizedHistory } satisfies TopBuyersDrawHistoryCache)
+      markFetchedNow(historyLastFetchKey)
     } catch {
       setHistory([])
     } finally {
       setIsHistoryLoading(false)
     }
-  }, [getPublicTopBuyersDrawHistory, getTopBuyersDrawHistory, historyScope])
+  }, [
+    getPublicTopBuyersDrawHistory,
+    getTopBuyersDrawHistory,
+    historyScope,
+    historyCacheKey,
+    historyLastFetchKey,
+  ])
 
   const refreshResult = useCallback(async () => {
     try {
@@ -323,6 +356,8 @@ export function useTopBuyersDraw(autoRefresh = true, historyScope: HistoryScope 
         : unwrapCallableData(rawPayload as CallableEnvelope<GetLatestTopBuyersDrawOutput>)
       const normalizedResult = normalizeResult(payload?.result || null)
       setResult(normalizedResult)
+      writeCachedJson(RESULT_CACHE_KEY, { result: normalizedResult } satisfies TopBuyersDrawCache)
+      markFetchedNow(RESULT_LAST_FETCH_KEY)
       setErrorMessage(null)
     } catch {
       setErrorMessage('Nao foi possivel carregar o ultimo resultado publicado.')
@@ -344,6 +379,8 @@ export function useTopBuyersDraw(autoRefresh = true, historyScope: HistoryScope 
       }
 
       setResult(normalized)
+      writeCachedJson(RESULT_CACHE_KEY, { result: normalized } satisfies TopBuyersDrawCache)
+      markFetchedNow(RESULT_LAST_FETCH_KEY)
       setHistory((current) => {
         const deduped = [normalized, ...current.filter((item) => item.drawId !== normalized.drawId)]
         return deduped.sort((left, right) => (right.publishedAtMs || 0) - (left.publishedAtMs || 0))
@@ -356,24 +393,74 @@ export function useTopBuyersDraw(autoRefresh = true, historyScope: HistoryScope 
   }, [publishTopBuyersDraw])
 
   useEffect(() => {
-    void refreshResult()
-    if (historyScope !== 'none') {
-      void refreshHistory()
+    const cachedResult = readCachedJson<TopBuyersDrawCache>(RESULT_CACHE_KEY)
+    if (cachedResult && 'result' in cachedResult) {
+      setResult(cachedResult.result)
     }
 
+    if (historyScope !== 'none') {
+      const cachedHistory = readCachedJson<TopBuyersDrawHistoryCache>(historyCacheKey)
+      if (cachedHistory && Array.isArray(cachedHistory.results)) {
+        setHistory(cachedHistory.results)
+      }
+    }
+
+    const shouldFetchResult = shouldFetchAfterDays(RESULT_LAST_FETCH_KEY, FETCH_EVERY_DAYS)
+    if (shouldFetchResult || !cachedResult) {
+      void refreshResult()
+    } else {
+      setIsLoading(false)
+    }
+
+    if (historyScope !== 'none') {
+      const shouldFetchHistory = shouldFetchAfterDays(historyLastFetchKey, FETCH_EVERY_DAYS)
+      const hasCachedHistory = Boolean(readCachedJson<TopBuyersDrawHistoryCache>(historyCacheKey))
+      if (shouldFetchHistory || !hasCachedHistory) {
+        void refreshHistory()
+      } else {
+        setIsHistoryLoading(false)
+      }
+    }
+  }, [historyCacheKey, historyLastFetchKey, historyScope, refreshHistory, refreshResult])
+
+  useEffect(() => {
     if (!autoRefresh) {
       return undefined
     }
 
-    const intervalId = window.setInterval(() => {
-      void refreshResult()
-      if (historyScope !== 'none') {
-        void refreshHistory()
+    const runRefresh = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return
       }
-    }, 45000)
 
-    return () => window.clearInterval(intervalId)
-  }, [autoRefresh, historyScope, refreshHistory, refreshResult])
+      const shouldFetchResult = shouldFetchAfterDays(RESULT_LAST_FETCH_KEY, FETCH_EVERY_DAYS)
+      if (shouldFetchResult) {
+        void refreshResult()
+      }
+      if (historyScope !== 'none') {
+        const shouldFetchHistory = shouldFetchAfterDays(historyLastFetchKey, FETCH_EVERY_DAYS)
+        if (shouldFetchHistory) {
+          void refreshHistory()
+        }
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      runRefresh()
+    }, AUTO_REFRESH_INTERVAL_MS)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        runRefresh()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [autoRefresh, historyLastFetchKey, historyScope, refreshHistory, refreshResult])
 
   return {
     result,

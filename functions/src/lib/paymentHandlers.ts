@@ -38,7 +38,6 @@ import {
   sameNumberSet,
   sanitizeAmount,
   sanitizeOptionalAmount,
-  sanitizePhone,
   sanitizeString,
   sleep,
   requireActiveUid,
@@ -208,6 +207,24 @@ function sanitizeCpf(value: unknown): string | null {
   }
 
   return digits
+}
+
+function normalizeGatewayPhone(value: unknown): string | null {
+  const rawDigits = sanitizeString(value).replace(/\D/g, '')
+  if (!rawDigits) {
+    return null
+  }
+
+  let digits = rawDigits
+  if (digits.length > 11 && digits.startsWith('55')) {
+    digits = digits.slice(-11)
+  }
+
+  if (digits.length === 10 || digits.length === 11) {
+    return digits
+  }
+
+  return null
 }
 
 function inferOrderStatus(payload: unknown): OrderStatus {
@@ -622,8 +639,9 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
       const payload = asRecord(request.data) as Partial<CreatePixDepositInput>
       const requestedAmount = sanitizeOptionalAmount(payload.amount)
       const payerName = sanitizeString(payload.payerName)
-      const phone = sanitizePhone(payload.phone)
+      const phone = normalizeGatewayPhone(payload.phone)
       const cpf = sanitizeCpf(payload.cpf)
+      const rawPhoneDigits = sanitizeString(payload.phone).replace(/\D/g, '')
       const reservationRef = db.collection('numberReservations').doc(uid)
       const reservationSnapshot = await reservationRef.get()
 
@@ -712,6 +730,8 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         payerNameMasked: maskName(payerName),
         phoneMasked: maskPhoneNumber(phone),
         hasPhone: Boolean(phone),
+        rawPhoneDigitsLength: rawPhoneDigits.length || null,
+        phoneIgnoredAsInvalid: Boolean(rawPhoneDigits) && !phone,
         hasCpf: Boolean(cpf),
         clientReferenceBase,
         hasCallbackUrl: Boolean(callbackUrl),

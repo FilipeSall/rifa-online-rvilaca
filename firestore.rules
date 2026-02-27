@@ -56,20 +56,29 @@ service cloud.firestore {
       return isValidUserProfileBase() && roleKeptUnchanged;
     }
 
+    function hasSafeListLimit(maxLimit) {
+      return request.query.limit != null
+        && request.query.limit > 0
+        && request.query.limit <= maxLimit;
+    }
+
     // Dados públicos de campanha usados pela landing page.
     match /campaigns/{campaignId} {
-      allow read: if true;
+      allow get: if true;
+      allow list: if false;
       allow write: if false;
     }
 
     // Sorteios e ganhadores — visibilidade pública.
     match /draws/{drawId} {
-      allow read: if true;
+      allow get: if true;
+      allow list: if false;
       allow write: if false;
     }
 
     match /winners/{winnerId} {
-      allow read: if true;
+      allow get: if true;
+      allow list: if false;
       allow write: if false;
     }
 
@@ -88,7 +97,8 @@ service cloud.firestore {
     // Perfil do usuário: somente o próprio usuário pode ler e escrever.
     // delete: if false explícito é seguro porque write foi separado em create/update.
     match /users/{uid} {
-      allow read: if isOwner(uid);
+      allow get: if isOwner(uid);
+      allow list: if false;
       allow create: if isOwner(uid) && isValidUserProfileCreate();
       allow update: if isOwner(uid) && isValidUserProfileUpdate();
       allow delete: if false;
@@ -102,13 +112,17 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['uid', 'cpf', 'createdAt'])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.cpf == cpfId;
-      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow list: if false;
       allow update, delete: if false;
     }
 
     // Coleções sensíveis/transacionais — somente backend via Admin SDK.
     match /orders/{orderId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && hasSafeListLimit(120);
       allow write: if false;
     }
 

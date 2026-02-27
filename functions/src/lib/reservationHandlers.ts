@@ -3,7 +3,6 @@ import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
 import {
   CAMPAIGN_DOC_ID,
-  MAX_PURCHASE_QUANTITY,
   RAFFLE_NUMBER_END,
   RAFFLE_NUMBER_START,
   RESERVATION_DURATION_MS,
@@ -36,6 +35,7 @@ function sanitizeReservationNumbers(
   rangeStart: number,
   rangeEnd: number,
   minPurchaseQuantity: number,
+  maxReservationQuantity: number,
 ): number[] {
   if (!Array.isArray(value)) {
     throw new HttpsError('invalid-argument', 'numbers deve ser uma lista')
@@ -62,8 +62,8 @@ function sanitizeReservationNumbers(
     throw new HttpsError('invalid-argument', `Selecione no minimo ${minPurchaseQuantity} numeros`)
   }
 
-  if (parsed.length > MAX_PURCHASE_QUANTITY) {
-    throw new HttpsError('invalid-argument', `Selecione no maximo ${MAX_PURCHASE_QUANTITY} numeros`)
+  if (parsed.length > maxReservationQuantity) {
+    throw new HttpsError('invalid-argument', `Selecione no maximo ${maxReservationQuantity} numeros`)
   }
 
   return parsed
@@ -103,6 +103,7 @@ export function createReserveNumbersHandler(db: Firestore) {
         campaignRange.start,
         campaignRange.end,
         minPurchaseQuantity,
+        campaignRange.total,
       )
       const nowMs = Date.now()
       const expiresAtMs = nowMs + RESERVATION_DURATION_MS

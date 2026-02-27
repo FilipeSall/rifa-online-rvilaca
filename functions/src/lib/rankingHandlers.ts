@@ -35,6 +35,19 @@ interface GetWeeklyTopBuyersRankingOutput {
 }
 
 const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
+const MAX_PUBLIC_RANKING_LIMIT = 50
+const RANKING_CACHE_TTL_MS = 3 * 60 * 1000
+
+type RankingCacheEntry = {
+  updatedAtMs: number
+  expiresAtMs: number
+  items: ChampionRankingItem[]
+}
+
+let championsRankingCache: RankingCacheEntry | null = null
+let championsRankingInFlight: Promise<RankingCacheEntry> | null = null
+const weeklyRankingCache = new Map<string, RankingCacheEntry>()
+const weeklyRankingInFlight = new Map<string, Promise<RankingCacheEntry>>()
 
 function sanitizeLimit(value: unknown, max = 10, fallback = 5) {
   const parsed = Number(value)
@@ -132,6 +145,86 @@ function getWeeklyRankingWindow(nowMs = Date.now()): RankingWindow {
   }
 }
 
+function isCacheFresh(cache: RankingCacheEntry | null, nowMs: number) {
+  return Boolean(cache && cache.expiresAtMs > nowMs)
+}
+
+async function loadChampionsRankingCached(db: Firestore): Promise<RankingCacheEntry> {
+  const nowMs = Date.now()
+  if (isCacheFresh(championsRankingCache, nowMs)) {
+    return championsRankingCache as RankingCacheEntry
+  }
+
+  if (championsRankingInFlight) {
+    return championsRankingInFlight
+  }
+
+  championsRankingInFlight = (async () => {
+    const items = await buildRanking(db, MAX_PUBLIC_RANKING_LIMIT)
+    const updatedAtMs = Date.now()
+    const cacheEntry: RankingCacheEntry = {
+      items,
+      updatedAtMs,
+      expiresAtMs: updatedAtMs + RANKING_CACHE_TTL_MS,
+    }
+    championsRankingCache = cacheEntry
+    return cacheEntry
+  })()
+
+  try {
+    return await championsRankingInFlight
+  } finally {
+    championsRankingInFlight = null
+  }
+}
+
+async function loadWeeklyRankingCached(
+  db: Firestore,
+  rankingWindow: RankingWindow,
+): Promise<RankingCacheEntry> {
+  const nowMs = Date.now()
+  const cacheKey = rankingWindow.weekId
+  const currentCache = weeklyRankingCache.get(cacheKey) || null
+
+  if (isCacheFresh(currentCache, nowMs)) {
+    return currentCache as RankingCacheEntry
+  }
+
+  const inFlight = weeklyRankingInFlight.get(cacheKey)
+  if (inFlight) {
+    return inFlight
+  }
+
+  const promise = (async () => {
+    const items = await buildRanking(db, MAX_PUBLIC_RANKING_LIMIT, {
+      startMs: rankingWindow.startMs,
+      endMs: rankingWindow.endMs,
+    })
+    const updatedAtMs = Date.now()
+    const cacheEntry: RankingCacheEntry = {
+      items,
+      updatedAtMs,
+      expiresAtMs: updatedAtMs + RANKING_CACHE_TTL_MS,
+    }
+
+    for (const existingKey of weeklyRankingCache.keys()) {
+      if (existingKey !== cacheKey) {
+        weeklyRankingCache.delete(existingKey)
+      }
+    }
+    weeklyRankingCache.set(cacheKey, cacheEntry)
+    return cacheEntry
+  })()
+
+  weeklyRankingInFlight.set(cacheKey, promise)
+
+  try {
+    return await promise
+  } finally {
+    weeklyRankingInFlight.delete(cacheKey)
+  }
+}
+
 async function buildRanking(
   db: Firestore,
   limit: number,
@@ -220,15 +313,15 @@ async function buildRanking(
 export function createGetChampionsRankingHandler(db: Firestore) {
   return async (request: { data: unknown }): Promise<GetChampionsRankingOutput> => {
     const payload = asRecord(request.data) as GetChampionsRankingInput
-    const limit = sanitizeLimit(payload.limit, 50, 5)
+    const limit = sanitizeLimit(payload.limit, MAX_PUBLIC_RANKING_LIMIT, 5)
 
     try {
-      const items = await buildRanking(db, limit)
+      const cached = await loadChampionsRankingCached(db)
 
       return {
         campaignId: CAMPAIGN_DOC_ID,
-        updatedAtMs: Date.now(),
-        items,
+        updatedAtMs: cached.updatedAtMs,
+        items: cached.items.slice(0, limit),
       }
     } catch (error) {
       logger.error('getChampionsRanking failed', {
@@ -242,22 +335,19 @@ export function createGetChampionsRankingHandler(db: Firestore) {
 export function createGetWeeklyTopBuyersRankingHandler(db: Firestore) {
   return async (request: { data: unknown }): Promise<GetWeeklyTopBuyersRankingOutput> => {
     const payload = asRecord(request.data) as GetWeeklyTopBuyersRankingInput
-    const limit = sanitizeLimit(payload.limit, 50, 50)
+    const limit = sanitizeLimit(payload.limit, MAX_PUBLIC_RANKING_LIMIT, MAX_PUBLIC_RANKING_LIMIT)
     const rankingWindow = getWeeklyRankingWindow()
 
     try {
-      const items = await buildRanking(db, limit, {
-        startMs: rankingWindow.startMs,
-        endMs: rankingWindow.endMs,
-      })
+      const cached = await loadWeeklyRankingCached(db, rankingWindow)
 
       return {
         campaignId: CAMPAIGN_DOC_ID,
-        updatedAtMs: Date.now(),
+        updatedAtMs: cached.updatedAtMs,
         weekId: rankingWindow.weekId,
         weekStartAtMs: rankingWindow.startMs,
         weekEndAtMs: rankingWindow.endMs,
-        items,
+        items: cached.items.slice(0, limit),
       }
     } catch (error) {
       logger.error('getWeeklyTopBuyersRanking failed', {

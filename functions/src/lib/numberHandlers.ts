@@ -5,7 +5,6 @@ import {
   CAMPAIGN_DOC_ID,
   DEFAULT_NUMBER_WINDOW_PAGE_SIZE,
   MAX_NUMBER_WINDOW_PAGE_SIZE,
-  MAX_PURCHASE_QUANTITY,
 } from './constants.js'
 import {
   buildNumberStateView,
@@ -103,17 +102,17 @@ function sanitizeOptionalPageStart(raw: unknown): number | null {
   return pageStart
 }
 
-function sanitizeQuantity(raw: unknown): number {
+function sanitizeQuantity(raw: unknown, maxAllowed: number): number {
   const quantity = Number(raw)
 
   if (!Number.isInteger(quantity)) {
     throw new HttpsError('invalid-argument', 'quantity deve ser um numero inteiro')
   }
 
-  if (quantity <= 0 || quantity > MAX_PURCHASE_QUANTITY) {
+  if (quantity <= 0 || quantity > maxAllowed) {
     throw new HttpsError(
       'invalid-argument',
-      `quantity deve estar entre 1 e ${MAX_PURCHASE_QUANTITY}`,
+      `quantity deve estar entre 1 e ${maxAllowed}`,
     )
   }
 
@@ -630,8 +629,8 @@ export function createPickRandomAvailableNumbersHandler(db: Firestore) {
     try {
       const payload = asRecord(request.data) as Partial<PickRandomAvailableNumbersInput>
       const campaignId = sanitizeCampaignId(payload.campaignId)
-      const quantity = sanitizeQuantity(payload.quantity)
       const campaignRange = await resolveCampaignRange(db, campaignId)
+      const quantity = sanitizeQuantity(payload.quantity, campaignRange.total)
       const excludedNumbers = new Set(
         sanitizeExcludeNumbers(payload.excludeNumbers, campaignRange.start, campaignRange.end),
       )
