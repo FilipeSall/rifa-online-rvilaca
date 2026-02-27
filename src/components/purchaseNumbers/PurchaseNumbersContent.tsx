@@ -143,9 +143,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
       return
     }
 
-    if (selectionMode !== 'manual') {
-      setSelectionMode('manual')
-    }
+    handleClearSelectedNumbers()
 
     searchParams.delete('mode')
     const nextSearch = searchParams.toString()
@@ -156,7 +154,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
       },
       { replace: true },
     )
-  }, [location.pathname, location.search, navigate, selectionMode, setSelectionMode])
+  }, [handleClearSelectedNumbers, location.pathname, location.search, navigate])
 
   useEffect(() => {
     if (!isMobileCartOpen || mobileModalView !== 'auth' || !shouldProceedAfterMobileAuth || !isLoggedIn) {

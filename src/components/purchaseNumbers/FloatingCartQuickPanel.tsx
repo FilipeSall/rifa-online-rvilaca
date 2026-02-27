@@ -18,7 +18,7 @@ export default function FloatingCartQuickPanel() {
   }
 
   return (
-    <div className="relative">
+    <div className="fixed bottom-4 right-4 z-[72] sm:relative sm:bottom-auto sm:right-auto sm:z-auto">
       <button
         aria-label="Abrir carrinho"
         className="group relative flex h-16 w-16 items-center justify-center rounded-full border border-cyan-300/40 bg-cyan-500/90 text-black shadow-[0_15px_35px_rgba(0,0,0,0.45)] transition-all hover:scale-[1.03] hover:brightness-105"

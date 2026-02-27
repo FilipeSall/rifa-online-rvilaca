@@ -212,7 +212,7 @@ export default function HeroSection({
             {/* CTA button + secure payment */}
             <div className="mt-1 flex w-full flex-col gap-2 lg:max-w-lg xl:max-w-none" style={heroScaledAlignedSectionStyle}>
               <button
-                className="inline-flex w-full h-16 items-center justify-center rounded-xl bg-gradient-to-r from-purple-600 via-violet-500 to-purple-700 px-8 text-base font-black text-white transition-all hover:brightness-110 hover:scale-[1.02] shadow-[0_0_32px_rgba(139,92,246,0.6),0_0_64px_rgba(139,92,246,0.3)] uppercase tracking-widest gap-3 disabled:cursor-not-allowed disabled:opacity-70"
+                className="inline-flex w-full h-16 items-center justify-center rounded-xl border border-violet-200/30 bg-gradient-to-r from-purple-600 via-violet-500 to-purple-700 px-8 text-base font-black text-white transition-all hover:scale-[1.02] hover:border-violet-100/45 hover:brightness-110 shadow-[0_0_32px_rgba(139,92,246,0.6),0_0_64px_rgba(139,92,246,0.3)] uppercase tracking-widest gap-3 disabled:cursor-not-allowed disabled:opacity-70"
                 type="button"
                 disabled={isQuickCheckoutLoading}
                 onClick={onQuickCheckout}

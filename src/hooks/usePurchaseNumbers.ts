@@ -206,11 +206,12 @@ function pickRandomUniqueNumbersFromRange(
   return Array.from(selected).sort((left, right) => left - right)
 }
 
-export function usePurchaseNumbers() {
+export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionMode }) {
   const navigate = useNavigate()
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
   const setPurchaseSummary = usePurchaseSummaryStore((state) => state.setSummary)
   const { campaign } = useCampaignSettings()
+  const initialSelectionMode = options?.initialSelectionMode === 'manual' ? 'manual' : 'automatico'
 
   const totalNumbers =
     Number.isInteger(campaign.totalNumbers) && campaign.totalNumbers > 0
@@ -220,7 +221,7 @@ export function usePurchaseNumbers() {
   const rangeEnd = rangeStart + totalNumbers - 1
 
   const [pageStartState, setPageStartState] = useState(rangeStart)
-  const [selectionMode, setSelectionMode] = useState<SelectionMode>('automatico')
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>(initialSelectionMode)
   const [quantity, setQuantity] = useState(
     getSafeQuantity(DEFAULT_INITIAL_QUANTITY, MAX_QUANTITY, MIN_QUANTITY),
   )
