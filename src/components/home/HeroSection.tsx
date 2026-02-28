@@ -245,7 +245,7 @@ export default function HeroSection({
           {/* Moto image */}
           <div className="relative order-1 lg:col-span-6 lg:order-2">
             <div className="absolute inset-0 bg-neon-pink/20 blur-[100px] rounded-full opacity-20" />
-            <div className="relative z-10 mx-auto aspect-square w-full max-w-[680px] hero-carousel-frame lg:w-[min(40vw,640px)]">
+            <div className="relative z-10 mx-auto aspect-square w-full max-w-[680px] hero-carousel-frame max-[639px]:left-1/2 max-[639px]:w-screen max-[639px]:max-w-none max-[639px]:-translate-x-1/2 lg:w-[min(40vw,640px)]">
               {heroCarouselImages.length > 0 ? (
                 <Swiper
                   modules={[Autoplay, Pagination]}
@@ -289,7 +289,7 @@ export default function HeroSection({
               ) : (
                 <div
                   aria-hidden="true"
-                  className="h-full w-full rounded-[28px] border border-white/10 bg-black/35"
+                  className="h-full w-full rounded-[28px] border border-white/10 bg-black/35 max-[639px]:rounded-none"
                 />
               )}
 

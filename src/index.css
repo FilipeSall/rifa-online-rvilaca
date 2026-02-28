@@ -291,6 +291,21 @@ body {
   box-shadow: 0 0 12px rgba(255, 0, 204, 0.45);
 }
 
+@media (max-width: 639px) {
+  .hero-carousel-frame {
+    border-radius: 0;
+  }
+
+  .hero-carousel-frame::after {
+    border-radius: 0;
+  }
+
+  .hero-carousel-swiper .swiper-pagination {
+    top: 0.85rem !important;
+    bottom: auto !important;
+  }
+}
+
 @keyframes heroSheenMove {
   from {
     transform: translateX(-130%);
