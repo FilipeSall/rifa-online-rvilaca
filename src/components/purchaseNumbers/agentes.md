@@ -39,7 +39,7 @@ Este fluxo controla selecao de numeros, conflito e ida para checkout.
 
 ## Invariantes de negocio
 
-- Quantidade minima vem de `campaign.minPurchaseQuantity`.
+- Quantidade minima e maxima seguem o menor/maior bracket ativo em `campaign.packPrices`.
 - Limite maximo segue `campaign.totalNumbers`.
 - Navegacao para `/checkout` so depois de reserva bem sucedida.
 

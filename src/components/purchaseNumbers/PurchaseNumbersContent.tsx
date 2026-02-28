@@ -24,7 +24,8 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     selectionMode,
     setSelectionMode,
     quantity,
-    minPurchaseQuantity,
+    availablePackQuantities,
+    minSelectableQuantity,
     maxSelectable,
     rangeStart,
     rangeEnd,
@@ -180,7 +181,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
   const summaryCardProps = useMemo(
     () => ({
       selectedCount,
-      minQuantity: minPurchaseQuantity,
+      minQuantity: minSelectableQuantity,
       unitPrice,
       subtotal,
       discountAmount,
@@ -202,7 +203,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     }),
     [
       selectedCount,
-      minPurchaseQuantity,
+      minSelectableQuantity,
       unitPrice,
       subtotal,
       discountAmount,
@@ -231,7 +232,9 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
           <div className="space-y-6 xl:col-span-8">
             <QuantitySelectionCard
               quantity={quantity}
-              minQuantity={minPurchaseQuantity}
+              minQuantity={minSelectableQuantity}
+              packQuantities={availablePackQuantities}
+              featuredPromotion={purchaseState.campaign.featuredPromotion}
               maxSelectable={maxSelectable}
               onSetQuantity={handleSetQuantity}
             />

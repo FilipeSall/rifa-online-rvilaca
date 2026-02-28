@@ -2,7 +2,6 @@ import {
   CAMPAIGN_PACK_QUANTITIES,
   DEFAULT_ADDITIONAL_PRIZES,
   DEFAULT_BONUS_PRIZE,
-  DEFAULT_MIN_PURCHASE_QUANTITY,
   DEFAULT_CAMPAIGN_TITLE,
   DEFAULT_MAIN_PRIZE,
   DEFAULT_SECOND_PRIZE,
@@ -25,7 +24,6 @@ import { parseCampaignDateTime, resolveCampaignScheduleStatus } from '../../../u
 export type CampaignFormState = {
   title: string
   pricePerCotaInput: string
-  minPurchaseQuantityInput: string
   mainPrize: string
   secondPrize: string
   bonusPrize: string
@@ -137,63 +135,60 @@ function sanitizePackPrices(value: unknown, unitPrice: number): CampaignPackPric
   const items = Array.isArray(value)
     ? value
     : []
-  const byQuantity = new Map<number, CampaignPackPrice>()
-
-  for (const rawItem of items) {
-    if (!rawItem || typeof rawItem !== 'object') {
-      continue
-    }
-
-    const item = rawItem as Partial<CampaignPackPrice>
-    const quantity = Number(item.quantity)
-    if (!Number.isInteger(quantity) || !CAMPAIGN_PACK_QUANTITIES.includes(quantity as (typeof CAMPAIGN_PACK_QUANTITIES)[number])) {
-      continue
-    }
-
-    const price = Number(item.price)
-    if (!Number.isFinite(price) || price <= 0) {
-      continue
-    }
-
-    byQuantity.set(quantity, {
+  const normalized = items.slice(0, CAMPAIGN_PACK_QUANTITIES.length).map((rawItem, index) => {
+    const item = rawItem && typeof rawItem === 'object' ? (rawItem as Partial<CampaignPackPrice>) : {}
+    const parsed = Number(item.quantity)
+    const fallbackQuantity = CAMPAIGN_PACK_QUANTITIES[index] ?? CAMPAIGN_PACK_QUANTITIES[0]
+    const quantity = Number.isInteger(parsed) && parsed > 0 ? parsed : fallbackQuantity
+    return {
       quantity,
-      price: Number(price.toFixed(2)),
+      price: Number((quantity * unitPrice).toFixed(2)),
       active: item.active !== false,
+    }
+  })
+
+  if (normalized.length >= CAMPAIGN_PACK_QUANTITIES.length) {
+    return normalized
+  }
+
+  const used = new Set(normalized.map((item) => item.quantity))
+  for (const fallbackQuantity of CAMPAIGN_PACK_QUANTITIES) {
+    if (normalized.length >= CAMPAIGN_PACK_QUANTITIES.length) {
+      break
+    }
+    if (used.has(fallbackQuantity)) {
+      continue
+    }
+    normalized.push({
+      quantity: fallbackQuantity,
+      price: Number((fallbackQuantity * unitPrice).toFixed(2)),
+      active: true,
     })
   }
 
-  return CAMPAIGN_PACK_QUANTITIES.map((quantity) => (
-    byQuantity.get(quantity) || {
-      quantity,
-      price: Number((quantity * unitPrice).toFixed(2)),
-      active: true,
-    }
-  ))
+  return normalized
 }
 
-function sanitizeFeaturedPromotion(value: unknown): CampaignFeaturedPromotion | null {
+function sanitizeFeaturedPromotion(value: unknown, allowedQuantities: number[]): CampaignFeaturedPromotion | null {
   if (!value || typeof value !== 'object') {
     return null
   }
 
   const payload = value as Partial<CampaignFeaturedPromotion>
   const targetQuantity = Number(payload.targetQuantity)
-  if (!Number.isInteger(targetQuantity) || !CAMPAIGN_PACK_QUANTITIES.includes(targetQuantity as (typeof CAMPAIGN_PACK_QUANTITIES)[number])) {
+  if (!Number.isInteger(targetQuantity) || targetQuantity <= 0 || !allowedQuantities.includes(targetQuantity)) {
     return null
   }
 
   const discountType = payload.discountType === 'fixed' ? 'fixed' : 'percent'
   const rawValue = Number(payload.discountValue)
-  if (!Number.isFinite(rawValue) || rawValue <= 0) {
+  if (!Number.isFinite(rawValue) || rawValue < 0) {
     return null
   }
 
   const discountValue = discountType === 'percent'
     ? Number(Math.min(rawValue, 100).toFixed(2))
     : Number(rawValue.toFixed(2))
-  if (discountValue <= 0) {
-    return null
-  }
 
   return {
     active: payload.active === true,
@@ -220,20 +215,11 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
   const normalizedEndsAtTime = formState.endsAt.trim() ? formState.endsAtTime.trim() || undefined : undefined
   const normalizedPriceText = formState.pricePerCotaInput.replace(',', '.').trim()
   const normalizedPrice = Number(normalizedPriceText)
-  const minPurchaseQuantity = Number(formState.minPurchaseQuantityInput)
 
   if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0) {
     return {
       errorToastId: 'campaign-invalid-price',
       errorMessage: 'Informe um valor valido para a cota.',
-      payload: null,
-    }
-  }
-
-  if (!Number.isInteger(minPurchaseQuantity) || minPurchaseQuantity <= 0 || minPurchaseQuantity > MAX_QUANTITY) {
-    return {
-      errorToastId: 'campaign-invalid-min-purchase',
-      errorMessage: `Informe uma compra minima valida (1 a ${MAX_QUANTITY}).`,
       payload: null,
     }
   }
@@ -262,11 +248,38 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
     endsAt: formState.endsAt.trim() || null,
     endsAtTime: normalizedEndsAtTime || null,
   })
+  if (formState.packPrices.length !== CAMPAIGN_PACK_QUANTITIES.length) {
+    return {
+      errorToastId: 'campaign-invalid-pack-count',
+      errorMessage: `Configure exatamente ${CAMPAIGN_PACK_QUANTITIES.length} brackets de cotas.`,
+      payload: null,
+    }
+  }
   const normalizedPackPrices = sanitizePackPrices(
     formState.packPrices,
     Number(normalizedPrice.toFixed(2)),
   )
-  const normalizedFeaturedPromotion = sanitizeFeaturedPromotion(formState.featuredPromotion)
+  const packQuantities = normalizedPackPrices.map((item) => item.quantity)
+  const hasInvalidPackQuantity = normalizedPackPrices.some(
+    (item) => !Number.isInteger(item.quantity) || item.quantity <= 0 || item.quantity > MAX_QUANTITY,
+  )
+  if (hasInvalidPackQuantity) {
+    return {
+      errorToastId: 'campaign-invalid-pack-quantity',
+      errorMessage: `Cada bracket deve ter quantidade inteira entre 1 e ${MAX_QUANTITY}.`,
+      payload: null,
+    }
+  }
+
+  if (new Set(packQuantities).size !== packQuantities.length) {
+    return {
+      errorToastId: 'campaign-duplicated-pack-quantity',
+      errorMessage: 'Os 8 brackets devem ter quantidades diferentes entre si.',
+      payload: null,
+    }
+  }
+
+  const normalizedFeaturedPromotion = sanitizeFeaturedPromotion(formState.featuredPromotion, packQuantities)
 
   return {
     errorToastId: null,
@@ -274,7 +287,6 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
     payload: {
       title: normalizedTitle,
       pricePerCota: Number(normalizedPrice.toFixed(2)),
-      minPurchaseQuantity: Math.max(1, Math.min(minPurchaseQuantity || DEFAULT_MIN_PURCHASE_QUANTITY, MAX_QUANTITY)),
       mainPrize: normalizedMainPrize,
       secondPrize: normalizedSecondPrize,
       bonusPrize: normalizedBonusPrize,

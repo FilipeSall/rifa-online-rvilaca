@@ -40,7 +40,7 @@ export default function HomePage() {
         <main className="flex-grow">
           <HeroSection
             quantity={purchaseState.quantity}
-            minQuantity={purchaseState.minPurchaseQuantity}
+            packQuantities={purchaseState.availablePackQuantities}
             onSetQuantity={purchaseState.handleSetQuantity}
             onQuickCheckout={purchaseState.handleQuickCheckout}
             isQuickCheckoutLoading={
@@ -49,10 +49,7 @@ export default function HomePage() {
               || purchaseState.isReserving
             }
           />
-          <PurchaseHeroSection
-            unitPrice={purchaseState.unitPrice}
-            minQuantity={purchaseState.minPurchaseQuantity}
-          />
+          <PurchaseHeroSection unitPrice={purchaseState.unitPrice} />
           <WinnersFaqSection />
           <TrustBadgesSection />
         </main>

@@ -9,7 +9,6 @@ import {
   DEFAULT_BONUS_PRIZE,
   DEFAULT_CAMPAIGN_STATUS,
   DEFAULT_CAMPAIGN_TITLE,
-  DEFAULT_MIN_PURCHASE_QUANTITY,
   DEFAULT_MAIN_PRIZE,
   DEFAULT_PRICE_PER_COTA,
   DEFAULT_SECOND_PRIZE,
@@ -71,7 +70,6 @@ interface CampaignMidias {
 interface UpsertCampaignSettingsInput {
   title?: string
   pricePerCota?: number
-  minPurchaseQuantity?: number
   mainPrize?: string
   secondPrize?: string
   bonusPrize?: string
@@ -94,7 +92,6 @@ interface UpsertCampaignSettingsOutput {
   campaignId: string
   title: string
   pricePerCota: number
-  minPurchaseQuantity: number
   mainPrize: string
   secondPrize: string
   bonusPrize: string
@@ -154,22 +151,6 @@ function buildDefaultPackPrices(unitPrice: number): CampaignPackPrice[] {
     price: Number((quantity * unitPrice).toFixed(2)),
     active: true,
   }))
-}
-
-function sanitizeMinPurchaseQuantity(value: unknown): number | null {
-  if (value === undefined || value === null || value === '') {
-    return null
-  }
-
-  const numeric = Number(value)
-  if (!Number.isInteger(numeric) || numeric <= 0 || numeric > MAX_PURCHASE_QUANTITY) {
-    throw new HttpsError(
-      'invalid-argument',
-      `minPurchaseQuantity deve ser inteiro entre 1 e ${MAX_PURCHASE_QUANTITY}.`,
-    )
-  }
-
-  return numeric
 }
 
 function sanitizeCampaignTitle(value: unknown): string | null {
@@ -346,34 +327,32 @@ function sanitizeCampaignPackPrices(value: unknown, unitPriceFallback: number): 
     throw new HttpsError('invalid-argument', 'packPrices deve ser uma lista.')
   }
 
-  const byQuantity = new Map<number, CampaignPackPrice>()
+  const normalized: CampaignPackPrice[] = []
+  const usedQuantities = new Set<number>()
 
   for (const rawItem of items) {
     const item = asRecord(rawItem)
     const quantity = Number(item.quantity)
-    if (!Number.isInteger(quantity) || !CAMPAIGN_PACK_QUANTITIES.includes(quantity as (typeof CAMPAIGN_PACK_QUANTITIES)[number])) {
-      continue
+    if (!Number.isInteger(quantity) || quantity <= 0 || quantity > MAX_PURCHASE_QUANTITY) {
+      throw new HttpsError('invalid-argument', `packPrices.quantity deve ser inteiro entre 1 e ${MAX_PURCHASE_QUANTITY}.`)
+    }
+    if (usedQuantities.has(quantity)) {
+      throw new HttpsError('invalid-argument', 'packPrices nao pode conter quantidades repetidas.')
     }
 
-    const parsedPrice = Number(item.price)
-    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
-      throw new HttpsError('invalid-argument', `packPrices[${quantity}] possui preco invalido.`)
-    }
-
-    byQuantity.set(quantity, {
-      quantity,
-      price: Number(parsedPrice.toFixed(2)),
-      active: item.active !== false,
-    })
-  }
-
-  return CAMPAIGN_PACK_QUANTITIES.map((quantity) => (
-    byQuantity.get(quantity) || {
+    normalized.push({
       quantity,
       price: Number((quantity * unitPriceFallback).toFixed(2)),
-      active: true,
-    }
-  ))
+      active: item.active !== false,
+    })
+    usedQuantities.add(quantity)
+  }
+
+  if (normalized.length !== CAMPAIGN_PACK_QUANTITIES.length) {
+    throw new HttpsError('invalid-argument', `packPrices deve conter exatamente ${CAMPAIGN_PACK_QUANTITIES.length} brackets.`)
+  }
+
+  return normalized
 }
 
 function sanitizeCampaignFeaturedPromotion(value: unknown): CampaignFeaturedPromotion | null | undefined {
@@ -387,13 +366,13 @@ function sanitizeCampaignFeaturedPromotion(value: unknown): CampaignFeaturedProm
 
   const payload = asRecord(value)
   const targetQuantity = Number(payload.targetQuantity)
-  if (!Number.isInteger(targetQuantity) || !CAMPAIGN_PACK_QUANTITIES.includes(targetQuantity as (typeof CAMPAIGN_PACK_QUANTITIES)[number])) {
+  if (!Number.isInteger(targetQuantity) || targetQuantity <= 0 || targetQuantity > MAX_PURCHASE_QUANTITY) {
     throw new HttpsError('invalid-argument', 'featuredPromotion.targetQuantity invalido.')
   }
 
   const discountType = payload.discountType === 'fixed' ? 'fixed' : 'percent'
   const rawDiscountValue = Number(payload.discountValue)
-  if (!Number.isFinite(rawDiscountValue) || rawDiscountValue <= 0) {
+  if (!Number.isFinite(rawDiscountValue) || rawDiscountValue < 0) {
     throw new HttpsError('invalid-argument', 'featuredPromotion.discountValue invalido.')
   }
 
@@ -638,15 +617,6 @@ export function readCampaignPricePerCota(data: DocumentData | undefined): number
   return Number(numeric.toFixed(2))
 }
 
-export function readCampaignMinPurchaseQuantity(data: DocumentData | undefined): number {
-  const numeric = Number(data?.minPurchaseQuantity)
-  if (!Number.isInteger(numeric) || numeric <= 0 || numeric > MAX_PURCHASE_QUANTITY) {
-    return DEFAULT_MIN_PURCHASE_QUANTITY
-  }
-
-  return numeric
-}
-
 export function readCampaignCoupons(data: DocumentData | undefined): CampaignCoupon[] {
   try {
     const sanitized = sanitizeCoupons(data?.coupons)
@@ -669,6 +639,24 @@ export function readCampaignPackPrices(data: DocumentData | undefined): Campaign
       error: String(error),
     })
     return buildDefaultPackPrices(readCampaignPricePerCota(data))
+  }
+}
+
+export function readCampaignPurchaseQuantityLimits(data: DocumentData | undefined): { min: number; max: number } {
+  const activeQuantities = readCampaignPackPrices(data)
+    .filter((item) => item.active)
+    .map((item) => item.quantity)
+    .filter((item, index, list) => Number.isInteger(item) && item > 0 && list.indexOf(item) === index)
+    .sort((left, right) => left - right)
+
+  const fallbackQuantities = [...CAMPAIGN_PACK_QUANTITIES].sort((left, right) => left - right)
+  const quantities = activeQuantities.length > 0 ? activeQuantities : fallbackQuantities
+  const min = quantities[0] ?? CAMPAIGN_PACK_QUANTITIES[0]
+  const max = quantities[quantities.length - 1] ?? min
+
+  return {
+    min,
+    max: Math.max(min, max),
   }
 }
 
@@ -799,7 +787,6 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       const payload = asRecord(request.data) as Partial<UpsertCampaignSettingsInput>
       const nextTitle = sanitizeCampaignTitle(payload.title)
       const nextPricePerCota = sanitizeCampaignPrice(payload.pricePerCota)
-      const nextMinPurchaseQuantity = sanitizeMinPurchaseQuantity(payload.minPurchaseQuantity)
       const nextMainPrize = sanitizeCampaignPrize(payload.mainPrize, 'mainPrize')
       const nextSecondPrize = sanitizeCampaignPrize(payload.secondPrize, 'secondPrize')
       const nextBonusPrize = sanitizeCampaignPrize(payload.bonusPrize, 'bonusPrize')
@@ -821,10 +808,19 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       const nextFeaturedPromotion = sanitizeCampaignFeaturedPromotion(payload.featuredPromotion)
       const nextCoupons = sanitizeCoupons(payload.coupons)
       const nextMidias = sanitizeCampaignMidias(payload.midias)
+      const effectivePackPrices = nextPackPrices ?? readCampaignPackPrices(currentData)
+
+      if (
+        nextFeaturedPromotion
+        && !effectivePackPrices.some((pack) => pack.quantity === nextFeaturedPromotion.targetQuantity)
+      ) {
+        throw new HttpsError('invalid-argument', 'featuredPromotion.targetQuantity deve existir nos brackets configurados.')
+      }
 
       const updateData: DocumentData = {
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: uid,
+        minPurchaseQuantity: FieldValue.delete(),
       }
 
       if (nextTitle !== null) {
@@ -834,10 +830,6 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
 
       if (nextPricePerCota !== null) {
         updateData.pricePerCota = nextPricePerCota
-      }
-
-      if (nextMinPurchaseQuantity !== null) {
-        updateData.minPurchaseQuantity = nextMinPurchaseQuantity
       }
 
       if (nextMainPrize !== null) {
@@ -928,10 +920,6 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
           updateData.pricePerCota = DEFAULT_PRICE_PER_COTA
         }
 
-        if (!updateData.minPurchaseQuantity) {
-          updateData.minPurchaseQuantity = DEFAULT_MIN_PURCHASE_QUANTITY
-        }
-
         if (!updateData.mainPrize) {
           updateData.mainPrize = DEFAULT_MAIN_PRIZE
         }
@@ -976,7 +964,6 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       } else if (
         nextTitle === null &&
         nextPricePerCota === null &&
-        nextMinPurchaseQuantity === null &&
         nextMainPrize === null &&
         nextSecondPrize === null &&
         nextBonusPrize === null &&
@@ -1006,7 +993,6 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         hasNewMidias: nextMidias !== null,
         nextHeroCarouselCount: nextMidias ? nextMidias.heroCarousel.length : null,
         hasFeaturedVideo: Boolean(nextMidias?.featuredVideo?.url),
-        nextMinPurchaseQuantity,
       })
 
       await campaignRef.set(updateData, { merge: true })
@@ -1018,7 +1004,6 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         campaignId: CAMPAIGN_DOC_ID,
         title: readCampaignTitle(campaignData),
         pricePerCota: readCampaignPricePerCota(campaignData),
-        minPurchaseQuantity: readCampaignMinPurchaseQuantity(campaignData),
         mainPrize: readCampaignMainPrize(campaignData),
         secondPrize: readCampaignSecondPrize(campaignData),
         bonusPrize: readCampaignBonusPrize(campaignData),
@@ -1040,7 +1025,6 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       logger.info('upsertCampaignSettings succeeded', {
         uid,
         campaignId: CAMPAIGN_DOC_ID,
-        minPurchaseQuantity: output.minPurchaseQuantity,
         packPricesCount: output.packPrices.length,
         hasFeaturedPromotion: Boolean(output.featuredPromotion?.active),
         couponsCount: output.coupons.length,

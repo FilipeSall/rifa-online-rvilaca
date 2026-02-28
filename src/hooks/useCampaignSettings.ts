@@ -8,7 +8,6 @@ import {
     buildDefaultCampaignPackPrices,
     DEFAULT_ADDITIONAL_PRIZES,
     DEFAULT_BONUS_PRIZE,
-    DEFAULT_MIN_PURCHASE_QUANTITY,
     DEFAULT_CAMPAIGN_STATUS,
     DEFAULT_CAMPAIGN_TITLE,
     DEFAULT_MAIN_PRIZE,
@@ -17,6 +16,7 @@ import {
     DEFAULT_TICKET_PRICE,
     DEFAULT_TOTAL_NUMBERS,
 } from '../const/campaign'
+import { MAX_QUANTITY } from '../const/purchaseNumbers'
 import { db, functions } from '../lib/firebase'
 import type {
     CampaignFeaturedVideoMedia,
@@ -70,15 +70,6 @@ function sanitizePricePerCota(value: unknown) {
     }
 
     return Number(numeric.toFixed(2))
-}
-
-function sanitizeMinPurchaseQuantity(value: unknown) {
-    const parsed = Number(value)
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-        return DEFAULT_MIN_PURCHASE_QUANTITY
-    }
-
-    return Math.max(1, Math.min(parsed, 300))
 }
 
 function sanitizeCampaignStatus(value: unknown): CampaignStatus {
@@ -147,22 +138,14 @@ function sanitizeTotalNumbers(value: unknown) {
     return parsed
 }
 
-function toSafeMoney(value: unknown) {
-    const parsed = Number(value)
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-        return 0
-    }
-
-    return Number(parsed.toFixed(2))
-}
-
 function sanitizeCampaignPackPrices(value: unknown, unitPriceFallback: number): CampaignPackPrice[] {
     const items = Array.isArray(value)
         ? value
         : value && typeof value === 'object'
             ? Object.values(value as Record<string, unknown>)
             : []
-    const byQuantity = new Map<number, CampaignPackPrice>()
+    const normalized: CampaignPackPrice[] = []
+    const used = new Set<number>()
 
     for (const rawItem of items) {
         if (!rawItem || typeof rawItem !== 'object') {
@@ -171,54 +154,63 @@ function sanitizeCampaignPackPrices(value: unknown, unitPriceFallback: number): 
 
         const item = rawItem as Partial<CampaignPackPrice>
         const quantity = Number(item.quantity)
-        if (!Number.isInteger(quantity) || !CAMPAIGN_PACK_QUANTITIES.includes(quantity as (typeof CAMPAIGN_PACK_QUANTITIES)[number])) {
+        if (!Number.isInteger(quantity) || quantity <= 0 || quantity > MAX_QUANTITY || used.has(quantity)) {
             continue
         }
 
-        const price = toSafeMoney(item.price)
-        if (price <= 0) {
-            continue
-        }
-
-        byQuantity.set(quantity, {
-            quantity,
-            price,
-            active: item.active !== false,
-        })
-    }
-
-    return CAMPAIGN_PACK_QUANTITIES.map((quantity) => (
-        byQuantity.get(quantity) || {
+        normalized.push({
             quantity,
             price: Number((quantity * unitPriceFallback).toFixed(2)),
-            active: true,
+            active: item.active !== false,
+        })
+        used.add(quantity)
+
+        if (normalized.length >= CAMPAIGN_PACK_QUANTITIES.length) {
+            break
         }
-    ))
+    }
+
+    for (const fallbackQuantity of CAMPAIGN_PACK_QUANTITIES) {
+        if (normalized.length >= CAMPAIGN_PACK_QUANTITIES.length) {
+            break
+        }
+        if (used.has(fallbackQuantity)) {
+            continue
+        }
+        normalized.push({
+            quantity: fallbackQuantity,
+            price: Number((fallbackQuantity * unitPriceFallback).toFixed(2)),
+            active: true,
+        })
+        used.add(fallbackQuantity)
+    }
+
+    return normalized
 }
 
-function sanitizeCampaignFeaturedPromotion(value: unknown): CampaignFeaturedPromotion | null {
+function sanitizeCampaignFeaturedPromotion(value: unknown, allowedQuantities?: number[]): CampaignFeaturedPromotion | null {
     if (!value || typeof value !== 'object') {
         return null
     }
 
     const payload = value as Record<string, unknown>
     const targetQuantity = Number(payload.targetQuantity)
-    if (!Number.isInteger(targetQuantity) || !CAMPAIGN_PACK_QUANTITIES.includes(targetQuantity as (typeof CAMPAIGN_PACK_QUANTITIES)[number])) {
+    if (!Number.isInteger(targetQuantity) || targetQuantity <= 0 || targetQuantity > MAX_QUANTITY) {
+        return null
+    }
+    if (Array.isArray(allowedQuantities) && !allowedQuantities.includes(targetQuantity)) {
         return null
     }
 
     const discountType: CampaignCouponDiscountType = payload.discountType === 'fixed' ? 'fixed' : 'percent'
     const rawValue = Number(payload.discountValue)
-    if (!Number.isFinite(rawValue) || rawValue <= 0) {
+    if (!Number.isFinite(rawValue) || rawValue < 0) {
         return null
     }
 
     const discountValue = discountType === 'percent'
         ? Number(Math.min(rawValue, 100).toFixed(2))
         : Number(rawValue.toFixed(2))
-    if (discountValue <= 0) {
-        return null
-    }
 
     const label = typeof payload.label === 'string' ? payload.label.trim().slice(0, 80) : ''
 
@@ -492,11 +484,11 @@ function mapSnapshotToSettings(raw: unknown): CampaignSettings {
     const payload = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
     const pricePerCota = sanitizePricePerCota(payload.pricePerCota)
 
+    const packPrices = sanitizeCampaignPackPrices(payload.packPrices, pricePerCota)
     return {
         id: CAMPAIGN_DOC_ID,
         title: sanitizeCampaignTitle(payload.title ?? payload.name),
         pricePerCota,
-        minPurchaseQuantity: sanitizeMinPurchaseQuantity(payload.minPurchaseQuantity),
         mainPrize: sanitizePrizeText(payload.mainPrize, DEFAULT_MAIN_PRIZE),
         secondPrize: sanitizePrizeText(payload.secondPrize, DEFAULT_SECOND_PRIZE),
         bonusPrize: sanitizePrizeText(payload.bonusPrize, DEFAULT_BONUS_PRIZE),
@@ -511,8 +503,11 @@ function mapSnapshotToSettings(raw: unknown): CampaignSettings {
         startsAtTime: sanitizeCampaignTime(payload.startsAtTime),
         endsAt: sanitizeCampaignDate(payload.endsAt),
         endsAtTime: sanitizeCampaignTime(payload.endsAtTime),
-        packPrices: sanitizeCampaignPackPrices(payload.packPrices, pricePerCota),
-        featuredPromotion: sanitizeCampaignFeaturedPromotion(payload.featuredPromotion),
+        packPrices,
+        featuredPromotion: sanitizeCampaignFeaturedPromotion(
+            payload.featuredPromotion,
+            packPrices.map((item) => item.quantity),
+        ),
         coupons: sanitizeCoupons(payload.coupons),
         midias: sanitizeCampaignMidias(payload.midias ?? payload.media),
     }
@@ -523,7 +518,6 @@ function createDefaultCampaignSettings(): CampaignSettings {
         id: CAMPAIGN_DOC_ID,
         title: DEFAULT_CAMPAIGN_TITLE,
         pricePerCota: DEFAULT_TICKET_PRICE,
-        minPurchaseQuantity: DEFAULT_MIN_PURCHASE_QUANTITY,
         mainPrize: DEFAULT_MAIN_PRIZE,
         secondPrize: DEFAULT_SECOND_PRIZE,
         bonusPrize: DEFAULT_BONUS_PRIZE,
@@ -586,12 +580,12 @@ export function useCampaignSettings() {
                 const response = await upsertCampaignSettings(input)
                 const payload = unwrapCallableData(response.data as CallableEnvelope<UpsertCampaignSettingsOutput>)
                 const pricePerCota = sanitizePricePerCota(payload.pricePerCota)
+                const packPrices = sanitizeCampaignPackPrices(payload.packPrices, pricePerCota)
 
                 setCampaign({
                     id: payload.campaignId,
                     title: sanitizeCampaignTitle(payload.title),
                     pricePerCota,
-                    minPurchaseQuantity: sanitizeMinPurchaseQuantity(payload.minPurchaseQuantity),
                     mainPrize: sanitizePrizeText(payload.mainPrize, DEFAULT_MAIN_PRIZE),
                     secondPrize: sanitizePrizeText(payload.secondPrize, DEFAULT_SECOND_PRIZE),
                     bonusPrize: sanitizePrizeText(payload.bonusPrize, DEFAULT_BONUS_PRIZE),
@@ -608,8 +602,11 @@ export function useCampaignSettings() {
                     startsAtTime: sanitizeCampaignTime(payload.startsAtTime),
                     endsAt: sanitizeCampaignDate(payload.endsAt),
                     endsAtTime: sanitizeCampaignTime(payload.endsAtTime),
-                    packPrices: sanitizeCampaignPackPrices(payload.packPrices, pricePerCota),
-                    featuredPromotion: sanitizeCampaignFeaturedPromotion(payload.featuredPromotion),
+                    packPrices,
+                    featuredPromotion: sanitizeCampaignFeaturedPromotion(
+                        payload.featuredPromotion,
+                        packPrices.map((item) => item.quantity),
+                    ),
                     coupons: sanitizeCoupons(payload.coupons),
                     midias: sanitizeCampaignMidias(payload.midias),
                 })
@@ -632,7 +629,6 @@ export function useCampaignSettings() {
             saveCampaignSettings({
                 title: DEFAULT_CAMPAIGN_TITLE,
                 pricePerCota: DEFAULT_TICKET_PRICE,
-                minPurchaseQuantity: DEFAULT_MIN_PURCHASE_QUANTITY,
                 mainPrize: DEFAULT_MAIN_PRIZE,
                 secondPrize: DEFAULT_SECOND_PRIZE,
                 bonusPrize: DEFAULT_BONUS_PRIZE,

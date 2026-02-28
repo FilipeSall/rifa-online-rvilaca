@@ -3,7 +3,6 @@ import { toast } from 'react-toastify'
 import {
   DEFAULT_ADDITIONAL_PRIZES,
   DEFAULT_BONUS_PRIZE,
-  DEFAULT_MIN_PURCHASE_QUANTITY,
   DEFAULT_CAMPAIGN_TITLE,
   DEFAULT_MAIN_PRIZE,
   DEFAULT_SECOND_PRIZE,
@@ -32,7 +31,6 @@ export function useCampaignForm() {
   } = useCampaignSettings()
   const [title, setTitle] = useState(DEFAULT_CAMPAIGN_TITLE)
   const [pricePerCotaInput, setPricePerCotaInput] = useState(DEFAULT_TICKET_PRICE.toFixed(2))
-  const [minPurchaseQuantityInput, setMinPurchaseQuantityInput] = useState(String(DEFAULT_MIN_PURCHASE_QUANTITY))
   const [mainPrize, setMainPrize] = useState(DEFAULT_MAIN_PRIZE)
   const [secondPrize, setSecondPrize] = useState(DEFAULT_SECOND_PRIZE)
   const [bonusPrize, setBonusPrize] = useState(DEFAULT_BONUS_PRIZE)
@@ -53,7 +51,6 @@ export function useCampaignForm() {
   useEffect(() => {
     setTitle(campaign.title)
     setPricePerCotaInput(campaign.pricePerCota.toFixed(2))
-    setMinPurchaseQuantityInput(String(campaign.minPurchaseQuantity))
     setMainPrize(campaign.mainPrize)
     setSecondPrize(campaign.secondPrize)
     setBonusPrize(campaign.bonusPrize)
@@ -75,7 +72,6 @@ export function useCampaignForm() {
     campaign.coupons,
     campaign.midias,
     campaign.mainPrize,
-    campaign.minPurchaseQuantity,
     campaign.pricePerCota,
     campaign.secondPrize,
     campaign.totalNumbers,
@@ -107,7 +103,6 @@ export function useCampaignForm() {
     const { payload, errorMessage, errorToastId } = buildCampaignSettingsInput({
       title,
       pricePerCotaInput,
-      minPurchaseQuantityInput,
       mainPrize,
       secondPrize,
       bonusPrize,
@@ -148,7 +143,6 @@ export function useCampaignForm() {
     coupons,
     endsAt,
     mainPrize,
-    minPurchaseQuantityInput,
     pricePerCotaInput,
     saveCampaignSettings,
     secondPrize,
@@ -169,7 +163,6 @@ export function useCampaignForm() {
       const { payload, errorMessage, errorToastId } = buildCampaignSettingsInput({
         title,
         pricePerCotaInput,
-        minPurchaseQuantityInput,
         mainPrize,
         secondPrize,
         bonusPrize,
@@ -212,7 +205,6 @@ export function useCampaignForm() {
       bonusPrize,
       endsAt,
       mainPrize,
-      minPurchaseQuantityInput,
       pricePerCotaInput,
       saveCampaignSettings,
       secondPrize,
@@ -234,7 +226,6 @@ export function useCampaignForm() {
       const { payload, errorMessage, errorToastId } = buildCampaignSettingsInput({
         title,
         pricePerCotaInput,
-        minPurchaseQuantityInput,
         mainPrize,
         secondPrize,
         bonusPrize,
@@ -278,7 +269,6 @@ export function useCampaignForm() {
       coupons,
       endsAt,
       mainPrize,
-      minPurchaseQuantityInput,
       pricePerCotaInput,
       saveCampaignSettings,
       secondPrize,
@@ -300,7 +290,6 @@ export function useCampaignForm() {
     isSaving,
     title,
     pricePerCotaInput,
-    minPurchaseQuantityInput,
     mainPrize,
     secondPrize,
     bonusPrize,
@@ -318,7 +307,6 @@ export function useCampaignForm() {
     midias,
     setTitle,
     setPricePerCotaInput,
-    setMinPurchaseQuantityInput,
     setMainPrize,
     setSecondPrize,
     setBonusPrize,

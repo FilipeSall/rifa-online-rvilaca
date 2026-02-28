@@ -50,7 +50,6 @@ export type CampaignSettings = {
   id: string
   title: string
   pricePerCota: number
-  minPurchaseQuantity: number
   mainPrize: string
   secondPrize: string
   bonusPrize: string
@@ -72,7 +71,6 @@ export type CampaignSettings = {
 export type UpsertCampaignSettingsInput = {
   title?: string
   pricePerCota?: number
-  minPurchaseQuantity?: number
   mainPrize?: string
   secondPrize?: string
   bonusPrize?: string
@@ -95,7 +93,6 @@ export type UpsertCampaignSettingsOutput = {
   campaignId: string
   title: string
   pricePerCota: number
-  minPurchaseQuantity: number
   mainPrize: string
   secondPrize: string
   bonusPrize: string

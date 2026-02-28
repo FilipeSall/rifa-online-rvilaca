@@ -19,7 +19,7 @@ Contexto para IA no layout principal da home.
 
 ## Integracao com compra
 
-- O Hero recebe `quantity`, `minQuantity` e `onSetQuantity` do `usePurchaseNumbers`.
+- O Hero recebe `quantity`, `packQuantities` e `onSetQuantity` do `usePurchaseNumbers`.
 - A secao de compra real fica em `src/components/purchaseNumbers/*`.
 - Home nao deve fazer consulta de disponibilidade de numero diretamente.
 

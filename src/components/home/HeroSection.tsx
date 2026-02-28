@@ -13,7 +13,7 @@ import 'react-loading-skeleton/dist/skeleton.css'
 
 type HeroSectionProps = {
   quantity: number
-  minQuantity: number
+  packQuantities: number[]
   onSetQuantity: (value: number) => void
   onQuickCheckout: () => void
   isQuickCheckoutLoading: boolean
@@ -21,7 +21,7 @@ type HeroSectionProps = {
 
 export default function HeroSection({
   quantity,
-  minQuantity,
+  packQuantities,
   onSetQuantity,
   onQuickCheckout,
   isQuickCheckoutLoading,
@@ -31,10 +31,8 @@ export default function HeroSection({
   const titleRef = useRef<HTMLHeadingElement>(null)
   const [heroSalesCardWidth, setHeroSalesCardWidth] = useState<number | null>(null)
   const heroQuickQuantityPacks = useMemo(
-    () =>
-      Array.from(new Set([minQuantity, 50, 100, 250, 350, 500, 750, 1000]))
-        .filter((pack) => Number.isInteger(pack) && pack > 0),
-    [minQuantity],
+    () => packQuantities.filter((pack) => Number.isInteger(pack) && pack > 0).slice(0, 8),
+    [packQuantities],
   )
   const campaignTitle = campaign.title || DEFAULT_CAMPAIGN_TITLE
   const mainPrize = campaign.mainPrize || DEFAULT_MAIN_PRIZE
@@ -71,18 +69,18 @@ export default function HeroSection({
       featuredPromotion: activeFeaturedPromotion,
     })
 
-    if (pricing.promotionDiscount <= 0) {
-      return null
-    }
-
-    const tooltip = activeFeaturedPromotion.discountType === 'percent'
-      ? `Economize ${activeFeaturedPromotion.discountValue}% nesse pacote e pague ${formatCurrency(pricing.subtotalAfterPromotion)}.`
-      : `Economize ${formatCurrency(pricing.promotionDiscount)} nesse pacote e pague ${formatCurrency(pricing.subtotalAfterPromotion)}.`
+    const hasTooltip = pricing.promotionDiscount > 0
+    const tooltip = hasTooltip
+      ? (activeFeaturedPromotion.discountType === 'percent'
+          ? `Economize ${activeFeaturedPromotion.discountValue}% nesse pacote e pague ${formatCurrency(pricing.subtotalAfterPromotion)}.`
+          : `Economize ${formatCurrency(pricing.promotionDiscount)} nesse pacote e pague ${formatCurrency(pricing.subtotalAfterPromotion)}.`)
+      : null
 
     return {
       targetQuantity: activeFeaturedPromotion.targetQuantity,
       label: activeFeaturedPromotion.label.trim() || 'Promocao ativa',
       tooltip,
+      hasTooltip,
     }
   }, [activeFeaturedPromotion, campaign.packPrices, campaign.pricePerCota])
 
@@ -180,12 +178,14 @@ export default function HeroSection({
                     <div key={pack} className="group relative">
                       {isPromotionPack ? (
                         <>
-                          <span className="pointer-events-none absolute -top-2 left-2 z-10 inline-flex rounded-full border border-amber-300/55 bg-[linear-gradient(120deg,rgba(245,158,11,0.95),rgba(251,191,36,0.92))] px-2 py-1 text-[9px] font-black uppercase tracking-[0.11em] text-black shadow-[0_8px_18px_rgba(245,158,11,0.3)]">
+                          <span className="pointer-events-none absolute -top-2 left-1/2 z-10 inline-flex min-w-[120px] max-w-[92%] -translate-x-1/2 items-center justify-center rounded-md border border-amber-300/55 bg-[linear-gradient(120deg,rgba(245,158,11,0.95),rgba(251,191,36,0.92))] px-3 py-1 text-center text-[9px] font-black uppercase tracking-[0.09em] text-black shadow-[0_8px_18px_rgba(245,158,11,0.3)]">
                             {featuredPromotionInsight.label}
                           </span>
-                          <div className="pointer-events-none absolute -top-2 left-1/2 z-20 w-48 -translate-x-1/2 -translate-y-[85%] scale-95 rounded-md border border-amber-300/45 bg-black/92 px-2.5 py-2 text-center text-[10px] font-semibold leading-tight text-amber-100 opacity-0 shadow-[0_12px_30px_rgba(0,0,0,0.55)] transition-all duration-200 ease-out group-hover:-translate-y-[95%] group-hover:scale-100 group-hover:opacity-100 group-focus-within:-translate-y-[95%] group-focus-within:scale-100 group-focus-within:opacity-100">
-                            {featuredPromotionInsight.tooltip}
-                          </div>
+                          {featuredPromotionInsight.hasTooltip ? (
+                            <div className="pointer-events-none absolute -top-2 left-1/2 z-30 w-48 -translate-x-1/2 -translate-y-[125%] scale-95 rounded-md border border-amber-200/80 bg-[#090611] px-2.5 py-2 text-center text-[10px] font-semibold leading-tight text-amber-100 opacity-0 shadow-[0_16px_40px_rgba(0,0,0,0.75)] ring-1 ring-black/70 transition-all duration-200 ease-out group-hover:-translate-y-[135%] group-hover:scale-100 group-hover:opacity-100 group-focus-within:-translate-y-[135%] group-focus-within:scale-100 group-focus-within:opacity-100">
+                              {featuredPromotionInsight.tooltip}
+                            </div>
+                          ) : null}
                         </>
                       ) : null}
                       <button

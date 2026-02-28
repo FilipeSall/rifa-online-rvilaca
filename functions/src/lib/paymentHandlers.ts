@@ -17,8 +17,8 @@ import {
 import {
   readCampaignCoupons,
   readCampaignFeaturedPromotion,
-  readCampaignMinPurchaseQuantity,
   readCampaignPackPrices,
+  readCampaignPurchaseQuantityLimits,
   readCampaignPricePerCota,
 } from './campaignHandlers.js'
 import {
@@ -746,7 +746,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
       const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
       const campaignData = campaignSnapshot.exists ? campaignSnapshot.data() : undefined
       const campaignRange = readCampaignNumberRange(campaignData, CAMPAIGN_DOC_ID)
-      const minPurchaseQuantity = readCampaignMinPurchaseQuantity(campaignData)
+      const quantityLimits = readCampaignPurchaseQuantityLimits(campaignData)
       const reservationNumbers = readStoredReservationNumbers(
         reservationSnapshot.get('numbers'),
         campaignRange.start,
@@ -770,10 +770,10 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         )
       }
 
-      if (reservationNumbers.length < minPurchaseQuantity) {
+      if (reservationNumbers.length < quantityLimits.min || reservationNumbers.length > quantityLimits.max) {
         throw new HttpsError(
           'failed-precondition',
-          `Sua reserva nao possui numeros suficientes. Minimo da campanha: ${minPurchaseQuantity}.`,
+          `Sua reserva deve conter entre ${quantityLimits.min} e ${quantityLimits.max} numeros.`,
         )
       }
 
@@ -828,7 +828,8 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         hasCallbackUrl: Boolean(callbackUrl),
         maxAttempts: MAX_DEPOSIT_ORDER_ATTEMPTS,
         reservationQuantity: reservationNumbers.length,
-        minPurchaseQuantity,
+        minReservationQuantity: quantityLimits.min,
+        maxReservationQuantity: quantityLimits.max,
         unitPriceAtCheckout: pricing.unitPriceAtCheckout,
         matchedPackQuantity: pricing.matchedPackQuantity,
         hasAmountMismatch,
@@ -948,7 +949,6 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
               appliedPromotionLabel: pricing.appliedPromotionLabel,
               appliedPromotionDiscountType: pricing.appliedPromotionType,
               appliedPromotionDiscountValue: pricing.appliedPromotionValue,
-              minPurchaseQuantity,
               quantity: reservationNumbers.length,
               reservedNumbers: reservationNumbers,
               appliedCouponCode: coupon?.code || null,
@@ -1001,7 +1001,6 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
           appliedPromotionLabel: pricing.appliedPromotionLabel,
           appliedPromotionDiscountType: pricing.appliedPromotionType,
           appliedPromotionDiscountValue: pricing.appliedPromotionValue,
-          minPurchaseQuantity,
           quantity: reservationNumbers.length,
           reservedNumbers: reservationNumbers,
           appliedCouponCode: coupon?.code || null,

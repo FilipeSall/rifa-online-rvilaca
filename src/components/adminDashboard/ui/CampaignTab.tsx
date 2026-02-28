@@ -9,6 +9,7 @@ import {
   DEFAULT_SECOND_PRIZE,
   DEFAULT_TOTAL_NUMBERS,
 } from '../../../const/campaign'
+import { MAX_QUANTITY } from '../../../const/purchaseNumbers'
 import type {
   CampaignFeaturedPromotion,
   CampaignFeaturedVideoMedia,
@@ -17,6 +18,7 @@ import type {
   CampaignHeroCarouselMedia,
 } from '../../../types/campaign'
 import { useCampaignForm } from '../hooks/useCampaignForm'
+import { CustomSelect } from '../../ui/CustomSelect'
 import {
   deleteCampaignFeaturedVideo,
   deleteCampaignHeroCarouselImage,
@@ -54,10 +56,10 @@ function formatCouponValue(coupon: CampaignCoupon) {
 
 function createDefaultFeaturedPromotion(): CampaignFeaturedPromotion {
   return {
-    active: false,
+    active: true,
     targetQuantity: CAMPAIGN_PACK_QUANTITIES[0],
     discountType: 'percent',
-    discountValue: 10,
+    discountValue: 0,
     label: 'Oferta especial',
   }
 }
@@ -98,7 +100,6 @@ export default function CampaignTab() {
     isSaving,
     title,
     pricePerCotaInput,
-    minPurchaseQuantityInput,
     mainPrize,
     secondPrize,
     bonusPrize,
@@ -116,7 +117,6 @@ export default function CampaignTab() {
     midias,
     setTitle,
     setPricePerCotaInput,
-    setMinPurchaseQuantityInput,
     setMainPrize,
     setSecondPrize,
     setBonusPrize,
@@ -179,7 +179,6 @@ export default function CampaignTab() {
     buildCampaignSettingsInput({
       title,
       pricePerCotaInput,
-      minPurchaseQuantityInput,
       mainPrize,
       secondPrize,
       bonusPrize,
@@ -203,7 +202,6 @@ export default function CampaignTab() {
     endsAt,
     mainPrize,
     midias,
-    minPurchaseQuantityInput,
     pricePerCotaInput,
     secondPrize,
     startsAt,
@@ -220,7 +218,6 @@ export default function CampaignTab() {
     buildCampaignSettingsInput({
       title: campaign.title,
       pricePerCotaInput: campaign.pricePerCota.toFixed(2),
-      minPurchaseQuantityInput: String(campaign.minPurchaseQuantity),
       mainPrize: campaign.mainPrize,
       secondPrize: campaign.secondPrize,
       bonusPrize: campaign.bonusPrize,
@@ -244,7 +241,6 @@ export default function CampaignTab() {
     campaign.endsAt,
     campaign.mainPrize,
     campaign.midias,
-    campaign.minPurchaseQuantity,
     campaign.packPrices,
     campaign.featuredPromotion,
     campaign.pricePerCota,
@@ -294,13 +290,44 @@ export default function CampaignTab() {
     const parsed = Number(pricePerCotaInput.replace(',', '.'))
     return Number.isFinite(parsed) && parsed > 0 ? Number(parsed.toFixed(2)) : campaign.pricePerCota
   }, [campaign.pricePerCota, pricePerCotaInput])
+  const computedPackPrices = useMemo(
+    () =>
+      packPrices.slice(0, CAMPAIGN_PACK_QUANTITIES.length).map((item, index) => {
+        const fallbackQuantity = CAMPAIGN_PACK_QUANTITIES[index] ?? CAMPAIGN_PACK_QUANTITIES[0]
+        const quantity = Number.isInteger(item.quantity) && item.quantity > 0 ? item.quantity : fallbackQuantity
+        return {
+          quantity,
+          price: Number((quantity * safePricePerCota).toFixed(2)),
+          active: item.active !== false,
+        }
+      }),
+    [packPrices, safePricePerCota],
+  )
+  const availablePromotionQuantities = useMemo(
+    () =>
+      computedPackPrices
+        .filter((item) => item.active)
+        .map((item) => item.quantity)
+        .filter((quantity, index, list) => list.indexOf(quantity) === index)
+        .sort((left, right) => left - right),
+    [computedPackPrices],
+  )
+  const fallbackPromotionQuantity = availablePromotionQuantities[0] ?? CAMPAIGN_PACK_QUANTITIES[0]
+  const promotionDraft = featuredPromotion || {
+    ...createDefaultFeaturedPromotion(),
+    targetQuantity: fallbackPromotionQuantity,
+  }
   const featuredPromotionPreview = useMemo(() => {
     const promotion = featuredPromotion || createDefaultFeaturedPromotion()
-    const pricing = calculateCampaignPricing(promotion.targetQuantity, {
+    const targetQuantity = availablePromotionQuantities.some((quantity) => quantity === promotion.targetQuantity)
+      ? promotion.targetQuantity
+      : fallbackPromotionQuantity
+    const pricing = calculateCampaignPricing(targetQuantity, {
       pricePerCota: safePricePerCota,
-      packPrices,
+      packPrices: computedPackPrices,
       featuredPromotion: {
         ...promotion,
+        targetQuantity,
         active: true,
       },
     })
@@ -308,9 +335,11 @@ export default function CampaignTab() {
     const normalizedLabel = promotion.label.trim().slice(0, 80)
     const label = normalizedLabel || FEATURED_PROMOTION_LABEL_SUGGESTIONS[0]
     const savings = Number((pricing.subtotalBase - pricing.subtotalAfterPromotion).toFixed(2))
-    const copy = promotion.discountType === 'percent'
-      ? `Economize ${promotion.discountValue}% e pague ${formatCurrency(pricing.subtotalAfterPromotion)}`
-      : `Economize ${formatCurrency(savings)} e pague ${formatCurrency(pricing.subtotalAfterPromotion)}`
+    const copy = savings > 0
+      ? (promotion.discountType === 'percent'
+          ? `Economize ${promotion.discountValue}% e pague ${formatCurrency(pricing.subtotalAfterPromotion)}`
+          : `Economize ${formatCurrency(savings)} e pague ${formatCurrency(pricing.subtotalAfterPromotion)}`)
+      : 'Sem desconto no momento. Use a label para destacar o bracket no site.'
 
     return {
       label,
@@ -319,7 +348,7 @@ export default function CampaignTab() {
       pricing,
       savings,
     }
-  }, [featuredPromotion, packPrices, safePricePerCota])
+  }, [availablePromotionQuantities, computedPackPrices, fallbackPromotionQuantity, featuredPromotion, safePricePerCota])
 
   useEffect(() => {
     if (!heroAltInput.trim()) {
@@ -364,23 +393,22 @@ export default function CampaignTab() {
     return normalizedCode.length > 0 && Number.isFinite(parsedValue) && parsedValue > 0
   }, [couponCodeInput, couponValueInput])
 
-  const handlePackPriceInputChange = (quantity: number, rawValue: string) => {
-    const normalized = rawValue.replace(',', '.')
-    const parsed = Number(normalized)
+  const handlePackQuantityInputChange = (packIndex: number, rawValue: string) => {
+    const parsed = Number(rawValue.replace(/[^0-9]/g, ''))
 
-    setPackPrices((current) => current.map((item) => (
-      item.quantity === quantity
+    setPackPrices((current) => current.map((item, index) => (
+      index === packIndex
         ? {
             ...item,
-            price: Number.isFinite(parsed) && parsed > 0 ? Number(parsed.toFixed(2)) : item.price,
+            quantity: Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, MAX_QUANTITY) : item.quantity,
           }
         : item
     )))
   }
 
-  const handlePackPriceActiveToggle = (quantity: number) => {
-    setPackPrices((current) => current.map((item) => (
-      item.quantity === quantity
+  const handlePackPriceActiveToggle = (packIndex: number) => {
+    setPackPrices((current) => current.map((item, index) => (
+      index === packIndex
         ? {
             ...item,
             active: !item.active,
@@ -389,26 +417,17 @@ export default function CampaignTab() {
     )))
   }
 
-  const handleTogglePackPromotion = (quantity: number) => {
-    const isPromotionAlreadyActive = Boolean(featuredPromotion?.active && featuredPromotion.targetQuantity === quantity)
+  const handleConfigurePackPromotion = (quantity: number) => {
     const nextPromotionBase = featuredPromotion || createDefaultFeaturedPromotion()
-
     setActiveCommercialPanel('promotion')
     setFeaturedPromotion({
       ...nextPromotionBase,
       targetQuantity: quantity,
-      active: !isPromotionAlreadyActive,
+      active: true,
       label: nextPromotionBase.label.trim() || FEATURED_PROMOTION_LABEL_SUGGESTIONS[0],
     })
 
-    if (isPromotionAlreadyActive) {
-      toast.info(`Promocao do pacote ${quantity} foi desativada.`, {
-        toastId: 'campaign-promotion-row-deactivated',
-      })
-      return
-    }
-
-    toast.success(`Pacote de ${quantity} numeros agora esta em destaque.`, {
+    toast.success(`Promocao configurada para o bracket de ${quantity} numeros.`, {
       toastId: 'campaign-promotion-row-activated',
       icon: (
         <span className="material-symbols-outlined text-[18px] leading-none text-amber-300">
@@ -424,6 +443,25 @@ export default function CampaignTab() {
     })
   }
 
+  const handleAddFeaturedPromotion = () => {
+    const nextPromotionBase = featuredPromotion || createDefaultFeaturedPromotion()
+    const targetQuantity = availablePromotionQuantities.some((quantity) => quantity === nextPromotionBase.targetQuantity)
+      ? nextPromotionBase.targetQuantity
+      : fallbackPromotionQuantity
+
+    setActiveCommercialPanel('promotion')
+    setFeaturedPromotion({
+      ...nextPromotionBase,
+      targetQuantity,
+      active: true,
+      label: nextPromotionBase.label.trim() || FEATURED_PROMOTION_LABEL_SUGGESTIONS[0],
+    })
+  }
+
+  const handleRemoveFeaturedPromotion = () => {
+    setFeaturedPromotion(null)
+  }
+
   const handleFeaturedPromotionFieldChange = (
     field: keyof CampaignFeaturedPromotion,
     value: string | number | boolean,
@@ -435,7 +473,7 @@ export default function CampaignTab() {
       }
       if (field === 'discountValue') {
         const parsed = Number(value)
-        return { ...base, discountValue: Number.isFinite(parsed) && parsed > 0 ? Number(parsed.toFixed(2)) : base.discountValue }
+        return { ...base, discountValue: Number.isFinite(parsed) && parsed >= 0 ? Number(parsed.toFixed(2)) : 0 }
       }
       if (field === 'active') {
         return { ...base, active: Boolean(value) }
@@ -846,10 +884,10 @@ export default function CampaignTab() {
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-neon-pink">Central da Campanha</p>
             <h3 className="mt-2 font-luxury text-3xl font-bold text-white">Operacao comercial com controle total</h3>
             <p className="mt-3 max-w-2xl text-sm text-gray-300">
-              Configure preço, compra mínima e cupons da campanha em tempo real.
+              Configure preco, brackets de tickets, promocao e cupons da campanha em tempo real.
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-neon-pink/20 bg-black/40 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Preço atual</p>
               <p className="mt-1 text-lg font-black text-neon-pink">{formatCurrency(campaign.pricePerCota)}</p>
@@ -860,15 +898,11 @@ export default function CampaignTab() {
                 {getScheduleStatusLabel(scheduleStatus)}
               </p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-black/40 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Compra mínima</p>
-              <p className="mt-1 text-lg font-black text-white">{campaign.minPurchaseQuantity}</p>
-            </div>
             <div className="rounded-xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200">Cupons ativos</p>
               <p className="mt-1 text-lg font-black text-cyan-100">{activeCoupons}</p>
             </div>
-            <div className="rounded-xl border border-amber-300/25 bg-amber-500/10 px-4 py-3 xl:col-span-2">
+            <div className="rounded-xl border border-amber-300/25 bg-amber-500/10 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-amber-200">Total de numeros</p>
               <p className="mt-1 text-lg font-black text-amber-100">{campaign.totalNumbers.toLocaleString('pt-BR')}</p>
             </div>
@@ -932,25 +966,11 @@ export default function CampaignTab() {
                     onChange={(event) => setPricePerCotaInput(event.target.value)}
                   />
                 </div>
-
-                <div className="rounded-xl border border-cyan-300/25 bg-cyan-500/10 px-4 py-3">
-                  <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-min-purchase">
-                    Compra minima (cotas)
-                  </label>
-                  <input
-                    id="campaign-min-purchase"
-                    className="mt-2 h-11 w-full rounded-md border border-cyan-200/30 bg-black/25 px-3 text-sm font-semibold text-cyan-50 outline-none transition-colors focus:border-cyan-200/80"
-                    inputMode="numeric"
-                    type="text"
-                    value={minPurchaseQuantityInput}
-                    onChange={(event) => setMinPurchaseQuantityInput(event.target.value.replace(/[^0-9]/g, ''))}
-                  />
-                </div>
               </div>
 
               <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">Tabela de 8 precos e promocao</p>
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">Tabela de 8 brackets e promocao</p>
                   <span className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-100">
                     {activePackPrices} ativos
                   </span>
@@ -983,16 +1003,16 @@ export default function CampaignTab() {
 
                 {activeCommercialPanel === 'pricing' ? (
                   <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {CAMPAIGN_PACK_QUANTITIES.map((quantity) => {
-                      const currentPack = packPrices.find((item) => item.quantity === quantity)
-                      const currentPrice = currentPack?.price ?? Number((quantity * safePricePerCota).toFixed(2))
+                    {packPrices.slice(0, CAMPAIGN_PACK_QUANTITIES.length).map((pack, index) => {
+                      const quantity = pack.quantity
+                      const currentPrice = Number((quantity * safePricePerCota).toFixed(2))
                       const isPromotionActiveForRow = Boolean(
                         featuredPromotion?.active && featuredPromotion.targetQuantity === quantity,
                       )
 
                       return (
                         <div
-                          key={quantity}
+                          key={`pack-${index}`}
                           className={`rounded-lg border p-3 transition-colors ${
                             isPromotionActiveForRow
                               ? 'border-amber-300/45 bg-amber-500/10'
@@ -1000,28 +1020,35 @@ export default function CampaignTab() {
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <p className="text-xs font-bold uppercase tracking-[0.13em] text-white">{quantity} cotas</p>
+                            <p className="text-xs font-bold uppercase tracking-[0.13em] text-white">Bracket {index + 1}</p>
                             <button
                               type="button"
                               className={`rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${
-                                currentPack?.active
+                                pack.active
                                   ? 'border border-emerald-300/40 bg-emerald-500/15 text-emerald-200'
                                   : 'border border-gray-500/40 bg-gray-500/10 text-gray-300'
                               }`}
-                              onClick={() => handlePackPriceActiveToggle(quantity)}
+                              onClick={() => handlePackPriceActiveToggle(index)}
                             >
-                              {currentPack?.active ? 'Ativo' : 'Inativo'}
+                              {pack.active ? 'Ativo' : 'Inativo'}
                             </button>
                           </div>
+                          <label className="mt-2 block text-[10px] uppercase tracking-[0.13em] text-cyan-100" htmlFor={`campaign-pack-quantity-${index}`}>
+                            Numero de cotas
+                          </label>
+                          <input
+                            id={`campaign-pack-quantity-${index}`}
+                            className="mt-2 h-9 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none focus:border-cyan-200/70"
+                            inputMode="numeric"
+                            type="text"
+                            value={String(quantity)}
+                            onChange={(event) => handlePackQuantityInputChange(index, event.target.value)}
+                          />
                           <div className="mt-2 flex items-center gap-2">
-                            <span className="text-xs font-semibold text-cyan-100">R$</span>
-                            <input
-                              className="h-9 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none focus:border-cyan-200/70"
-                              inputMode="decimal"
-                              type="text"
-                              value={currentPrice.toString().replace('.', ',')}
-                              onChange={(event) => handlePackPriceInputChange(quantity, event.target.value)}
-                            />
+                            <span className="text-xs font-semibold text-cyan-100">Valor automatico:</span>
+                            <span className="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm font-semibold text-white">
+                              {formatCurrency(currentPrice)}
+                            </span>
                           </div>
                           <button
                             type="button"
@@ -1030,12 +1057,12 @@ export default function CampaignTab() {
                                 ? 'border-amber-300/55 bg-amber-300/25 text-amber-100'
                                 : 'border-amber-300/35 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'
                             } disabled:cursor-not-allowed disabled:opacity-55`}
-                            onClick={() => handleTogglePackPromotion(quantity)}
-                            disabled={currentPack?.active === false}
+                            onClick={() => handleConfigurePackPromotion(quantity)}
+                            disabled={pack.active === false}
                           >
-                            {isPromotionActiveForRow ? 'Promocao ativa' : 'Ativar promocao'}
+                            {isPromotionActiveForRow ? 'Editar promocao' : 'Adicionar promocao'}
                           </button>
-                          {currentPack?.active === false ? (
+                          {pack.active === false ? (
                             <p className="mt-2 text-[10px] text-gray-500">
                               Ative este pacote para permitir promocao.
                             </p>
@@ -1046,61 +1073,66 @@ export default function CampaignTab() {
                   </div>
                 ) : (
                   <div
-                    className={`mt-4 rounded-2xl border p-4 transition-all ${
+                    className={`mt-4 rounded-2xl p-4 transition-all ${
                       hasActiveFeaturedPromotion
-                        ? 'border-amber-300/50 bg-[linear-gradient(130deg,rgba(120,90,8,0.22),rgba(10,10,10,0.55))] shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_0_40px_rgba(245,158,11,0.12)]'
-                        : 'border-amber-300/20 bg-amber-500/5'
+                        ? 'bg-[linear-gradient(130deg,rgba(120,90,8,0.22),rgba(10,10,10,0.55))] shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_0_40px_rgba(245,158,11,0.12)]'
+                        : 'bg-amber-500/5'
                     }`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <p className="text-[10px] uppercase tracking-[0.16em] text-amber-200">Promocao em destaque</p>
                         <p className="mt-1 text-xs text-amber-100/85">
-                          Defina qual pacote recebe destaque e veja o preview em tempo real.
+                          Escolha um bracket, opcionalmente informe desconto e defina a label exibida no site.
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        className={`rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${
-                          hasActiveFeaturedPromotion
-                            ? 'border border-emerald-300/35 bg-emerald-500/15 text-emerald-200'
-                            : 'border border-gray-500/40 bg-gray-500/10 text-gray-300'
-                        }`}
-                        onClick={() => handleFeaturedPromotionFieldChange('active', !featuredPromotion?.active)}
-                      >
-                        {hasActiveFeaturedPromotion ? 'Ativa' : 'Inativa'}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="rounded-md border border-amber-300/35 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-amber-200 hover:bg-amber-500/20"
+                          onClick={handleAddFeaturedPromotion}
+                        >
+                          Adicionar promocao
+                        </button>
+                        {hasActiveFeaturedPromotion ? (
+                          <button
+                            type="button"
+                            className="rounded-md border border-gray-500/40 bg-gray-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-300 hover:bg-gray-500/20"
+                            onClick={handleRemoveFeaturedPromotion}
+                          >
+                            Remover
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
 
                     <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
                       <div className="rounded-xl border border-amber-300/25 bg-black/30 p-3">
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-amber-100">Selecao de pacote</p>
-                        <div className="mt-3 grid grid-cols-2 gap-2">
-                          {CAMPAIGN_PACK_QUANTITIES.map((quantity) => (
-                            <button
-                              key={quantity}
-                              type="button"
-                              className={`rounded-md border px-2 py-2 text-xs font-bold transition ${
-                                (featuredPromotion?.targetQuantity ?? CAMPAIGN_PACK_QUANTITIES[0]) === quantity
-                                  ? 'border-amber-200/70 bg-amber-300 text-black'
-                                  : 'border-white/15 bg-black/30 text-gray-200 hover:border-amber-200/40'
-                              }`}
-                              onClick={() => handleFeaturedPromotionFieldChange('targetQuantity', quantity)}
-                            >
-                              {quantity} cotas
-                            </button>
-                          ))}
-                        </div>
+                        <label className="text-[10px] uppercase tracking-[0.13em] text-amber-100" htmlFor="featured-promotion-bracket">
+                          Bracket da promocao
+                        </label>
+                        <CustomSelect
+                          id="featured-promotion-bracket"
+                          className="mt-0"
+                          value={String(promotionDraft.targetQuantity)}
+                          disabled={availablePromotionQuantities.length === 0 || !hasActiveFeaturedPromotion}
+                          onChange={(value) => handleFeaturedPromotionFieldChange('targetQuantity', Number(value))}
+                          options={availablePromotionQuantities.map((quantity) => ({
+                            value: String(quantity),
+                            label: `Bracket de ${quantity} numeros`,
+                          }))}
+                        />
                       </div>
 
                       <div className="rounded-xl border border-amber-300/25 bg-black/30 p-3">
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-amber-100">Tipo de promocao</p>
-                        <div className="mt-3 inline-flex rounded-md border border-amber-300/30 bg-black/35 p-1">
+                        <p className="text-[10px] uppercase tracking-[0.13em] text-amber-100">Tipo do desconto</p>
+                        <div className="mt-2 inline-flex rounded-md border border-amber-300/30 bg-black/35 p-1">
                           <button
                             type="button"
                             className={`rounded px-3 py-1.5 text-xs font-bold ${
-                              (featuredPromotion?.discountType ?? 'percent') === 'percent' ? 'bg-amber-300 text-black' : 'text-gray-300'
+                              promotionDraft.discountType === 'percent' ? 'bg-amber-300 text-black' : 'text-gray-300'
                             }`}
+                            disabled={!hasActiveFeaturedPromotion}
                             onClick={() => handleFeaturedPromotionFieldChange('discountType', 'percent')}
                           >
                             %
@@ -1108,47 +1140,50 @@ export default function CampaignTab() {
                           <button
                             type="button"
                             className={`rounded px-3 py-1.5 text-xs font-bold ${
-                              (featuredPromotion?.discountType ?? 'percent') === 'fixed' ? 'bg-amber-300 text-black' : 'text-gray-300'
+                              promotionDraft.discountType === 'fixed' ? 'bg-amber-300 text-black' : 'text-gray-300'
                             }`}
+                            disabled={!hasActiveFeaturedPromotion}
                             onClick={() => handleFeaturedPromotionFieldChange('discountType', 'fixed')}
                           >
                             Fixo
                           </button>
                         </div>
-                        <label className="mt-3 block text-[10px] uppercase tracking-[0.13em] text-amber-100">Valor</label>
+                        <label className="text-[10px] uppercase tracking-[0.13em] text-amber-100" htmlFor="featured-promotion-discount">
+                          Valor do desconto (opcional)
+                        </label>
                         <input
+                          id="featured-promotion-discount"
                           className="mt-2 h-10 w-full rounded-md border border-amber-300/30 bg-black/35 px-3 text-sm font-semibold text-white outline-none focus:border-amber-200/80"
                           inputMode="decimal"
                           type="text"
-                          value={(featuredPromotion?.discountValue ?? 10).toString().replace('.', ',')}
+                          value={(promotionDraft.discountValue ?? 0).toString().replace('.', ',')}
+                          placeholder={promotionDraft.discountType === 'percent' ? 'Ex: 10' : 'Ex: 25,00'}
+                          disabled={!hasActiveFeaturedPromotion}
                           onChange={(event) => handleFeaturedPromotionFieldChange('discountValue', Number(event.target.value.replace(',', '.')))}
                         />
+                        <p className="mt-2 text-[11px] text-gray-300">
+                          {promotionDraft.discountType === 'percent'
+                            ? 'Informe percentual. Ex: 10 = 10% de desconto.'
+                            : 'Informe valor fixo em reais. Ex: 25 = R$ 25,00 de desconto.'}
+                        </p>
                       </div>
 
                       <div className="rounded-xl border border-amber-300/25 bg-black/30 p-3 lg:col-span-2">
-                        <label className="text-[10px] uppercase tracking-[0.13em] text-amber-100">Texto do banner na home</label>
+                        <label className="text-[10px] uppercase tracking-[0.13em] text-amber-100" htmlFor="featured-promotion-label">
+                          Label promocional
+                        </label>
                         <input
+                          id="featured-promotion-label"
                           className="mt-2 h-10 w-full rounded-md border border-amber-300/30 bg-black/35 px-3 text-sm font-semibold text-white outline-none focus:border-amber-200/80"
                           type="text"
-                          value={featuredPromotion?.label ?? ''}
+                          value={promotionDraft.label}
+                          disabled={!hasActiveFeaturedPromotion}
                           onChange={(event) => handleFeaturedPromotionFieldChange('label', event.target.value)}
                           placeholder="Ex: Melhor escolha"
                         />
                         <p className="mt-2 text-[11px] text-gray-300">
-                          Esse texto aparece diretamente no selo de promocao da home. Mantenha curto para gerar impacto.
+                          Essa label aparece sobre o bracket na home e na pagina de compra manual.
                         </p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {FEATURED_PROMOTION_LABEL_SUGGESTIONS.map((suggestion) => (
-                            <button
-                              key={suggestion}
-                              type="button"
-                              className="rounded-full border border-amber-300/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.11em] text-amber-100 transition hover:bg-amber-500/20"
-                              onClick={() => handleFeaturedPromotionFieldChange('label', suggestion)}
-                            >
-                              {suggestion}
-                            </button>
-                          ))}
-                        </div>
                       </div>
 
                       <div className="rounded-xl border border-cyan-300/25 bg-cyan-500/10 p-3 lg:col-span-2">

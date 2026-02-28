@@ -84,7 +84,7 @@ export default function PurchaseSummaryCard({
         <div className="mt-2 flex gap-2 max-[419px]:flex-col">
           <input
             id="coupon-code"
-            className="h-10 flex-1 rounded border border-white/15 bg-luxury-card px-3 text-sm text-white outline-none focus:border-neon-pink max-[419px]:w-full"
+            className="h-10 flex-1 rounded border border-white/15 bg-luxury-card px-3 text-sm text-white outline-none focus:border-neon-pink max-[419px]:h-12 max-[419px]:w-full"
             type="text"
             placeholder="Ex: PIX10"
             value={couponCode}
@@ -112,7 +112,7 @@ export default function PurchaseSummaryCard({
           <span className="text-2xl font-black text-neon-pink">{formatCurrency(totalAmount)}</span>
         </div>
         <p className="mt-2 text-xs text-gray-400">
-          Compra minima de {minQuantity} cotas. Numeros confirmados apos pagamento aprovado.
+          Menor bracket ativo: {minQuantity} numeros. Numeros confirmados apos pagamento aprovado.
         </p>
       </div>
 

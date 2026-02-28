@@ -8,7 +8,7 @@ import {
   RAFFLE_NUMBER_START,
   RESERVATION_DURATION_MS,
 } from './constants.js'
-import { readCampaignMinPurchaseQuantity } from './campaignHandlers.js'
+import { readCampaignPurchaseQuantityLimits } from './campaignHandlers.js'
 import {
   buildNumberStateView,
   buildReservedNumberStateData,
@@ -35,7 +35,7 @@ function sanitizeReservationNumbers(
   value: unknown,
   rangeStart: number,
   rangeEnd: number,
-  minPurchaseQuantity: number,
+  minReservationQuantity: number,
   maxReservationQuantity: number,
 ): number[] {
   if (!Array.isArray(value)) {
@@ -59,8 +59,8 @@ function sanitizeReservationNumbers(
     ),
   ).sort((a, b) => a - b)
 
-  if (parsed.length < minPurchaseQuantity) {
-    throw new HttpsError('invalid-argument', `Selecione no minimo ${minPurchaseQuantity} numeros`)
+  if (parsed.length < minReservationQuantity) {
+    throw new HttpsError('invalid-argument', `Selecione no minimo ${minReservationQuantity} numeros`)
   }
 
   if (parsed.length > maxReservationQuantity) {
@@ -109,13 +109,14 @@ export function createReserveNumbersHandler(db: Firestore) {
       const campaignSnapshot = await campaignRef.get()
       const campaignData = campaignSnapshot.exists ? campaignSnapshot.data() : undefined
       const campaignRange = readCampaignNumberRange(campaignData, CAMPAIGN_DOC_ID)
-      const minPurchaseQuantity = readCampaignMinPurchaseQuantity(campaignData)
-      const maxReservationQuantity = Math.min(campaignRange.total, MAX_PURCHASE_QUANTITY)
+      const quantityLimits = readCampaignPurchaseQuantityLimits(campaignData)
+      const maxReservationQuantity = Math.min(campaignRange.total, MAX_PURCHASE_QUANTITY, quantityLimits.max)
+      const minReservationQuantity = Math.min(quantityLimits.min, maxReservationQuantity)
       const requestedNumbers = sanitizeReservationNumbers(
         payload.numbers,
         campaignRange.start,
         campaignRange.end,
-        minPurchaseQuantity,
+        minReservationQuantity,
         maxReservationQuantity,
       )
       const nowMs = Date.now()
@@ -132,7 +133,7 @@ export function createReserveNumbersHandler(db: Firestore) {
         uniqueStateReads: transactionStats.uniqueStateReads,
         transactionAttempts: transactionStats.transactionAttempts,
         conflictsCount: transactionStats.conflictsCount,
-        minPurchaseQuantity,
+        minReservationQuantity,
         maxReservationQuantity,
         firstNumber: requestedNumbers[0],
         lastNumber: requestedNumbers[requestedNumbers.length - 1],

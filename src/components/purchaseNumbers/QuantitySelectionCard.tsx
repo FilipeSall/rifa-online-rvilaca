@@ -1,7 +1,9 @@
-import { PURCHASE_PACKS } from '../../const/purchaseNumbers'
+import type { CampaignFeaturedPromotion } from '../../types/campaign'
 
 type QuantitySelectionCardProps = {
   quantity: number
+  packQuantities: number[]
+  featuredPromotion: CampaignFeaturedPromotion | null
   minQuantity: number
   maxSelectable: number
   onSetQuantity: (value: number) => void
@@ -9,16 +11,17 @@ type QuantitySelectionCardProps = {
 
 export default function QuantitySelectionCard({
   quantity,
+  packQuantities,
+  featuredPromotion,
   minQuantity,
   maxSelectable,
   onSetQuantity,
 }: QuantitySelectionCardProps) {
-  const suggestedPacks = Array.from(new Set([
-    minQuantity,
-    ...PURCHASE_PACKS.filter((pack) => pack > minQuantity && pack <= maxSelectable),
-    maxSelectable,
-  ])).sort((left, right) => left - right)
+  const suggestedPacks = Array.from(new Set(
+    packQuantities.filter((pack) => pack >= minQuantity && pack <= maxSelectable),
+  )).sort((left, right) => left - right)
   const effectivePacks = suggestedPacks.slice(0, 8)
+  const promotionLabel = featuredPromotion?.label.trim() || 'Promocao'
 
   return (
     <article className="rounded-2xl border border-white/10 bg-luxury-card/70 p-6">
@@ -30,21 +33,33 @@ export default function QuantitySelectionCard({
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        {effectivePacks.map((pack) => (
-          <button
-            key={pack}
-            className={`rounded-lg border px-4 py-4 text-left transition-all ${
-              quantity === pack
-                ? 'border-neon-pink bg-neon-pink/10 text-neon-pink shadow-glow-pink'
-                : 'border-white/10 bg-luxury-bg text-white hover:border-neon-pink/50'
-            }`}
-            type="button"
-            onClick={() => onSetQuantity(pack)}
-          >
-            <p className="text-lg font-black">+{pack}</p>
-            <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Numeros</p>
-          </button>
-        ))}
+        {effectivePacks.map((pack) => {
+          const isPromotionPack = Boolean(featuredPromotion?.active && featuredPromotion.targetQuantity === pack)
+
+          return (
+            <div key={pack} className="relative">
+              {isPromotionPack ? (
+                <span className="pointer-events-none absolute -top-2 left-1/2 z-10 inline-flex min-w-[120px] max-w-[92%] -translate-x-1/2 items-center justify-center rounded-md border border-amber-300/55 bg-[linear-gradient(120deg,rgba(245,158,11,0.95),rgba(251,191,36,0.92))] px-3 py-1 text-center text-[9px] font-black uppercase tracking-[0.09em] text-black shadow-[0_8px_18px_rgba(245,158,11,0.3)]">
+                  {promotionLabel}
+                </span>
+              ) : null}
+              <button
+                className={`w-full rounded-lg border px-4 py-4 text-left transition-all ${
+                  quantity === pack
+                    ? 'border-neon-pink bg-neon-pink/10 text-neon-pink shadow-glow-pink'
+                    : isPromotionPack
+                      ? 'border-amber-300/55 bg-amber-500/10 text-amber-100 hover:border-amber-200/75'
+                      : 'border-white/10 bg-luxury-bg text-white hover:border-neon-pink/50'
+                }`}
+                type="button"
+                onClick={() => onSetQuantity(pack)}
+              >
+                <p className="text-lg font-black">+{pack}</p>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Numeros</p>
+              </button>
+            </div>
+          )
+        })}
       </div>
 
       <div className="mt-4 flex flex-col gap-4 rounded-lg border border-white/10 bg-luxury-bg p-4 md:flex-row md:items-center md:justify-between">

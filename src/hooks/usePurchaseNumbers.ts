@@ -4,9 +4,11 @@ import { toast } from 'react-toastify'
 import { useNavigate } from 'react-router-dom'
 import { OPEN_AUTH_MODAL_EVENT } from '../const/auth'
 import {
+  CAMPAIGN_PACK_QUANTITIES,
+} from '../const/campaign'
+import {
   DEFAULT_INITIAL_QUANTITY,
   MAX_QUANTITY,
-  MIN_QUANTITY,
   RAFFLE_NUMBER_END,
   RAFFLE_NUMBER_START,
 } from '../const/purchaseNumbers'
@@ -223,7 +225,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   const [pageStartState, setPageStartState] = useState(rangeStart)
   const [selectionMode, setSelectionMode] = useState<SelectionMode>(initialSelectionMode)
   const [quantity, setQuantity] = useState(
-    getSafeQuantity(DEFAULT_INITIAL_QUANTITY, MAX_QUANTITY, MIN_QUANTITY),
+    getSafeQuantity(DEFAULT_INITIAL_QUANTITY, MAX_QUANTITY, CAMPAIGN_PACK_QUANTITIES[0]),
   )
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>([])
   const [couponCode, setCouponCode] = useState('')
@@ -301,15 +303,30 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   const smallestAvailableNumber = rangeStart
   const isPageLoading = false
 
-  const maxSelectable = Math.max(
+  const reservationCap = Math.max(
     1,
     Math.min(totalNumbers > 0 ? totalNumbers : RAFFLE_NUMBER_END, MAX_QUANTITY),
   )
-  const minPurchaseQuantityRaw =
-    Number.isInteger(campaign.minPurchaseQuantity) && campaign.minPurchaseQuantity > 0
-      ? campaign.minPurchaseQuantity
-      : MIN_QUANTITY
-  const minPurchaseQuantity = Math.min(minPurchaseQuantityRaw, maxSelectable)
+  const activePackQuantities = useMemo(() => (
+    campaign.packPrices
+      .filter((item) => item.active)
+      .map((item) => item.quantity)
+      .filter((item, index, list) => Number.isInteger(item) && item > 0 && list.indexOf(item) === index)
+      .sort((left, right) => left - right)
+  ), [campaign.packPrices])
+  const availablePackQuantities = useMemo(() => {
+    const base = activePackQuantities.length > 0
+      ? activePackQuantities
+      : [...CAMPAIGN_PACK_QUANTITIES]
+    const withinCap = base.filter((quantityOption) => quantityOption <= reservationCap)
+    if (withinCap.length > 0) {
+      return withinCap
+    }
+
+    return [reservationCap]
+  }, [activePackQuantities, reservationCap])
+  const minSelectableQuantity = availablePackQuantities[0]
+  const maxSelectable = availablePackQuantities[availablePackQuantities.length - 1]
 
   const selectedCount = selectedNumbers.length
   const unitPrice = Number.isFinite(campaign.pricePerCota) && campaign.pricePerCota > 0
@@ -329,7 +346,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   )
   const discountAmount = couponDiscountAmount
   const totalAmount = Math.max(subtotalAfterPromotion - couponDiscountAmount, 0)
-  const canProceed = selectedCount >= minPurchaseQuantity && !isReserving && !isAutoSelecting
+  const canProceed = selectedCount >= minSelectableQuantity && !isReserving && !isAutoSelecting
 
   useEffect(() => {
     setPurchaseSummary({
@@ -353,8 +370,8 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   ])
 
   useEffect(() => {
-    setQuantity((current) => getSafeQuantity(current, maxSelectable, minPurchaseQuantity))
-  }, [maxSelectable, minPurchaseQuantity])
+    setQuantity((current) => getSafeQuantity(current, maxSelectable, minSelectableQuantity))
+  }, [maxSelectable, minSelectableQuantity])
 
   useEffect(() => {
     setSelectedNumbers((currentSelection) => {
@@ -495,11 +512,11 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
 
   const handleSetQuantity = useCallback(
     (value: number) => {
-      const safeValue = getSafeQuantity(value, maxSelectable, minPurchaseQuantity)
+      const safeValue = getSafeQuantity(value, maxSelectable, minSelectableQuantity)
       setQuantity(safeValue)
       clearReservationState()
     },
-    [clearReservationState, maxSelectable, minPurchaseQuantity],
+    [clearReservationState, maxSelectable, minSelectableQuantity],
   )
 
   const handleClearSelectedNumbers = useCallback(() => {
@@ -879,9 +896,10 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     selectionMode,
     setSelectionMode: handleSelectionModeChange,
     quantity,
+    availablePackQuantities,
     maxSelectable,
     availableNumbersCount,
-    minPurchaseQuantity,
+    minSelectableQuantity,
     rangeStart,
     rangeEnd,
     totalNumbers,
