@@ -11,7 +11,7 @@ export default function PurchaseNumbersPage() {
   const location = useLocation()
   const initialSelectionMode = useMemo<SelectionMode>(() => {
     const searchParams = new URLSearchParams(location.search)
-    return searchParams.get('mode') === 'manual' ? 'manual' : 'automatico'
+    return searchParams.get('mode') === 'automatico' ? 'automatico' : 'manual'
   }, [location.search])
   const purchaseState = usePurchaseNumbers({ initialSelectionMode })
 

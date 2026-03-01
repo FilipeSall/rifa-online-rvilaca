@@ -21,7 +21,7 @@ type NumberSelectionCardProps = {
   isPageLoading: boolean
   isManualAdding: boolean
   shouldHighlightAutoButton: boolean
-  onSelectionModeChange: (mode: SelectionMode) => void
+  onFillRemainingAutomatically: () => void
   onToggleNumber: (slot: NumberSlot) => void
   onLoadPreviousPage: () => void
   onLoadNextPage: () => void
@@ -61,7 +61,7 @@ export default function NumberSelectionCard({
   isPageLoading,
   isManualAdding,
   shouldHighlightAutoButton,
-  onSelectionModeChange,
+  onFillRemainingAutomatically,
   onToggleNumber,
   onLoadPreviousPage,
   onLoadNextPage,
@@ -125,29 +125,8 @@ export default function NumberSelectionCard({
 
       <div className="relative z-10">
         <p className="text-[10px] uppercase tracking-[0.22em] text-gray-500">2. Selecao de numeros</p>
-        <div className="mt-3 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="mt-3">
           <h2 className="text-xl font-bold text-white">Escolha seus numeros com controle total</h2>
-          <div className="inline-flex rounded-xl border border-white/10 bg-luxury-bg p-1">
-            <button
-              ref={autoButtonRef}
-              className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-widest transition-all ${
-                selectionMode === 'automatico' ? 'bg-neon-pink text-black' : 'text-gray-400 hover:text-white'
-              } ${shouldHighlightAutoButton ? 'ring-2 ring-white ring-offset-1 ring-offset-luxury-bg scale-105' : ''}`}
-              type="button"
-              onClick={() => onSelectionModeChange('automatico')}
-            >
-              Automatico
-            </button>
-            <button
-              className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-widest transition-colors ${
-                selectionMode === 'manual' ? 'bg-neon-pink text-black' : 'text-gray-400 hover:text-white'
-              }`}
-              type="button"
-              onClick={() => onSelectionModeChange('manual')}
-            >
-              Manual
-            </button>
-          </div>
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -241,7 +220,18 @@ export default function NumberSelectionCard({
             <span className="h-2 w-2 rounded-full bg-neon-pink" /> Selecionado
           </span>
           <button
-            className="ml-auto h-9 rounded-lg border border-red-300/30 bg-red-500/10 px-3 text-[11px] font-bold uppercase tracking-wider text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            ref={autoButtonRef}
+            className={`ml-auto h-9 rounded-lg border border-cyan-300/35 bg-cyan-500/10 px-3 text-[11px] font-bold uppercase tracking-wider text-cyan-100 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40 ${
+              shouldHighlightAutoButton ? 'ring-2 ring-white ring-offset-1 ring-offset-luxury-bg scale-105' : ''
+            }`}
+            type="button"
+            onClick={onFillRemainingAutomatically}
+            disabled={isPageLoading || isManualAdding || selectedCount >= quantity}
+          >
+            Preencher o resto automaticamente
+          </button>
+          <button
+            className="h-9 rounded-lg border border-red-300/30 bg-red-500/10 px-3 text-[11px] font-bold uppercase tracking-wider text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
             type="button"
             onClick={onClearSelectedNumbers}
             disabled={selectedCount === 0 || isPageLoading}

@@ -149,7 +149,7 @@ function RankingSection() {
             accentClassName="bg-gradient-to-r from-amber-400 via-neon-pink to-yellow-300"
             emptyMessage="Ainda nao ha compras pagas para montar o ranking geral."
             errorMessage={generalRanking.errorMessage}
-            footer="Ranking geral por quantidade total de cotas pagas na campanha."
+            footer="Ranking geral por quantidade total de cotas pagas na campanha. Ranking atualizado toda sexta-feira."
             isLoading={generalRanking.isLoading}
             items={generalRanking.items}
             subtitle="Classificacao acumulada em toda a edicao."
@@ -160,7 +160,7 @@ function RankingSection() {
             accentClassName="bg-gradient-to-r from-emerald-400 via-cyan-300 to-blue-300"
             emptyMessage="Ainda nao ha compras pagas na janela semanal."
             errorMessage={weeklyRanking.errorMessage}
-            footer="Regra: domingo 00:00 ate sexta 23:59, desempate por compra mais antiga."
+            footer="Regra: domingo 00:00 ate sexta 23:59, desempate por compra mais antiga. Ranking atualizado toda sexta-feira."
             isLoading={weeklyRanking.isLoading}
             items={weeklyRanking.items}
             subtitle={weeklySubtitle}

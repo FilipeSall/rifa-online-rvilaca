@@ -127,7 +127,7 @@ export default function WinnersModal({
                 <p className="font-luxury text-2xl font-black text-amber-100">O próximo pode ser você!</p>
                 <p className="mt-2 text-sm text-amber-50/90">Garanta seus números e participe dos próximos sorteios.</p>
                 <Link
-                  to="/comprar"
+                  to="/comprar-manualmente"
                   onClick={onClose}
                   className="mt-4 inline-flex h-11 items-center justify-center rounded-lg bg-neon-pink px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition-colors hover:bg-primary-hover"
                 >

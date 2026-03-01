@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import FeaturedVideoFloatingButton from './components/home/FeaturedVideoFloatingButton'
@@ -30,7 +30,7 @@ export default function App() {
   const { pathname } = useLocation()
   const isDashboardOrAccountRoute = pathname.startsWith('/dashboard') || pathname.startsWith('/minha-conta')
   const shouldRenderFeaturedVideoFloatingButton = !isDashboardOrAccountRoute
-  const shouldRenderFloatingCartQuickPanel = pathname === '/' || pathname === '/comprar'
+  const shouldRenderFloatingCartQuickPanel = pathname === '/' || pathname === '/comprar-manualmente'
   const shouldRenderWinnersNotifications = pathname === '/'
   const winnersNotification = useWinnersNotification(shouldRenderWinnersNotifications)
 
@@ -48,7 +48,8 @@ export default function App() {
       />
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/comprar" element={<PurchaseNumbersPage />} />
+        <Route path="/comprar-manualmente" element={<PurchaseNumbersPage />} />
+        <Route path="/comprar" element={<Navigate to="/comprar-manualmente" replace />} />
         <Route path="/minha-conta" element={<UserDashboardPage />} />
         <Route path="/dashboard" element={<AdminDashboardPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />

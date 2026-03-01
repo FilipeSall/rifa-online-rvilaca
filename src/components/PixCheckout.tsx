@@ -11,6 +11,9 @@ interface PixCheckoutProps {
   cpf?: string | null
   existingOrderId?: string | null
   couponCode?: string | null
+  canRecoverReservation?: boolean
+  isRecoveringReservation?: boolean
+  onRecoverReservation?: () => Promise<void> | void
   onPaymentConfirmed?: (orderId: string) => void
 }
 
@@ -69,6 +72,9 @@ export default function PixCheckout({
   cpf,
   existingOrderId = null,
   couponCode = null,
+  canRecoverReservation = false,
+  isRecoveringReservation = false,
+  onRecoverReservation,
   onPaymentConfirmed,
 }: PixCheckoutProps) {
   const { createDeposit, loading, error, clearError } = useHorsePay()
@@ -85,6 +91,14 @@ export default function PixCheckout({
     () => localError || normalizeErrorMessage(error),
     [error, localError],
   )
+  const shouldShowRecoveryButton = useMemo(() => {
+    if (!canRecoverReservation || !onRecoverReservation || status !== 'failed') {
+      return false
+    }
+
+    const normalized = errorMessage.toLowerCase()
+    return normalized.includes('sua reserva expirou') && normalized.includes('reserve novamente')
+  }, [canRecoverReservation, errorMessage, onRecoverReservation, status])
 
   const stopOrderListener = useCallback(() => {
     if (!orderListenerRef.current) {
@@ -267,6 +281,26 @@ export default function PixCheckout({
     }
   }, [copyPasteCode])
 
+  const handleRecoverReservationAndRetry = useCallback(async () => {
+    if (!onRecoverReservation || !canRecoverReservation) {
+      return
+    }
+
+    clearError()
+    setLocalError(null)
+    setCopyMessage('')
+
+    try {
+      await onRecoverReservation()
+    } catch (reservationError) {
+      setLocalError(normalizeErrorMessage(reservationError))
+      setStatus('failed')
+      return
+    }
+
+    await handleCreatePix()
+  }, [canRecoverReservation, clearError, handleCreatePix, onRecoverReservation])
+
   const isGenerating = loading || status === 'generating'
 
   return (
@@ -337,13 +371,26 @@ export default function PixCheckout({
       {status === 'failed' && (
         <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/15 p-4">
           <p className="text-sm font-semibold text-red-300">{errorMessage}</p>
-          <button
-            className="mt-3 inline-flex h-10 items-center justify-center rounded-lg bg-red-500 px-4 text-xs font-bold uppercase tracking-wider text-white transition hover:bg-red-400"
-            onClick={handleCreatePix}
-            type="button"
-          >
-            Tentar novamente
-          </button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-red-500 px-4 text-xs font-bold uppercase tracking-wider text-white transition hover:bg-red-400"
+              onClick={handleCreatePix}
+              type="button"
+            >
+              Tentar novamente
+            </button>
+
+            {shouldShowRecoveryButton ? (
+              <button
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-amber-400 px-4 text-xs font-bold uppercase tracking-wider text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-70"
+                onClick={handleRecoverReservationAndRetry}
+                disabled={isRecoveringReservation || isGenerating}
+                type="button"
+              >
+                {isRecoveringReservation ? 'Reservando...' : 'Reservar novamente numeros'}
+              </button>
+            ) : null}
+          </div>
         </div>
       )}
     </div>

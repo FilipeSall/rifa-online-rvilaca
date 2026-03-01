@@ -7,7 +7,13 @@ import {
   type AppCheck,
 } from 'firebase/app-check'
 import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  type Firestore,
+} from 'firebase/firestore'
 import { getFunctions } from 'firebase/functions'
 import { getStorage } from 'firebase/storage'
 
@@ -64,7 +70,19 @@ if (isAppCheckEnabled && appCheckSiteKey) {
 }
 
 const auth = getAuth(app)
-const db = getFirestore(app)
+let db: Firestore
+
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+  })
+} catch {
+  // Fallback para ambientes sem suporte ao cache persistente.
+  db = getFirestore(app)
+}
+
 const storage = getStorage(app)
 const functions = getFunctions(app, import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'southamerica-east1')
 

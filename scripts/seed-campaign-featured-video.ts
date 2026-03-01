@@ -18,7 +18,7 @@ type StoredFeaturedVideo = {
 
 const DEFAULT_CAMPAIGN_ID = 'campanha-bmw-r1200-gs-2026'
 const DEFAULT_SERVICE_ACCOUNT_PATH = 'rifa-online-395d9-firebase-adminsdk-fbsvc-c068a78ce5.json'
-const DEFAULT_VIDEO_ASSET_PATH = 'src/assets/videoJonny.mp4'
+const DEFAULT_VIDEO_ASSET_PATH = 'src/assets/videoJhony.mp4'
 
 function normalizeBucketName(rawBucket: string) {
   return rawBucket.replace(/^gs:\/\//, '').trim()

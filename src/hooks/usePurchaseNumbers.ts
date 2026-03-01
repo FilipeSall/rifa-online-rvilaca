@@ -707,6 +707,44 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     clearReservationState()
   }, [clearReservationState, selectionMode])
 
+  const handleFillRemainingAutomatically = useCallback(() => {
+    const preservedSelection = Array.from(new Set(selectedNumbersRef.current))
+      .filter((number) => number >= rangeStart && number <= rangeEnd)
+      .slice(0, quantity)
+      .sort((left, right) => left - right)
+    const missingQuantity = Math.max(quantity - preservedSelection.length, 0)
+
+    if (missingQuantity <= 0) {
+      return
+    }
+
+    const generated = pickRandomUniqueNumbersFromRange(
+      rangeStart,
+      rangeEnd,
+      missingQuantity,
+      preservedSelection,
+    )
+
+    if (generated.length === 0) {
+      toast.warning('Nao foi possivel completar a selecao automaticamente no momento.', {
+        position: 'bottom-right',
+      })
+      return
+    }
+
+    const mergedSelection = Array.from(new Set([...preservedSelection, ...generated]))
+      .sort((left, right) => left - right)
+      .slice(0, quantity)
+
+    setSelectedNumbers((currentSelection) => (
+      areNumberListsEqual(currentSelection, mergedSelection)
+        ? currentSelection
+        : mergedSelection
+    ))
+    setSelectionMode('manual')
+    clearReservationState()
+  }, [clearReservationState, quantity, rangeEnd, rangeStart])
+
   const handleToggleNumber = useCallback(
     (slot: NumberSlot) => {
       if (slot.status !== 'disponivel') {
@@ -1148,6 +1186,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     conflictResolution,
     handleSetQuantity,
     handleClearSelectedNumbers,
+    handleFillRemainingAutomatically,
     handleToggleNumber,
     handleGoToPage,
     handleAddManualNumber,

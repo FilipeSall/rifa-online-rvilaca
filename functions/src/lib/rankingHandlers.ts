@@ -37,6 +37,8 @@ interface GetWeeklyTopBuyersRankingOutput {
 const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
 const MAX_PUBLIC_RANKING_LIMIT = 50
 const RANKING_CACHE_TTL_MS = 3 * 60 * 1000
+const CHAMPIONS_PUBLIC_CACHE_DOC_ID = '_public-champions-ranking'
+const WEEKLY_PUBLIC_CACHE_DOC_ID = '_public-weekly-top-buyers-ranking'
 
 type RankingCacheEntry = {
   updatedAtMs: number
@@ -147,6 +149,37 @@ function getWeeklyRankingWindow(nowMs = Date.now()): RankingWindow {
 
 function isCacheFresh(cache: RankingCacheEntry | null, nowMs: number) {
   return Boolean(cache && cache.expiresAtMs > nowMs)
+}
+
+async function publishChampionsRankingCache(db: Firestore, cache: RankingCacheEntry) {
+  try {
+    await db.collection('draws').doc(CHAMPIONS_PUBLIC_CACHE_DOC_ID).set({
+      cacheType: 'championsRanking',
+      updatedAtMs: cache.updatedAtMs,
+      items: cache.items,
+    }, { merge: true })
+  } catch (error) {
+    logger.warn('publishChampionsRankingCache failed', { error: String(error) })
+  }
+}
+
+async function publishWeeklyRankingCache(
+  db: Firestore,
+  rankingWindow: RankingWindow,
+  cache: RankingCacheEntry,
+) {
+  try {
+    await db.collection('draws').doc(WEEKLY_PUBLIC_CACHE_DOC_ID).set({
+      cacheType: 'weeklyTopBuyersRanking',
+      weekId: rankingWindow.weekId,
+      weekStartAtMs: rankingWindow.startMs,
+      weekEndAtMs: rankingWindow.endMs,
+      updatedAtMs: cache.updatedAtMs,
+      items: cache.items,
+    }, { merge: true })
+  } catch (error) {
+    logger.warn('publishWeeklyRankingCache failed', { error: String(error) })
+  }
 }
 
 async function loadChampionsRankingCached(db: Firestore): Promise<RankingCacheEntry> {
@@ -317,6 +350,7 @@ export function createGetChampionsRankingHandler(db: Firestore) {
 
     try {
       const cached = await loadChampionsRankingCached(db)
+      await publishChampionsRankingCache(db, cached)
 
       return {
         campaignId: CAMPAIGN_DOC_ID,
@@ -340,6 +374,7 @@ export function createGetWeeklyTopBuyersRankingHandler(db: Firestore) {
 
     try {
       const cached = await loadWeeklyRankingCached(db, rankingWindow)
+      await publishWeeklyRankingCache(db, rankingWindow, cached)
 
       return {
         campaignId: CAMPAIGN_DOC_ID,

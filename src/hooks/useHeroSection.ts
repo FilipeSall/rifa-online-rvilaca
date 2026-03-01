@@ -131,7 +131,7 @@ export function useHeroSection(targetSoldPercentage: number = HERO_CONFIG.target
   }, [])
 
   const handleOpenBuyModal = useCallback(() => {
-    navigate('/comprar')
+    navigate('/comprar-manualmente')
   }, [navigate])
 
   const handleOpenCampaignSettings = useCallback(() => {

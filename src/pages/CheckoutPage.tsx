@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { doc, onSnapshot } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { useLocation, useNavigate } from 'react-router-dom'
 import PixCheckout from '../components/PixCheckout'
 import AnnouncementBar from '../components/home/AnnouncementBar'
 import Footer from '../components/home/Footer'
 import Header from '../components/home/Header'
 import { useCampaignSettings } from '../hooks/useCampaignSettings'
-import { db } from '../lib/firebase'
+import { db, functions } from '../lib/firebase'
 import { useAuthStore } from '../stores/authStore'
 import type { CouponFeedback } from '../types/purchaseNumbers'
 import { validateCouponCode } from '../services/purchaseNumbers/purchaseNumbersService'
@@ -22,6 +23,27 @@ type CheckoutNavigationState = {
   selectedNumbers?: number[]
   couponCode?: string
   isAutomaticSelection?: boolean
+}
+
+type ReserveNumbersInput = {
+  numbers: number[]
+}
+
+type ReserveNumbersResponse = {
+  numbers?: number[]
+}
+
+type CallableEnvelope<T> = T | { result?: T }
+
+function unwrapCallableData<T>(value: CallableEnvelope<T>) {
+  if (value && typeof value === 'object' && 'result' in value) {
+    const wrapped = value as { result?: T }
+    if (wrapped.result !== undefined) {
+      return wrapped.result
+    }
+  }
+
+  return value as T
 }
 
 function parsePositiveAmount(value: unknown) {
@@ -76,6 +98,31 @@ function parseOptionalNumberList(value: unknown) {
   )).sort((left, right) => left - right)
 }
 
+function getReserveErrorMessage(error: unknown) {
+  if (!error || typeof error !== 'object') {
+    return 'Nao foi possivel reservar os numeros agora. Tente novamente.'
+  }
+
+  const candidate = error as { message?: string; code?: string }
+
+  if (candidate.message) {
+    const cleanMessage = candidate.message
+      .replace(/^Firebase:\s*/i, '')
+      .replace(/\s*\(functions\/[a-z-]+\)\.?$/i, '')
+      .trim()
+
+    if (cleanMessage) {
+      return cleanMessage
+    }
+  }
+
+  if (candidate.code === 'functions/unauthenticated') {
+    return 'Voce precisa entrar na conta para reservar numeros.'
+  }
+
+  return 'Nao foi possivel reservar os numeros agora. Tente novamente.'
+}
+
 function formatPhoneInput(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 11)
   if (digits.length <= 10) {
@@ -109,10 +156,15 @@ export default function CheckoutPage() {
   const [payerCpf, setPayerCpf] = useState('')
   const [isReturningToSelection, setIsReturningToSelection] = useState(false)
   const [isGoingToManualSelection, setIsGoingToManualSelection] = useState(false)
+  const [isRecoveringReservation, setIsRecoveringReservation] = useState(false)
   const [reservedNumbers, setReservedNumbers] = useState<number[]>([])
   const [couponInput, setCouponInput] = useState('')
   const [appliedCouponCode, setAppliedCouponCode] = useState<string | null>(null)
   const [couponFeedback, setCouponFeedback] = useState<CouponFeedback | null>(null)
+  const reserveNumbersCallable = useMemo(
+    () => httpsCallable<ReserveNumbersInput, unknown>(functions, 'reserveNumbers'),
+    [],
+  )
   const routeOrderId = useMemo(() => {
     const queryOrderId = new URLSearchParams(location.search).get('orderId')
     const fromQuery = parseOptionalText(queryOrderId)
@@ -292,7 +344,7 @@ export default function CheckoutPage() {
     }
 
     setIsReturningToSelection(true)
-    navigate('/comprar')
+    navigate('/comprar-manualmente')
   }, [isReturningToSelection, navigate])
 
   const handleGoToManualSelection = useCallback(() => {
@@ -301,7 +353,7 @@ export default function CheckoutPage() {
     }
 
     setIsGoingToManualSelection(true)
-    navigate('/comprar?mode=manual')
+    navigate('/comprar-manualmente?mode=manual')
   }, [isGoingToManualSelection, navigate])
 
   const handlePaymentConfirmed = useCallback((paidOrderId: string) => {
@@ -310,6 +362,38 @@ export default function CheckoutPage() {
       state: { highlightOrderId: paidOrderId },
     })
   }, [navigate])
+
+  const handleRecoverReservation = useCallback(async () => {
+    if (isRecoveringReservation) {
+      return
+    }
+
+    if (!isAuthReady || !isLoggedIn || !user?.uid) {
+      throw new Error('Voce precisa entrar na conta para reservar novamente.')
+    }
+
+    if (selectedNumbers.length === 0) {
+      throw new Error('Nao ha numeros para reservar novamente.')
+    }
+
+    setIsRecoveringReservation(true)
+
+    try {
+      const callableResult = await reserveNumbersCallable({ numbers: selectedNumbers })
+      const payload = unwrapCallableData(callableResult.data as CallableEnvelope<ReserveNumbersResponse>)
+      const refreshedNumbers = parseOptionalNumberList(payload.numbers)
+
+      if (refreshedNumbers.length === 0) {
+        throw new Error('Nao foi possivel reservar novamente os numeros selecionados.')
+      }
+
+      setReservedNumbers(refreshedNumbers)
+    } catch (error) {
+      throw new Error(getReserveErrorMessage(error))
+    } finally {
+      setIsRecoveringReservation(false)
+    }
+  }, [isAuthReady, isLoggedIn, isRecoveringReservation, reserveNumbersCallable, selectedNumbers, user?.uid])
 
   return (
     <div className="selection:bg-neon-pink selection:text-black overflow-x-hidden bg-luxury-bg font-display text-text-main">
@@ -564,6 +648,9 @@ export default function CheckoutPage() {
                     cpf={payerCpf}
                     existingOrderId={routeOrderId || null}
                     couponCode={appliedCouponCode}
+                    canRecoverReservation={selectedNumbers.length > 0}
+                    isRecoveringReservation={isRecoveringReservation}
+                    onRecoverReservation={handleRecoverReservation}
                     onPaymentConfirmed={handlePaymentConfirmed}
                   />
                 ) : null}

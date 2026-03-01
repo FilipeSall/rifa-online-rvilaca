@@ -158,7 +158,7 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
               {isPublicMode ? (
                 <Link
                   className="inline-flex h-11 items-center justify-center rounded-lg border border-amber-300/30 bg-amber-400/15 px-4 text-xs font-black uppercase tracking-[0.14em] text-amber-100 transition-colors hover:bg-amber-400/25"
-                  to="/comprar"
+                  to="/comprar-manualmente"
                 >
                   Comprar números
                 </Link>

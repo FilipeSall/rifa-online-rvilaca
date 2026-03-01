@@ -1,22 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { doc, onSnapshot } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
-import { functions } from '../lib/firebase'
+import { db, functions } from '../lib/firebase'
 import type { RankingItem } from '../const/home'
-import { markFetchedNow, readCachedJson, shouldFetchAfterDays, writeCachedJson } from '../utils/fetchCache'
 
 type GetChampionsRankingOutput = {
   updatedAtMs?: number
   items?: RankingItem[]
 }
 const RANKING_LIMIT = 20
-const FETCH_EVERY_DAYS = 5
-const CACHE_KEY = 'rifa-online:cache:champions-ranking:v1'
-const LAST_FETCH_KEY = 'rifa-online:last-fetch:champions-ranking:v1'
-
-type ChampionsRankingCache = {
-  items: RankingItem[]
-  updatedAtMs: number | null
-}
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const PUBLIC_CACHE_DOC_PATH = ['draws', '_public-champions-ranking'] as const
 
 type CallableEnvelope<T> = T | { result?: T }
 
@@ -53,17 +47,38 @@ function normalizeRankingItems(value: unknown): RankingItem[] {
     .filter((item) => item.pos > 0 && item.cotas > 0)
 }
 
+function shouldRefreshRanking(updatedAtMs: number | null, nowMs = Date.now()) {
+  if (!updatedAtMs || !Number.isFinite(updatedAtMs)) {
+    return true
+  }
+
+  return nowMs >= updatedAtMs + CACHE_TTL_MS
+}
+
 export function useChampionsRanking() {
   const [items, setItems] = useState<RankingItem[]>([])
   const [updatedAtMs, setUpdatedAtMs] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const hasCachedSnapshotRef = useRef(false)
+  const isRefreshingRef = useRef(false)
   const getRankingCallable = useMemo(
     () => httpsCallable<{ limit: number }, unknown>(functions, 'getChampionsRanking'),
     [],
   )
+  const rankingCacheDocRef = useMemo(
+    () => doc(db, PUBLIC_CACHE_DOC_PATH[0], PUBLIC_CACHE_DOC_PATH[1]),
+    [],
+  )
 
   const refreshRanking = useCallback(async () => {
+    if (isRefreshingRef.current) {
+      return
+    }
+
+    isRefreshingRef.current = true
+    setIsLoading(true)
+
     try {
       const response = await getRankingCallable({ limit: RANKING_LIMIT })
       const payload = unwrapCallableData(response.data as CallableEnvelope<GetChampionsRankingOutput>)
@@ -75,35 +90,71 @@ export function useChampionsRanking() {
 
       setItems(nextItems)
       setUpdatedAtMs(nextUpdatedAtMs)
-      writeCachedJson(CACHE_KEY, { items: nextItems, updatedAtMs: nextUpdatedAtMs } satisfies ChampionsRankingCache)
-      markFetchedNow(LAST_FETCH_KEY)
       setErrorMessage(null)
     } catch {
-      setErrorMessage('Nao foi possivel carregar o ranking agora.')
+      if (!hasCachedSnapshotRef.current) {
+        setErrorMessage('Nao foi possivel carregar o ranking agora.')
+      }
     } finally {
+      isRefreshingRef.current = false
       setIsLoading(false)
     }
   }, [getRankingCallable])
 
   useEffect(() => {
-    const cached = readCachedJson<ChampionsRankingCache>(CACHE_KEY)
-    if (cached) {
-      setItems(Array.isArray(cached.items) ? cached.items : [])
-      setUpdatedAtMs(
-        typeof cached.updatedAtMs === 'number' && Number.isFinite(cached.updatedAtMs)
-          ? cached.updatedAtMs
-          : null,
-      )
+    const unsubscribe = onSnapshot(
+      rankingCacheDocRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          void refreshRanking()
+          return
+        }
+
+        const payload = snapshot.data() as Record<string, unknown>
+        const nextItems = normalizeRankingItems(payload.items)
+        const nextUpdatedAtMs =
+          typeof payload.updatedAtMs === 'number' && Number.isFinite(payload.updatedAtMs)
+            ? payload.updatedAtMs
+            : null
+
+        hasCachedSnapshotRef.current = true
+        setItems(nextItems)
+        setUpdatedAtMs(nextUpdatedAtMs)
+        setErrorMessage(null)
+        setIsLoading(false)
+
+        if (shouldRefreshRanking(nextUpdatedAtMs)) {
+          void refreshRanking()
+        }
+      },
+      () => {
+        // Mantém fallback via callable.
+        void refreshRanking()
+      },
+    )
+
+    return unsubscribe
+  }, [rankingCacheDocRef, refreshRanking])
+
+  useEffect(() => {
+    if (!updatedAtMs || !Number.isFinite(updatedAtMs)) {
+      return
     }
 
-    const shouldFetch = shouldFetchAfterDays(LAST_FETCH_KEY, FETCH_EVERY_DAYS)
-    if (shouldFetch || !cached) {
+    const refreshAtMs = updatedAtMs + CACHE_TTL_MS
+    const delayMs = refreshAtMs - Date.now()
+
+    if (delayMs <= 0) {
       void refreshRanking()
       return
     }
 
-    setIsLoading(false)
-  }, [refreshRanking])
+    const timer = window.setTimeout(() => {
+      void refreshRanking()
+    }, delayMs)
+
+    return () => window.clearTimeout(timer)
+  }, [updatedAtMs, refreshRanking])
 
   return {
     items,

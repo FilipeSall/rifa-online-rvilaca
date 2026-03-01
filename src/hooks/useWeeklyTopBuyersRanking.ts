@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { doc, onSnapshot } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
-import { functions } from '../lib/firebase'
+import { db, functions } from '../lib/firebase'
 import type { RankingItem } from '../const/home'
-import { markFetchedNow, readCachedJson, shouldFetchAfterDays, writeCachedJson } from '../utils/fetchCache'
 
 type GetWeeklyTopBuyersRankingOutput = {
   updatedAtMs?: number
@@ -12,17 +12,8 @@ type GetWeeklyTopBuyersRankingOutput = {
   items?: RankingItem[]
 }
 const RANKING_LIMIT = 20
-const FETCH_EVERY_DAYS = 5
-const CACHE_KEY = 'rifa-online:cache:weekly-top-buyers-ranking:v1'
-const LAST_FETCH_KEY = 'rifa-online:last-fetch:weekly-top-buyers-ranking:v1'
-
-type WeeklyRankingCache = {
-  items: RankingItem[]
-  updatedAtMs: number | null
-  weekId: string | null
-  weekStartAtMs: number | null
-  weekEndAtMs: number | null
-}
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const PUBLIC_CACHE_DOC_PATH = ['draws', '_public-weekly-top-buyers-ranking'] as const
 
 type CallableEnvelope<T> = T | { result?: T }
 
@@ -59,6 +50,14 @@ function normalizeRankingItems(value: unknown): RankingItem[] {
     .filter((item) => item.pos > 0 && item.cotas > 0)
 }
 
+function shouldRefreshRanking(updatedAtMs: number | null, nowMs = Date.now()) {
+  if (!updatedAtMs || !Number.isFinite(updatedAtMs)) {
+    return true
+  }
+
+  return nowMs >= updatedAtMs + CACHE_TTL_MS
+}
+
 export function useWeeklyTopBuyersRanking() {
   const [items, setItems] = useState<RankingItem[]>([])
   const [updatedAtMs, setUpdatedAtMs] = useState<number | null>(null)
@@ -67,12 +66,25 @@ export function useWeeklyTopBuyersRanking() {
   const [weekEndAtMs, setWeekEndAtMs] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const hasCachedSnapshotRef = useRef(false)
+  const isRefreshingRef = useRef(false)
   const getWeeklyRankingCallable = useMemo(
     () => httpsCallable<{ limit: number }, unknown>(functions, 'getWeeklyTopBuyersRanking'),
     [],
   )
+  const rankingCacheDocRef = useMemo(
+    () => doc(db, PUBLIC_CACHE_DOC_PATH[0], PUBLIC_CACHE_DOC_PATH[1]),
+    [],
+  )
 
   const refreshRanking = useCallback(async () => {
+    if (isRefreshingRef.current) {
+      return
+    }
+
+    isRefreshingRef.current = true
+    setIsLoading(true)
+
     try {
       const response = await getWeeklyRankingCallable({ limit: RANKING_LIMIT })
       const payload = unwrapCallableData(response.data as CallableEnvelope<GetWeeklyTopBuyersRankingOutput>)
@@ -96,52 +108,83 @@ export function useWeeklyTopBuyersRanking() {
       setWeekId(nextWeekId)
       setWeekStartAtMs(nextWeekStartAtMs)
       setWeekEndAtMs(nextWeekEndAtMs)
-      writeCachedJson(CACHE_KEY, {
-        items: nextItems,
-        updatedAtMs: nextUpdatedAtMs,
-        weekId: nextWeekId,
-        weekStartAtMs: nextWeekStartAtMs,
-        weekEndAtMs: nextWeekEndAtMs,
-      } satisfies WeeklyRankingCache)
-      markFetchedNow(LAST_FETCH_KEY)
       setErrorMessage(null)
     } catch {
-      setErrorMessage('Nao foi possivel carregar o ranking semanal agora.')
+      if (!hasCachedSnapshotRef.current) {
+        setErrorMessage('Nao foi possivel carregar o ranking semanal agora.')
+      }
     } finally {
+      isRefreshingRef.current = false
       setIsLoading(false)
     }
   }, [getWeeklyRankingCallable])
 
   useEffect(() => {
-    const cached = readCachedJson<WeeklyRankingCache>(CACHE_KEY)
-    if (cached) {
-      setItems(Array.isArray(cached.items) ? cached.items : [])
-      setUpdatedAtMs(
-        typeof cached.updatedAtMs === 'number' && Number.isFinite(cached.updatedAtMs)
-          ? cached.updatedAtMs
-          : null,
-      )
-      setWeekId(typeof cached.weekId === 'string' ? cached.weekId : null)
-      setWeekStartAtMs(
-        typeof cached.weekStartAtMs === 'number' && Number.isFinite(cached.weekStartAtMs)
-          ? cached.weekStartAtMs
-          : null,
-      )
-      setWeekEndAtMs(
-        typeof cached.weekEndAtMs === 'number' && Number.isFinite(cached.weekEndAtMs)
-          ? cached.weekEndAtMs
-          : null,
-      )
+    const unsubscribe = onSnapshot(
+      rankingCacheDocRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          void refreshRanking()
+          return
+        }
+
+        const payload = snapshot.data() as Record<string, unknown>
+        const nextItems = normalizeRankingItems(payload.items)
+        const nextUpdatedAtMs =
+          typeof payload.updatedAtMs === 'number' && Number.isFinite(payload.updatedAtMs)
+            ? payload.updatedAtMs
+            : null
+        const nextWeekId = typeof payload.weekId === 'string' ? payload.weekId : null
+        const nextWeekStartAtMs =
+          typeof payload.weekStartAtMs === 'number' && Number.isFinite(payload.weekStartAtMs)
+            ? payload.weekStartAtMs
+            : null
+        const nextWeekEndAtMs =
+          typeof payload.weekEndAtMs === 'number' && Number.isFinite(payload.weekEndAtMs)
+            ? payload.weekEndAtMs
+            : null
+
+        hasCachedSnapshotRef.current = true
+        setItems(nextItems)
+        setUpdatedAtMs(nextUpdatedAtMs)
+        setWeekId(nextWeekId)
+        setWeekStartAtMs(nextWeekStartAtMs)
+        setWeekEndAtMs(nextWeekEndAtMs)
+        setErrorMessage(null)
+        setIsLoading(false)
+
+        if (shouldRefreshRanking(nextUpdatedAtMs)) {
+          void refreshRanking()
+        }
+      },
+      () => {
+        // Mantém fallback via callable.
+        void refreshRanking()
+      },
+    )
+
+    return unsubscribe
+  }, [rankingCacheDocRef, refreshRanking])
+
+  useEffect(() => {
+    if (!updatedAtMs || !Number.isFinite(updatedAtMs)) {
+      return
     }
 
-    const shouldFetch = shouldFetchAfterDays(LAST_FETCH_KEY, FETCH_EVERY_DAYS)
-    if (shouldFetch || !cached) {
+    const refreshAtMs = updatedAtMs + CACHE_TTL_MS
+    const delayMs = refreshAtMs - Date.now()
+
+    if (delayMs <= 0) {
       void refreshRanking()
       return
     }
 
-    setIsLoading(false)
-  }, [refreshRanking])
+    const timer = window.setTimeout(() => {
+      void refreshRanking()
+    }, delayMs)
+
+    return () => window.clearTimeout(timer)
+  }, [updatedAtMs, refreshRanking])
 
   return {
     items,

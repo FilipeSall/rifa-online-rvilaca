@@ -132,7 +132,7 @@ export default function HeroSection({
   }, [])
 
   return (
-    <section className="relative overflow-hidden hero-bg pb-20 lg:pt-0 lg:h-[calc(100svh-7rem)] lg:py-4">
+    <section className="relative overflow-hidden hero-bg pb-20 lg:h-[calc(100svh-7rem)] lg:py-4">
       <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-neon-pink/5 to-transparent pointer-events-none" />
       <div className="container relative z-10 mx-auto h-full px-4 lg:px-8">
         <div className="grid grid-cols-1 gap-12 lg:h-full lg:grid-cols-12 lg:items-center">
@@ -160,7 +160,9 @@ export default function HeroSection({
               Além de <span className="text-neon-cyan font-semibold">{mainPrize}</span>, você também concorre a{' '}
               <span className="text-neon-cyan font-semibold">{secondPrize}</span> e{' '}
               <span className="text-neon-cyan font-semibold">{bonusPrize}</span>. Sorteio com transparência total:
-              apuração pela Loteria Federal e validação por algoritmo auditável.
+              apuração pela{' '}
+              <span className="font-semibold text-amber-300">Loteria Federal</span>{' '}
+              e validação por algoritmo auditável.
             </p>
 
             <article className="mt-1 rounded-2xl border border-white/10 bg-luxury-card/70 p-5 lg:max-w-lg xl:max-w-none" style={heroScaledAlignedSectionStyle}>
@@ -208,6 +210,15 @@ export default function HeroSection({
                   )
                 })}
               </div>
+
+              <div className="mt-5 border-t border-white/10 pt-4 text-center">
+                <Link
+                  className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200 transition hover:text-cyan-100"
+                  to="/comprar-manualmente?mode=manual"
+                >
+                  Escolher numeros manualmente
+                </Link>
+              </div>
             </article>
 
             {/* CTA button + secure payment */}
@@ -230,12 +241,6 @@ export default function HeroSection({
                   </>
                 )}
               </button>
-              <Link
-                className="text-center text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200 transition hover:text-cyan-100"
-                to="/comprar"
-              >
-                Escolher numeros manualmente
-              </Link>
               <div className="flex items-center justify-center gap-2 text-gray-400">
                 <span className="material-symbols-outlined text-neon-cyan text-base">verified_user</span>
                 <span className="text-xs">Compra 100% segura e processada instantaneamente.</span>

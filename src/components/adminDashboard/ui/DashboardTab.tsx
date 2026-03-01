@@ -46,9 +46,19 @@ export default function DashboardTab() {
     canRenderConversionChart,
     canRenderVolumeChart,
   } = useDashboardCharts()
+  const isInitialLoading = isLoading && salesSeries.length === 0 && !errorMessage
 
   return (
     <div className="space-y-6">
+      {isInitialLoading ? (
+        <section className="rounded-2xl border border-cyan-300/30 bg-cyan-500/10 p-4 text-sm text-cyan-100">
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-cyan-100 border-t-transparent" />
+            Carregando dados do dashboard...
+          </div>
+        </section>
+      ) : null}
+
       {errorMessage ? (
         <section className="rounded-2xl border border-amber-400/35 bg-amber-500/10 p-4 text-sm text-amber-100">
           Falha ao carregar dashboard em tempo real: {errorMessage}
@@ -56,9 +66,17 @@ export default function DashboardTab() {
       ) : null}
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {KPI_CARDS.map((card, index) => (
-          <KpiCard key={card.id} card={card} kpis={kpis} index={index} />
-        ))}
+        {isInitialLoading
+          ? KPI_CARDS.map((card) => (
+            <article key={card.id} className="rounded-2xl border border-white/10 bg-luxury-card p-5">
+              <div className="h-4 w-24 animate-pulse rounded bg-white/10" />
+              <div className="mt-4 h-8 w-32 animate-pulse rounded bg-white/10" />
+              <div className="mt-4 h-3 w-40 animate-pulse rounded bg-white/10" />
+            </article>
+          ))
+          : KPI_CARDS.map((card, index) => (
+            <KpiCard key={card.id} card={card} kpis={kpis} index={index} />
+          ))}
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
@@ -67,7 +85,9 @@ export default function DashboardTab() {
             <h3 className="font-luxury text-xl font-bold text-white">Faturamento por dia</h3>
           </div>
           <div ref={revenueContainer.ref} className="h-[360px] min-w-0 xl:flex-1">
-            {canRenderRevenueChart ? (
+            {isInitialLoading ? (
+              <div className="h-full w-full animate-pulse rounded-xl bg-white/[0.03]" />
+            ) : canRenderRevenueChart ? (
               <AreaChart
                 width={Math.floor(revenueContainer.size.width)}
                 height={Math.floor(revenueContainer.size.height)}
@@ -128,7 +148,9 @@ export default function DashboardTab() {
           <h3 className="font-luxury text-xl font-bold text-white">Funil de conversao</h3>
           <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gray-500">Distribuicao real dos volumes</p>
           <div ref={conversionContainer.ref} className="h-72 min-w-0 pt-2">
-            {canRenderConversionChart ? (
+            {isInitialLoading ? (
+              <div className="h-full w-full animate-pulse rounded-xl bg-white/[0.03]" />
+            ) : canRenderConversionChart ? (
               <PieChart
                 width={Math.floor(conversionContainer.size.width)}
                 height={Math.floor(conversionContainer.size.height)}
@@ -158,12 +180,19 @@ export default function DashboardTab() {
             )}
           </div>
           <div className="grid grid-cols-2 gap-2">
-            {distributionSeries.map((entry) => (
-              <div key={entry.stage} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-gray-500">{entry.stage}</p>
-                <p className="mt-1 text-sm font-bold text-white">{entry.value}%</p>
-              </div>
-            ))}
+            {isInitialLoading
+              ? [1, 2].map((item) => (
+                <div key={item} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                  <div className="h-3 w-24 animate-pulse rounded bg-white/10" />
+                  <div className="mt-2 h-4 w-12 animate-pulse rounded bg-white/10" />
+                </div>
+              ))
+              : distributionSeries.map((entry) => (
+                <div key={entry.stage} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.15em] text-gray-500">{entry.stage}</p>
+                  <p className="mt-1 text-sm font-bold text-white">{entry.value}%</p>
+                </div>
+              ))}
           </div>
         </article>
       </section>
@@ -175,7 +204,9 @@ export default function DashboardTab() {
           {salesSeries.length > 0 ? ` (${kpis.latestDayLabel} mais recente)` : ''}
         </p>
         <div ref={volumeContainer.ref} className="mt-4 h-72 min-w-0">
-          {canRenderVolumeChart ? (
+          {isInitialLoading ? (
+            <div className="h-full w-full animate-pulse rounded-xl bg-white/[0.03]" />
+          ) : canRenderVolumeChart ? (
             <BarChart
               width={Math.floor(volumeContainer.size.width)}
               height={Math.floor(volumeContainer.size.height)}
