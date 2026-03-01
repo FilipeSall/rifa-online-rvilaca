@@ -137,6 +137,18 @@ function resolveChunkStart(number: number, rangeStart: number, rangeEnd: number)
   }).chunkStart
 }
 
+function isFirestoreContentionError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  const candidate = error as { code?: unknown; message?: unknown }
+  const code = typeof candidate.code === 'string' ? candidate.code.toLowerCase() : ''
+  const message = typeof candidate.message === 'string' ? candidate.message.toLowerCase() : ''
+
+  return code === 'aborted' || message.includes('too much contention') || message.includes('aborted')
+}
+
 async function loadChunkStatesForNumbers(params: {
   db: Firestore
   transaction: Transaction
@@ -201,10 +213,9 @@ async function reserveNumbersByChunk(params: {
   reservationRef: DocumentReference<DocumentData>
   stats: ReservationOperationStats
 }) {
-  const nowMs = params.expiresAtMs - RESERVATION_DURATION_MS
-
   await params.db.runTransaction(async (transaction) => {
     params.stats.transactionAttempts += 1
+    const nowMs = Date.now()
 
     const reservationSnapshot = await transaction.get(params.reservationRef)
     const previousNumbers = reservationSnapshot.exists
@@ -418,6 +429,10 @@ export function createReserveNumbersHandler(db: Firestore) {
         throw error
       }
 
+      if (isFirestoreContentionError(error)) {
+        throw new HttpsError('aborted', 'Alta concorrencia na reserva. Tente novamente em instantes.')
+      }
+
       throw new HttpsError('internal', 'Falha ao reservar numeros.')
     }
   }
@@ -428,17 +443,16 @@ async function releaseReservationByChunk(params: {
   uid: string
   reservationRef: DocumentReference<DocumentData>
   campaignRange: { start: number; end: number }
-  nowMs: number
   stats: ReservationOperationStats
 }) {
-  let releasedNumbers = 0
-
-  await params.db.runTransaction(async (transaction) => {
+  const releasedNumbers = await params.db.runTransaction(async (transaction) => {
     params.stats.transactionAttempts += 1
+    let releasedInAttempt = 0
+    const nowMs = Date.now()
 
     const reservationSnapshot = await transaction.get(params.reservationRef)
     if (!reservationSnapshot.exists) {
-      return
+      return 0
     }
 
     const reservedNumbers = readStoredReservationNumbers(
@@ -450,7 +464,7 @@ async function releaseReservationByChunk(params: {
 
     if (reservedNumbers.length === 0) {
       transaction.delete(params.reservationRef)
-      return
+      return 0
     }
 
     const { chunkRefs, chunkStatesByStart } = await loadChunkStatesForNumbers({
@@ -459,7 +473,7 @@ async function releaseReservationByChunk(params: {
       numbers: reservedNumbers,
       rangeStart: params.campaignRange.start,
       rangeEnd: params.campaignRange.end,
-      nowMs: params.nowMs,
+      nowMs,
       stats: params.stats,
     })
 
@@ -478,7 +492,7 @@ async function releaseReservationByChunk(params: {
       })
       const after = getChunkNumberView(chunkState, number)
       if (before.status === 'reservado' && before.reservedBy === params.uid && after.status !== 'reservado') {
-        releasedNumbers += 1
+        releasedInAttempt += 1
       }
     }
 
@@ -498,6 +512,7 @@ async function releaseReservationByChunk(params: {
     }
 
     transaction.delete(params.reservationRef)
+    return releasedInAttempt
   })
 
   return releasedNumbers
@@ -513,7 +528,6 @@ export function createReleaseReservationHandler(db: Firestore) {
       const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
       const campaignRange = readCampaignNumberRange(campaignData, CAMPAIGN_DOC_ID)
       const reservationRef = db.collection('numberReservations').doc(uid)
-      const nowMs = Date.now()
 
       logger.info('releaseReservation started', {
         uid: maskUid(uid),
@@ -524,7 +538,6 @@ export function createReleaseReservationHandler(db: Firestore) {
         uid,
         reservationRef,
         campaignRange,
-        nowMs,
         stats,
       })
 
@@ -560,6 +573,10 @@ export function createReleaseReservationHandler(db: Firestore) {
 
       if (error instanceof HttpsError) {
         throw error
+      }
+
+      if (isFirestoreContentionError(error)) {
+        throw new HttpsError('aborted', 'Alta concorrencia ao liberar reserva. Tente novamente em instantes.')
       }
 
       throw new HttpsError('internal', 'Falha ao liberar reserva.')

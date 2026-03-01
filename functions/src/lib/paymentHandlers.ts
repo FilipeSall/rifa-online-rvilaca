@@ -601,11 +601,11 @@ async function runPaidDepositBusinessLogic(
   const dailyMetricsRef = db.collection('salesMetricsDaily').doc(dateKey)
   const reservationRef = order.userId ? db.collection('numberReservations').doc(order.userId) : null
   const normalizedAmount = sanitizeOptionalAmount(order.amount)
-  const soldNumbers = order.reservedNumbers.length
   const nowMs = Date.now()
 
-  await db.runTransaction(async (transaction) => {
+  const soldNumbersCommitted = await db.runTransaction(async (transaction) => {
     transactionStats.transactionAttempts += 1
+    let soldNumbersInAttempt = 0
     const headerRefs = reservationRef ? [reservationRef, salesLedgerRef] : [salesLedgerRef]
     const headerSnapshots = await transaction.getAll(...headerRefs)
     const reservationSnapshot = reservationRef ? headerSnapshots[0] : null
@@ -681,6 +681,7 @@ async function runPaidDepositBusinessLogic(
           orderId: order.externalId,
           paidAtMs: nowMs,
         })
+        soldNumbersInAttempt += 1
       }
     }
 
@@ -713,7 +714,7 @@ async function runPaidDepositBusinessLogic(
         externalId: order.externalId,
         userId: order.userId,
         amount: normalizedAmount,
-        soldNumbers,
+        soldNumbers: soldNumbersInAttempt,
         dateKey,
         source: 'horsepay_webhook',
         createdAt: FieldValue.serverTimestamp(),
@@ -725,7 +726,7 @@ async function runPaidDepositBusinessLogic(
           {
             totalRevenue: FieldValue.increment(normalizedAmount),
             paidOrders: FieldValue.increment(1),
-            soldNumbers: FieldValue.increment(soldNumbers),
+            soldNumbers: FieldValue.increment(soldNumbersInAttempt),
             updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
@@ -736,7 +737,7 @@ async function runPaidDepositBusinessLogic(
             date: dateKey,
             revenue: FieldValue.increment(normalizedAmount),
             paidOrders: FieldValue.increment(1),
-            soldNumbers: FieldValue.increment(soldNumbers),
+            soldNumbers: FieldValue.increment(soldNumbersInAttempt),
             updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
@@ -760,11 +761,14 @@ async function runPaidDepositBusinessLogic(
     if (shouldDeleteReservation && reservationRef) {
       transaction.delete(reservationRef)
     }
+
+    return soldNumbersInAttempt
   })
 
   logger.info('runPaidDepositBusinessLogic succeeded', {
     externalId: order.externalId,
     reservedNumbersCount: order.reservedNumbers.length,
+    soldNumbersCommitted,
     amount: normalizedAmount,
     numbersRequested: transactionStats.numbersRequested,
     previousCount: transactionStats.previousCount,
