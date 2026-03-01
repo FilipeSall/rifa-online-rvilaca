@@ -27,6 +27,7 @@ import {
 } from './lib/mainRaffleDrawHandlers.js'
 import {
   createGetPublicNumberLookupHandler,
+  createGetNumberChunkWindowHandler,
   createGetNumberWindowHandler,
   createPickRandomAvailableNumbersHandler,
 } from './lib/numberHandlers.js'
@@ -91,6 +92,7 @@ export const reserveNumbers = onCall(callableOptions, createReserveNumbersHandle
 export const releaseReservation = onCall(callableOptions, createReleaseReservationHandler(db))
 
 export const getNumberWindow = onCall(callableOptions, createGetNumberWindowHandler(db))
+export const getNumberChunkWindow = onCall(callableOptions, createGetNumberChunkWindowHandler(db))
 
 export const getPublicNumberLookup = onCall(callableOptions, createGetPublicNumberLookupHandler(db))
 

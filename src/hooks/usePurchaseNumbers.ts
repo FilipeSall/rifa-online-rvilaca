@@ -37,6 +37,33 @@ type ReserveNumbersResponse = {
   reservationSeconds: number
 }
 
+type GetNumberChunkWindowInput = {
+  campaignId?: string
+  pageStart?: number
+  pageSize?: number
+}
+
+type GetNumberChunkWindowResponse = {
+  campaignId: string
+  pageSize: number
+  pageStart: number
+  pageEnd: number
+  rangeStart: number
+  rangeEnd: number
+  totalNumbers: number
+  smallestAvailableNumber: number | null
+  availableInPage: number
+  hasPreviousPage: boolean
+  hasNextPage: boolean
+  previousPageStart: number | null
+  nextPageStart: number | null
+  numbers: Array<{
+    number: number
+    status: NumberSlot['status']
+    reservationExpiresAtMs: number | null
+  }>
+}
+
 type ConflictResolutionState = {
   conflictedNumbers: number[]
   filteredSelection: number[]
@@ -168,6 +195,67 @@ function buildLocalNumberPool(pageStart: number, rangeStart: number, rangeEnd: n
   return pool
 }
 
+function sanitizeWindowResponse(
+  payload: GetNumberChunkWindowResponse | null,
+  fallback: {
+    rangeStart: number
+    rangeEnd: number
+    totalNumbers: number
+    pageStart: number
+  },
+): GetNumberChunkWindowResponse | null {
+  if (!payload) {
+    return null
+  }
+
+  const rangeStart = Number.isInteger(payload.rangeStart) ? payload.rangeStart : fallback.rangeStart
+  const rangeEnd = Number.isInteger(payload.rangeEnd) && payload.rangeEnd >= rangeStart
+    ? payload.rangeEnd
+    : fallback.rangeEnd
+  const totalNumbers = Number.isInteger(payload.totalNumbers) && payload.totalNumbers > 0
+    ? payload.totalNumbers
+    : Math.max(rangeEnd - rangeStart + 1, fallback.totalNumbers)
+  const pageSize = Number.isInteger(payload.pageSize) && payload.pageSize > 0 ? payload.pageSize : NUMBER_WINDOW_PAGE_SIZE
+  const rawPageStart = Number.isInteger(payload.pageStart) ? payload.pageStart : fallback.pageStart
+  const pageStart = clampPageStart(rawPageStart, rangeStart, rangeEnd)
+  const pageEnd = Number.isInteger(payload.pageEnd) ? payload.pageEnd : Math.min(pageStart + pageSize - 1, rangeEnd)
+  const numbers = Array.isArray(payload.numbers)
+    ? payload.numbers
+      .map((item) => ({
+        number: Number(item.number),
+        status: item.status,
+        reservationExpiresAtMs: Number.isFinite(item.reservationExpiresAtMs) ? Number(item.reservationExpiresAtMs) : null,
+      }))
+      .filter((item) =>
+        Number.isInteger(item.number)
+        && item.number >= rangeStart
+        && item.number <= rangeEnd
+        && (item.status === 'disponivel' || item.status === 'reservado' || item.status === 'pago'))
+      .sort((left, right) => left.number - right.number)
+    : []
+
+  return {
+    ...payload,
+    pageSize,
+    pageStart,
+    pageEnd: Math.max(pageStart, Math.min(pageEnd, rangeEnd)),
+    rangeStart,
+    rangeEnd,
+    totalNumbers,
+    smallestAvailableNumber: Number.isInteger(payload.smallestAvailableNumber ?? null)
+      ? Number(payload.smallestAvailableNumber)
+      : null,
+    availableInPage: Number.isInteger(payload.availableInPage)
+      ? payload.availableInPage
+      : numbers.filter((item) => item.status === 'disponivel').length,
+    hasPreviousPage: Boolean(payload.hasPreviousPage),
+    hasNextPage: Boolean(payload.hasNextPage),
+    previousPageStart: Number.isInteger(payload.previousPageStart ?? null) ? Number(payload.previousPageStart) : null,
+    nextPageStart: Number.isInteger(payload.nextPageStart ?? null) ? Number(payload.nextPageStart) : null,
+    numbers,
+  }
+}
+
 function pickRandomUniqueNumbersFromRange(
   rangeStart: number,
   rangeEnd: number,
@@ -215,18 +303,20 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   const { campaign } = useCampaignSettings()
   const initialSelectionMode = options?.initialSelectionMode === 'manual' ? 'manual' : 'automatico'
 
-  const totalNumbers =
+  const baseTotalNumbers =
     Number.isInteger(campaign.totalNumbers) && campaign.totalNumbers > 0
       ? campaign.totalNumbers
       : RAFFLE_NUMBER_END
-  const rangeStart = RAFFLE_NUMBER_START
-  const rangeEnd = rangeStart + totalNumbers - 1
+  const baseRangeStart = RAFFLE_NUMBER_START
+  const baseRangeEnd = baseRangeStart + baseTotalNumbers - 1
 
-  const [pageStartState, setPageStartState] = useState(rangeStart)
+  const [pageStartState, setPageStartState] = useState(baseRangeStart)
   const [selectionMode, setSelectionMode] = useState<SelectionMode>(initialSelectionMode)
   const [quantity, setQuantity] = useState(
     getSafeQuantity(DEFAULT_INITIAL_QUANTITY, MAX_QUANTITY, CAMPAIGN_PACK_QUANTITIES[0]),
   )
+  const [numberWindow, setNumberWindow] = useState<GetNumberChunkWindowResponse | null>(null)
+  const [isPageLoading, setIsPageLoading] = useState(false)
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>([])
   const [couponCode, setCouponCode] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null)
@@ -247,13 +337,19 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   selectedNumbersRef.current = selectedNumbers
   const lastReserveAttemptRef = useRef<{ fingerprint: string; atMs: number } | null>(null)
   const hasPromptedAuthForQuickCheckoutRef = useRef(false)
+  const numberWindowRequestRef = useRef(0)
 
   const callables = useMemo(
     () => ({
       reserveNumbers: httpsCallable<ReserveNumbersInput, unknown>(functions, 'reserveNumbers'),
+      getNumberChunkWindow: httpsCallable<GetNumberChunkWindowInput, unknown>(functions, 'getNumberChunkWindow'),
     }),
     [],
   )
+
+  const rangeStart = numberWindow?.rangeStart ?? baseRangeStart
+  const rangeEnd = numberWindow?.rangeEnd ?? baseRangeEnd
+  const totalNumbers = numberWindow?.totalNumbers ?? baseTotalNumbers
 
   const pageStart = useMemo(
     () => clampPageStart(pageStartState, rangeStart, rangeEnd),
@@ -266,14 +362,89 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     }
   }, [pageStart, pageStartState])
 
+  useEffect(() => {
+    const requestId = numberWindowRequestRef.current + 1
+    numberWindowRequestRef.current = requestId
+    setIsPageLoading(true)
+
+    void callables.getNumberChunkWindow({
+      pageStart,
+      pageSize: NUMBER_WINDOW_PAGE_SIZE,
+    })
+      .then((callableResult) => {
+        if (requestId !== numberWindowRequestRef.current) {
+          return
+        }
+
+        const payload = unwrapCallableData(
+          callableResult.data as CallableEnvelope<GetNumberChunkWindowResponse>,
+        )
+        const sanitized = sanitizeWindowResponse(payload, {
+          rangeStart: baseRangeStart,
+          rangeEnd: baseRangeEnd,
+          totalNumbers: baseTotalNumbers,
+          pageStart,
+        })
+        setNumberWindow(sanitized)
+      })
+      .catch((error) => {
+        if (requestId !== numberWindowRequestRef.current) {
+          return
+        }
+
+        setNumberWindow(null)
+        const message = getReserveErrorMessage(error)
+        toast.error(`Nao foi possivel carregar a pagina de numeros. ${message}`, {
+          position: 'bottom-right',
+          toastId: 'number-window-load-error',
+        })
+      })
+      .finally(() => {
+        if (requestId === numberWindowRequestRef.current) {
+          setIsPageLoading(false)
+        }
+      })
+  }, [
+    baseRangeEnd,
+    baseRangeStart,
+    baseTotalNumbers,
+    callables.getNumberChunkWindow,
+    pageStart,
+  ])
+
+  useEffect(() => {
+    if (!numberWindow) {
+      return
+    }
+
+    if (numberWindow.pageStart !== pageStartState) {
+      setPageStartState(numberWindow.pageStart)
+    }
+  }, [numberWindow, pageStartState])
+
   const numberPool = useMemo(
-    () => buildLocalNumberPool(pageStart, rangeStart, rangeEnd),
-    [pageStart, rangeEnd, rangeStart],
+    () => {
+      if (numberWindow && numberWindow.numbers.length > 0) {
+        return numberWindow.numbers.map((item) => ({
+          number: item.number,
+          status: item.status,
+        }))
+      }
+
+      return buildLocalNumberPool(pageStart, rangeStart, rangeEnd)
+    },
+    [numberWindow, pageStart, rangeEnd, rangeStart],
   )
 
   const pageEnd = useMemo(
-    () => (numberPool.length ? numberPool[numberPool.length - 1].number : null),
-    [numberPool],
+    () => {
+      if (numberWindow && Number.isInteger(numberWindow.pageEnd)) {
+        return numberWindow.pageEnd
+      }
+
+      return numberPool.length ? numberPool[numberPool.length - 1].number : null
+    },
+    [numberPool, numberWindow],
   )
 
   const totalPages = useMemo(() => {
@@ -285,23 +456,32 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   }, [rangeEnd, rangeStart])
 
   const currentPage = useMemo(
-    () => Math.floor((pageStart - rangeStart) / NUMBER_WINDOW_PAGE_SIZE) + 1,
-    [pageStart, rangeStart],
+    () => Math.floor(((numberWindow?.pageStart ?? pageStart) - rangeStart) / NUMBER_WINDOW_PAGE_SIZE) + 1,
+    [numberWindow?.pageStart, pageStart, rangeStart],
   )
 
   const previousPageStart = useMemo(
-    () => (pageStart > rangeStart ? Math.max(rangeStart, pageStart - NUMBER_WINDOW_PAGE_SIZE) : null),
-    [pageStart, rangeStart],
+    () => (
+      numberWindow
+        ? numberWindow.previousPageStart
+        : (pageStart > rangeStart ? Math.max(rangeStart, pageStart - NUMBER_WINDOW_PAGE_SIZE) : null)
+    ),
+    [numberWindow, pageStart, rangeStart],
   )
 
   const nextPageStart = useMemo(() => {
+    if (numberWindow) {
+      return numberWindow.nextPageStart
+    }
+
     const nextStart = pageStart + NUMBER_WINDOW_PAGE_SIZE
     return nextStart <= rangeEnd ? nextStart : null
-  }, [pageStart, rangeEnd])
+  }, [numberWindow, pageStart, rangeEnd])
 
-  const availableNumbersCount = numberPool.length
-  const smallestAvailableNumber = rangeStart
-  const isPageLoading = false
+  const availableNumbersCount = numberWindow
+    ? numberWindow.availableInPage
+    : numberPool.filter((item) => item.status === 'disponivel').length
+  const smallestAvailableNumber = numberWindow?.smallestAvailableNumber ?? rangeStart
 
   const reservationCap = Math.max(
     1,
@@ -635,7 +815,28 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
 
       try {
         const targetPageStart = rangeStart + (Math.floor((number - rangeStart) / NUMBER_WINDOW_PAGE_SIZE) * NUMBER_WINDOW_PAGE_SIZE)
-        setPageStartState(targetPageStart)
+        const callableResult = await callables.getNumberChunkWindow({
+          pageStart: targetPageStart,
+          pageSize: NUMBER_WINDOW_PAGE_SIZE,
+        })
+        const payload = unwrapCallableData(callableResult.data as CallableEnvelope<GetNumberChunkWindowResponse>)
+        const sanitized = sanitizeWindowResponse(payload, {
+          rangeStart: baseRangeStart,
+          rangeEnd: baseRangeEnd,
+          totalNumbers: baseTotalNumbers,
+          pageStart: targetPageStart,
+        })
+        setNumberWindow(sanitized)
+        setPageStartState(sanitized?.pageStart ?? targetPageStart)
+
+        const isAvailable = sanitized?.numbers.find((item) => item.number === number)?.status === 'disponivel'
+        if (!isAvailable) {
+          toast.warning(
+            `O numero ${formatTicketNumber(number)} nao esta disponivel agora. Escolha outro numero.`,
+            { position: 'bottom-right' },
+          )
+          return
+        }
 
         setSelectedNumbers((currentSelection) => {
           if (currentSelection.includes(number) || currentSelection.length >= quantity) {
@@ -649,7 +850,18 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
         setIsManualAdding(false)
       }
     },
-    [clearReservationState, quantity, rangeEnd, rangeStart, selectedNumbers, selectionMode],
+    [
+      baseRangeEnd,
+      baseRangeStart,
+      baseTotalNumbers,
+      callables.getNumberChunkWindow,
+      clearReservationState,
+      quantity,
+      rangeEnd,
+      rangeStart,
+      selectedNumbers,
+      selectionMode,
+    ],
   )
 
   const handleApplyCoupon = useCallback(() => {

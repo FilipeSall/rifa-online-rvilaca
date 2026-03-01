@@ -2,8 +2,19 @@ import { FieldValue, type DocumentData, type Firestore, type Transaction } from 
 import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
 import { CAMPAIGN_DOC_ID, DEFAULT_MAIN_PRIZE } from './constants.js'
+import {
+  buildChunkBoundsForNumber,
+  getChunkNumberView,
+  getChunkPaidMeta,
+  getNumberChunkRef,
+  markNumberAsAwarded,
+  NUMBER_CHUNK_SIZE,
+  readChunkStateFromDoc,
+  type NumberChunkRuntimeState,
+  writeChunkStateToDoc,
+} from './numberChunkStore.js'
 import { readCampaignNumberRange } from './numberStateStore.js'
-import { asRecord, readTimestampMillis, requireActiveUid, sanitizeString } from './shared.js'
+import { asRecord, requireActiveUid, sanitizeString } from './shared.js'
 
 const MAIN_RAFFLE_DRAW_HISTORY_COLLECTION = 'mainRaffleDrawResults'
 const EXTRACTION_COUNT = 5
@@ -195,15 +206,11 @@ async function assertAdminRole(db: Firestore, uid: string) {
 
 type ResolvedCandidate = {
   number: number
-  numberStateRefPath: string
+  chunkStart: number
+  chunkState: NumberChunkRuntimeState
   ownerUid: string
   paidAtMs: number | null
   fallbackDirection: 'none' | 'above' | 'below'
-}
-
-function normalizePaidStatus(value: unknown): 'pago' | 'disponivel' {
-  const normalized = sanitizeString(value).toLowerCase()
-  return normalized === 'pago' || normalized === 'paid' ? 'pago' : 'disponivel'
 }
 
 function chooseDirectionalCandidate(
@@ -225,7 +232,42 @@ function chooseDirectionalCandidate(
   return incoming.number > current.number ? incoming : current
 }
 
-async function findNearestCandidateByStatus(
+function findCandidateInChunkRange(params: {
+  chunkState: NumberChunkRuntimeState
+  chunkStart: number
+  startNumber: number
+  endNumber: number
+  direction: 'above' | 'below'
+  fallbackDirection: 'above' | 'below'
+}): ResolvedCandidate | null {
+  const { chunkState, chunkStart, startNumber, endNumber, direction, fallbackDirection } = params
+  const step = direction === 'above' ? 1 : -1
+
+  for (let number = startNumber; direction === 'above' ? number <= endNumber : number >= endNumber; number += step) {
+    const view = getChunkNumberView(chunkState, number)
+    if (view.status !== 'pago') {
+      continue
+    }
+
+    const paidMeta = getChunkPaidMeta(chunkState, number)
+    if (!paidMeta?.ownerUid || paidMeta.awardedDrawId) {
+      continue
+    }
+
+    return {
+      number,
+      chunkStart,
+      chunkState,
+      ownerUid: paidMeta.ownerUid,
+      paidAtMs: paidMeta.paidAtMs,
+      fallbackDirection,
+    }
+  }
+
+  return null
+}
+
+async function findNearestCandidateByDirection(
   transaction: Transaction,
   db: Firestore,
   params: {
@@ -234,64 +276,89 @@ async function findNearestCandidateByStatus(
     rangeStart: number
     rangeEnd: number
     direction: 'above' | 'below'
-    statusValue: 'pago' | 'paid'
   },
 ): Promise<ResolvedCandidate | null> {
-  const { campaignId, targetNumber, rangeStart, rangeEnd, direction, statusValue } = params
-  const collectionRef = db.collection('numberStates')
-  const pageSize = 50
-  const maxPages = 20
-  let lastNumberCursor: number | null = null
+  const { campaignId, targetNumber, rangeStart, rangeEnd, direction } = params
+  const targetBounds = buildChunkBoundsForNumber({
+    campaignId,
+    number: targetNumber,
+    rangeStart,
+    rangeEnd,
+  })
 
-  for (let page = 0; page < maxPages; page += 1) {
-    let query = collectionRef
-      .where('campaignId', '==', campaignId)
-      .where('status', '==', statusValue)
+  if (direction === 'above') {
+    for (let chunkStart = targetBounds.chunkStart; chunkStart <= rangeEnd; chunkStart += NUMBER_CHUNK_SIZE) {
+      const bounds = buildChunkBoundsForNumber({
+        campaignId,
+        number: chunkStart,
+        rangeStart,
+        rangeEnd,
+      })
+      const ref = getNumberChunkRef(db, campaignId, bounds.chunkStart)
+      const snapshot = await transaction.get(ref)
+      const chunkState = readChunkStateFromDoc({
+        bounds,
+        docData: snapshot.exists ? (snapshot.data() || null) : null,
+        nowMs: Date.now(),
+      })
 
-    if (direction === 'above') {
-      query = query
-        .where('number', '>', targetNumber)
-        .where('number', '<=', rangeEnd)
-        .orderBy('number', 'asc')
-    } else {
-      query = query
-        .where('number', '>=', rangeStart)
-        .where('number', '<', targetNumber)
-        .orderBy('number', 'desc')
-    }
-
-    if (Number.isInteger(lastNumberCursor)) {
-      query = query.startAfter(lastNumberCursor as number)
-    }
-
-    const snapshot = await transaction.get(query.limit(pageSize))
-    if (snapshot.empty) {
-      return null
-    }
-
-    for (const document of snapshot.docs) {
-      const number = Number(document.get('number'))
-      const ownerUid = sanitizeString(document.get('ownerUid'))
-      const awardedDrawId = sanitizeString(document.get('awardedDrawId'))
-
-      if (!Number.isInteger(number) || !ownerUid || awardedDrawId) {
+      const startNumber = chunkStart === targetBounds.chunkStart
+        ? Math.max(targetNumber + 1, bounds.chunkStart)
+        : bounds.chunkStart
+      const endNumber = bounds.chunkEnd
+      if (startNumber > endNumber) {
         continue
       }
 
-      return {
-        number,
-        numberStateRefPath: document.ref.path,
-        ownerUid,
-        paidAtMs: readTimestampMillis(document.get('paidAt')),
-        fallbackDirection: direction,
+      const candidate = findCandidateInChunkRange({
+        chunkState,
+        chunkStart: bounds.chunkStart,
+        startNumber,
+        endNumber,
+        direction,
+        fallbackDirection: 'above',
+      })
+      if (candidate) {
+        return candidate
       }
     }
+    return null
+  }
 
-    const lastNumber = Number(snapshot.docs[snapshot.docs.length - 1]?.get('number'))
-    if (!Number.isInteger(lastNumber)) {
-      return null
+  for (let chunkStart = targetBounds.chunkStart; chunkStart >= rangeStart; chunkStart -= NUMBER_CHUNK_SIZE) {
+    const bounds = buildChunkBoundsForNumber({
+      campaignId,
+      number: chunkStart,
+      rangeStart,
+      rangeEnd,
+    })
+    const ref = getNumberChunkRef(db, campaignId, bounds.chunkStart)
+    const snapshot = await transaction.get(ref)
+    const chunkState = readChunkStateFromDoc({
+      bounds,
+      docData: snapshot.exists ? (snapshot.data() || null) : null,
+      nowMs: Date.now(),
+    })
+
+    const startNumber = chunkStart === targetBounds.chunkStart
+      ? Math.min(targetNumber - 1, bounds.chunkEnd)
+      : bounds.chunkEnd
+    const endNumber = bounds.chunkStart
+    if (startNumber < endNumber) {
+      continue
     }
-    lastNumberCursor = lastNumber
+
+    const candidate = findCandidateInChunkRange({
+      chunkState,
+      chunkStart: bounds.chunkStart,
+      startNumber,
+      endNumber,
+      direction,
+      fallbackDirection: 'below',
+    })
+    if (candidate) {
+      return candidate
+    }
   }
 
   return null
@@ -308,49 +375,53 @@ async function findEligiblePaidNumber(
   },
 ): Promise<ResolvedCandidate | null> {
   const { campaignId, targetNumber, rangeStart, rangeEnd } = params
-  const collectionRef = db.collection('numberStates')
-
-  const exactRef = collectionRef.doc(`${campaignId}_${targetNumber}`)
+  const exactBounds = buildChunkBoundsForNumber({
+    campaignId,
+    number: targetNumber,
+    rangeStart,
+    rangeEnd,
+  })
+  const exactRef = getNumberChunkRef(db, campaignId, exactBounds.chunkStart)
   const exactSnapshot = await transaction.get(exactRef)
-  if (exactSnapshot.exists) {
-    const exactStatus = normalizePaidStatus(exactSnapshot.get('status'))
-    const exactOwnerUid = sanitizeString(exactSnapshot.get('ownerUid'))
-    const exactAwardedDrawId = sanitizeString(exactSnapshot.get('awardedDrawId'))
-    if (exactStatus === 'pago' && exactOwnerUid && !exactAwardedDrawId) {
-      return {
-        number: targetNumber,
-        numberStateRefPath: exactRef.path,
-        ownerUid: exactOwnerUid,
-        paidAtMs: readTimestampMillis(exactSnapshot.get('paidAt')),
-        fallbackDirection: 'none',
-      }
+  const exactChunkState = readChunkStateFromDoc({
+    bounds: exactBounds,
+    docData: exactSnapshot.exists ? (exactSnapshot.data() || null) : null,
+    nowMs: Date.now(),
+  })
+
+  const exactView = getChunkNumberView(exactChunkState, targetNumber)
+  const exactPaidMeta = getChunkPaidMeta(exactChunkState, targetNumber)
+  if (exactView.status === 'pago' && exactPaidMeta?.ownerUid && !exactPaidMeta.awardedDrawId) {
+    return {
+      number: targetNumber,
+      chunkStart: exactBounds.chunkStart,
+      chunkState: exactChunkState,
+      ownerUid: exactPaidMeta.ownerUid,
+      paidAtMs: exactPaidMeta.paidAtMs,
+      fallbackDirection: 'none',
     }
   }
 
   let aboveCandidate: ResolvedCandidate | null = null
   let belowCandidate: ResolvedCandidate | null = null
 
-  for (const statusValue of ['pago', 'paid'] as const) {
-    const aboveForStatus = await findNearestCandidateByStatus(transaction, db, {
-      campaignId,
-      targetNumber,
-      rangeStart,
-      rangeEnd,
-      direction: 'above',
-      statusValue,
-    })
-    aboveCandidate = chooseDirectionalCandidate('above', aboveCandidate, aboveForStatus)
+  const above = await findNearestCandidateByDirection(transaction, db, {
+    campaignId,
+    targetNumber,
+    rangeStart,
+    rangeEnd,
+    direction: 'above',
+  })
+  aboveCandidate = chooseDirectionalCandidate('above', aboveCandidate, above)
 
-    const belowForStatus = await findNearestCandidateByStatus(transaction, db, {
-      campaignId,
-      targetNumber,
-      rangeStart,
-      rangeEnd,
-      direction: 'below',
-      statusValue,
-    })
-    belowCandidate = chooseDirectionalCandidate('below', belowCandidate, belowForStatus)
-  }
+  const below = await findNearestCandidateByDirection(transaction, db, {
+    campaignId,
+    targetNumber,
+    rangeStart,
+    rangeEnd,
+    direction: 'below',
+  })
+  belowCandidate = chooseDirectionalCandidate('below', belowCandidate, below)
 
   if (belowCandidate && aboveCandidate) {
     const distanceBelow = targetNumber - belowCandidate.number
@@ -455,14 +526,14 @@ export function createPublishMainRaffleDrawHandler(db: Firestore) {
 
     await assertAdminRole(db, uid)
 
-  const payload = asRecord(request.data) as PublishMainRaffleDrawInput
-  const extractionNumbers = sanitizeExtractionNumbers(payload.extractionNumbers)
-  const extractionIndex = sanitizeExtractionIndex(payload.extractionIndex)
-  const selectedExtractionNumber = extractionNumbers[extractionIndex - 1]
-  if (!selectedExtractionNumber) {
-    throw new HttpsError('invalid-argument', 'A extracao usada deve estar preenchida.')
-  }
-  const selectedExtractionValue = Number(selectedExtractionNumber)
+    const payload = asRecord(request.data) as PublishMainRaffleDrawInput
+    const extractionNumbers = sanitizeExtractionNumbers(payload.extractionNumbers)
+    const extractionIndex = sanitizeExtractionIndex(payload.extractionIndex)
+    const selectedExtractionNumber = extractionNumbers[extractionIndex - 1]
+    if (!selectedExtractionNumber) {
+      throw new HttpsError('invalid-argument', 'A extracao usada deve estar preenchida.')
+    }
+    const selectedExtractionValue = Number(selectedExtractionNumber)
 
     const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
     const campaignData = campaignSnapshot.data()
@@ -522,6 +593,30 @@ export function createPublishMainRaffleDrawHandler(db: Firestore) {
         const winnerPhotoURL = sanitizeString(winnerUserData.photoURL)
         const winningNumberFormatted = String(candidate.number).padStart(7, '0')
 
+        const candidateChunkState = candidate.chunkState
+        const candidateChunkView = getChunkNumberView(candidateChunkState, candidate.number)
+        const candidatePaidMeta = getChunkPaidMeta(candidateChunkState, candidate.number)
+
+        if (
+          candidateChunkView.status !== 'pago'
+          || !candidatePaidMeta?.ownerUid
+          || candidatePaidMeta.awardedDrawId
+        ) {
+          throw new HttpsError(
+            'failed-precondition',
+            'O numero vencedor nao esta mais elegivel. Tente publicar novamente.',
+          )
+        }
+
+        const candidateChunkRef = getNumberChunkRef(db, CAMPAIGN_DOC_ID, candidate.chunkStart)
+        markNumberAsAwarded({
+          state: candidateChunkState,
+          number: candidate.number,
+          drawId: drawRef.id,
+          prize: drawPrize,
+          awardedAtMs: publishedAtMs,
+        })
+
         result = {
           campaignId: CAMPAIGN_DOC_ID,
           drawId: drawRef.id,
@@ -554,16 +649,9 @@ export function createPublishMainRaffleDrawHandler(db: Firestore) {
           updatedAt: FieldValue.serverTimestamp(),
         })
 
-        transaction.set(
-          db.doc(candidate.numberStateRefPath),
-          {
-            awardedDrawId: drawRef.id,
-            awardedPrize: drawPrize,
-            awardedAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        )
+        if (candidateChunkState.dirty) {
+          transaction.set(candidateChunkRef, writeChunkStateToDoc(candidateChunkState), { merge: true })
+        }
 
         transaction.set(
           db.collection('campaigns').doc(CAMPAIGN_DOC_ID),

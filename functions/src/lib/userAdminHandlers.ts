@@ -110,6 +110,7 @@ type ClearOrderHistoryAdminOutput = {
   deletedOrderNumbers: number
   deletedPayments: number
   deletedSalesLedger: number
+  deletedNumberChunks: number
   deletedNumberStates: number
   deletedNumberReservations: number
   deletedSalesMetricsDaily: number
@@ -843,7 +844,7 @@ export function createClearOrderHistoryAdminHandler(db: Firestore) {
       }
     }
 
-    const [paymentsResult, salesLedgerResult, numberStatesResult, numberReservationsResult, salesMetricsDailyResult] = await Promise.all([
+    const [paymentsResult, salesLedgerResult, numberChunksResult, numberReservationsResult, salesMetricsDailyResult] = await Promise.all([
       deleteQueryDocumentsInChunks({
         db,
         baseQuery: db.collection('payments'),
@@ -858,7 +859,7 @@ export function createClearOrderHistoryAdminHandler(db: Firestore) {
       }),
       deleteQueryDocumentsInChunks({
         db,
-        baseQuery: db.collection('numberStates'),
+        baseQuery: db.collection('numberChunks'),
         batchSize,
         dryRun,
       }),
@@ -904,7 +905,8 @@ export function createClearOrderHistoryAdminHandler(db: Firestore) {
       deletedOrderNumbers,
       deletedPayments: dryRun ? paymentsResult.scanned : paymentsResult.deleted,
       deletedSalesLedger: dryRun ? salesLedgerResult.scanned : salesLedgerResult.deleted,
-      deletedNumberStates: dryRun ? numberStatesResult.scanned : numberStatesResult.deleted,
+      deletedNumberChunks: dryRun ? numberChunksResult.scanned : numberChunksResult.deleted,
+      deletedNumberStates: dryRun ? numberChunksResult.scanned : numberChunksResult.deleted,
       deletedNumberReservations: dryRun ? numberReservationsResult.scanned : numberReservationsResult.deleted,
       deletedSalesMetricsDaily: dryRun ? salesMetricsDailyResult.scanned : salesMetricsDailyResult.deleted,
       metricsSummaryReset,

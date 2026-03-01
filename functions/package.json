@@ -4,7 +4,10 @@
   "type": "module",
   "main": "lib/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"lib/**/*.test.js\"",
+    "migrate:number-chunks": "node scripts/migrate-number-states-to-chunks.mjs",
+    "validate:chunks-and-cleanup-legacy": "node scripts/validate-chunks-and-cleanup-number-states.mjs"
   },
   "engines": {
     "node": "22"

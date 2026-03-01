@@ -97,9 +97,9 @@ export default function Header() {
       <div className="container mx-auto px-4 lg:px-8">
         <div className="flex h-20 items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <img src={logo} alt="JonnyBarber" className="h-16 w-16 object-contain" />
+            <img src={logo} alt="JhonyBarber" className="h-16 w-16 object-contain" />
             <h1 className="text-xl lg:text-2xl font-barber text-white tracking-widest uppercase">
-              JONNYBARBER
+              JHONYBARBER
             </h1>
           </Link>
 

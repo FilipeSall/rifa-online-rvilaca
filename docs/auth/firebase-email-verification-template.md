@@ -1,6 +1,6 @@
 Assunto sugerido:
 
-Confirme seu email e ative sua conta | JonnyBarber
+Confirme seu email e ative sua conta | JhonyBarber
 
 Como usar no Firebase:
 

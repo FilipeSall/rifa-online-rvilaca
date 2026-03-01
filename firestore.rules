@@ -76,9 +76,8 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Estado dos números da rifa: coleção server-only.
-    // A app cliente consulta via Cloud Functions (Admin SDK), não direto no Firestore.
-    match /numberStates/{numberStateId} {
+    // Modelo por chunks para disponibilidade (server-only).
+    match /numberChunks/{chunkId} {
       allow read, write: if false;
     }
 

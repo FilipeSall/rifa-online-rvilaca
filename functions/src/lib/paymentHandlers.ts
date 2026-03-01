@@ -22,9 +22,18 @@ import {
   readCampaignPricePerCota,
 } from './campaignHandlers.js'
 import {
-  buildNumberStateView,
-  buildPaidNumberStateData,
-  getNumberStateRef,
+  buildChunkBoundsForChunkStart,
+  clearNumberReservation,
+  getChunkNumberView,
+  getNumberChunkRef,
+  mapNumbersByChunkStart,
+  markNumberAsPaid,
+  NUMBER_CHUNK_SIZE,
+  readChunkStateFromDoc,
+  type NumberChunkRuntimeState,
+  writeChunkStateToDoc,
+} from './numberChunkStore.js'
+import {
   readCampaignNumberRange,
 } from './numberStateStore.js'
 import { readStoredReservationNumbers } from './reservationHandlers.js'
@@ -556,13 +565,20 @@ async function runPaidDepositBusinessLogic(
     reservedNumbers: number[]
   },
 ) {
+  const startedAtMs = Date.now()
   const transactionStats = {
-    requestedCount: order.reservedNumbers.length,
+    numbersRequested: order.reservedNumbers.length,
     previousCount: 0,
     uniqueStateReads: 0,
     transactionAttempts: 0,
     conflictsCount: 0,
+    chunksRead: 0,
+    chunksWritten: 0,
   }
+
+  const campaignSnapshot = await db.collection('campaigns').doc(order.campaignId).get()
+  const campaignData = campaignSnapshot.exists ? campaignSnapshot.data() : undefined
+  const campaignRange = readCampaignNumberRange(campaignData, order.campaignId)
 
   logger.info('runPaidDepositBusinessLogic started', {
     externalId: order.externalId,
@@ -570,11 +586,13 @@ async function runPaidDepositBusinessLogic(
     userId: order.userId ? maskUid(order.userId) : null,
     reservedNumbersCount: order.reservedNumbers.length,
     amount: sanitizeOptionalAmount(order.amount),
-    requestedCount: transactionStats.requestedCount,
+    numbersRequested: transactionStats.numbersRequested,
     previousCount: transactionStats.previousCount,
     uniqueStateReads: transactionStats.uniqueStateReads,
     transactionAttempts: transactionStats.transactionAttempts,
     conflictsCount: transactionStats.conflictsCount,
+    chunksRead: transactionStats.chunksRead,
+    chunksWritten: transactionStats.chunksWritten,
   })
   const paymentRef = db.collection('payments').doc(order.externalId)
   const salesLedgerRef = db.collection('salesLedger').doc(order.externalId)
@@ -588,21 +606,91 @@ async function runPaidDepositBusinessLogic(
 
   await db.runTransaction(async (transaction) => {
     transactionStats.transactionAttempts += 1
-    const numberStateRefs = new Map(
-      order.reservedNumbers.map((number) => [number, getNumberStateRef(db, order.campaignId, number)]),
-    )
-    transactionStats.uniqueStateReads = numberStateRefs.size
-    const numberStateSnapshots = await Promise.all(
-      order.reservedNumbers.map((number) => {
-        const ref = numberStateRefs.get(number)
-        return ref ? transaction.get(ref) : Promise.resolve(null)
-      }),
-    )
-    const numberStateSnapshotByNumber = new Map(
-      order.reservedNumbers.map((number, index) => [number, numberStateSnapshots[index]]),
-    )
     const reservationSnapshot = reservationRef ? await transaction.get(reservationRef) : null
     const salesLedgerSnapshot = await transaction.get(salesLedgerRef)
+    transactionStats.uniqueStateReads = order.reservedNumbers.length
+
+    const chunkStatesByStart = new Map<number, NumberChunkRuntimeState>()
+    const chunkRefs = new Map<number, ReturnType<typeof getNumberChunkRef>>()
+
+    if (order.userId && order.reservedNumbers.length > 0) {
+      const grouped = mapNumbersByChunkStart({
+        numbers: order.reservedNumbers,
+        rangeStart: campaignRange.start,
+        rangeEnd: campaignRange.end,
+      })
+      const chunkStarts = Array.from(grouped.keys()).sort((a, b) => a - b)
+      for (const chunkStart of chunkStarts) {
+        chunkRefs.set(chunkStart, getNumberChunkRef(db, order.campaignId, chunkStart))
+      }
+      transactionStats.chunksRead = chunkStarts.length
+
+      const chunkSnapshots = await Promise.all(
+        chunkStarts.map((chunkStart) => {
+          const ref = chunkRefs.get(chunkStart)
+          return ref ? transaction.get(ref) : Promise.resolve(null)
+        }),
+      )
+
+      for (let index = 0; index < chunkStarts.length; index += 1) {
+        const chunkStart = chunkStarts[index]
+        const snapshot = chunkSnapshots[index]
+        const bounds = buildChunkBoundsForChunkStart({
+          campaignId: order.campaignId,
+          rangeStart: campaignRange.start,
+          rangeEnd: campaignRange.end,
+          chunkStart,
+        })
+        const chunkState = readChunkStateFromDoc({
+          bounds,
+          docData: snapshot?.exists ? (snapshot.data() || null) : null,
+          nowMs,
+        })
+        chunkStatesByStart.set(chunkStart, chunkState)
+      }
+
+      for (const number of order.reservedNumbers) {
+        const chunkStart = campaignRange.start + Math.floor((number - campaignRange.start) / NUMBER_CHUNK_SIZE) * NUMBER_CHUNK_SIZE
+        const chunkState = chunkStatesByStart.get(chunkStart)
+        if (!chunkState) {
+          continue
+        }
+
+        const state = getChunkNumberView(chunkState, number)
+        if (state.status === 'pago') {
+          transactionStats.conflictsCount += 1
+          continue
+        }
+
+        if (state.status === 'reservado' && state.reservedBy && state.reservedBy !== order.userId) {
+          transactionStats.conflictsCount += 1
+          continue
+        }
+
+        clearNumberReservation({
+          state: chunkState,
+          number,
+          uid: order.userId,
+        })
+        markNumberAsPaid({
+          state: chunkState,
+          number,
+          userId: order.userId,
+          orderId: order.externalId,
+          paidAtMs: nowMs,
+        })
+      }
+    }
+
+    const reservationNumbers = reservationSnapshot?.exists
+      ? readStoredReservationNumbers(reservationSnapshot.get('numbers'), campaignRange.start, campaignRange.end)
+      : []
+    transactionStats.previousCount = reservationNumbers.length
+    const shouldDeleteReservation = Boolean(
+      reservationRef
+      && reservationSnapshot?.exists
+      && sameNumberSet(reservationNumbers, order.reservedNumbers),
+    )
 
     transaction.set(
       paymentRef,
@@ -652,55 +740,22 @@ async function runPaidDepositBusinessLogic(
           { merge: true },
         )
       }
-
     }
 
-    if (!order.userId || order.reservedNumbers.length === 0) {
-      return
-    }
-
-    for (const number of order.reservedNumbers) {
-      const numberStateRef = numberStateRefs.get(number)
-
-      if (!numberStateRef) {
+    transactionStats.chunksWritten = 0
+    for (const [chunkStart, chunkState] of chunkStatesByStart.entries()) {
+      if (!chunkState.dirty) {
         continue
       }
-
-      const numberStateSnapshot = numberStateSnapshotByNumber.get(number)
-      const state = buildNumberStateView({
-        number,
-        nowMs,
-        numberStateData: numberStateSnapshot?.exists ? numberStateSnapshot.data() : null,
-      })
-
-      if (state.status === 'pago') {
-        transactionStats.conflictsCount += 1
+      const chunkRef = chunkRefs.get(chunkStart)
+      if (!chunkRef) {
         continue
       }
-
-      if (state.reservedBy && state.reservedBy !== order.userId) {
-        transactionStats.conflictsCount += 1
-        continue
-      }
-
-      transaction.set(numberStateRef, buildPaidNumberStateData({
-        campaignId: order.campaignId,
-        number,
-        userId: order.userId,
-        orderId: order.externalId,
-      }), { merge: true })
+      transaction.set(chunkRef, writeChunkStateToDoc(chunkState), { merge: true })
+      transactionStats.chunksWritten += 1
     }
 
-    if (!reservationRef) {
-      return
-    }
-
-    const reservationNumbers = reservationSnapshot?.exists
-      ? readStoredReservationNumbers(reservationSnapshot.get('numbers'))
-      : []
-    transactionStats.previousCount = reservationNumbers.length
-
-    if (reservationSnapshot?.exists && sameNumberSet(reservationNumbers, order.reservedNumbers)) {
+    if (shouldDeleteReservation && reservationRef) {
       transaction.delete(reservationRef)
     }
   })
@@ -709,11 +764,14 @@ async function runPaidDepositBusinessLogic(
     externalId: order.externalId,
     reservedNumbersCount: order.reservedNumbers.length,
     amount: normalizedAmount,
-    requestedCount: transactionStats.requestedCount,
+    numbersRequested: transactionStats.numbersRequested,
     previousCount: transactionStats.previousCount,
     uniqueStateReads: transactionStats.uniqueStateReads,
     transactionAttempts: transactionStats.transactionAttempts,
     conflictsCount: transactionStats.conflictsCount,
+    chunksRead: transactionStats.chunksRead,
+    chunksWritten: transactionStats.chunksWritten,
+    durationMs: Date.now() - startedAtMs,
   })
 }
 

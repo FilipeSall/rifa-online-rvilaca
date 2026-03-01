@@ -7,8 +7,20 @@ import {
   MAX_NUMBER_WINDOW_PAGE_SIZE,
 } from './constants.js'
 import {
-  buildNumberStateView,
-  getNumberStateRef,
+  buildChunkBoundsForChunkStart,
+  buildChunkBoundsForNumber,
+  getChunkPaidMeta,
+  getChunkNumberView,
+  getNumberChunkRef,
+  mapNumbersByChunkStart,
+  readChunkStateFromDoc,
+  type NumberChunkPaidMetaEntry,
+  type NumberChunkRuntimeState,
+  writeChunkStateToDoc,
+  listChunkStartsInWindow,
+  NUMBER_CHUNK_SIZE,
+} from './numberChunkStore.js'
+import {
   readCampaignNumberRange,
   type NumberStateView,
 } from './numberStateStore.js'
@@ -173,12 +185,68 @@ function toRange(start: number, end: number): number[] {
   return Array.from({ length: end - start + 1 }, (_, index) => start + index)
 }
 
-async function readNumbersState(
+function readChunkState(params: {
+  campaignId: string
+  rangeStart: number
+  rangeEnd: number
+  chunkStart: number
+  snapshotData: DocumentData | null
+  nowMs: number
+  writes: Array<{ chunkStart: number; state: NumberChunkRuntimeState }>
+}): NumberChunkRuntimeState {
+  const bounds = buildChunkBoundsForChunkStart({
+    campaignId: params.campaignId,
+    rangeStart: params.rangeStart,
+    rangeEnd: params.rangeEnd,
+    chunkStart: params.chunkStart,
+  })
+
+  const chunkState = readChunkStateFromDoc({
+    bounds,
+    docData: params.snapshotData,
+    nowMs: params.nowMs,
+  })
+
+  if (chunkState.dirty) {
+    params.writes.push({ chunkStart: params.chunkStart, state: chunkState })
+  }
+  return chunkState
+}
+
+async function persistDirtyChunks(
+  db: Firestore,
+  campaignId: string,
+  writes: Array<{ chunkStart: number; state: NumberChunkRuntimeState }>,
+) {
+  if (writes.length === 0) {
+    return
+  }
+
+  const uniqueByChunk = new Map<number, NumberChunkRuntimeState>()
+  for (const item of writes) {
+    uniqueByChunk.set(item.chunkStart, item.state)
+  }
+
+  const chunkEntries = Array.from(uniqueByChunk.entries())
+  for (let offset = 0; offset < chunkEntries.length; offset += 400) {
+    const batch = db.batch()
+    const slice = chunkEntries.slice(offset, offset + 400)
+    for (const [chunkStart, state] of slice) {
+      const ref = getNumberChunkRef(db, campaignId, chunkStart)
+      batch.set(ref, writeChunkStateToDoc(state), { merge: true })
+    }
+    await batch.commit()
+  }
+}
+
+async function readNumbersStateChunked(
   db: Firestore,
   params: {
     campaignId: string
     numbers: number[]
     nowMs: number
+    rangeStart: number
+    rangeEnd: number
   },
 ): Promise<NumberStateView[]> {
   const uniqueNumbers = Array.from(new Set(params.numbers)).sort((a, b) => a - b)
@@ -186,28 +254,69 @@ async function readNumbersState(
     return []
   }
 
-  const numberStateRefs = uniqueNumbers.map((number) =>
-    getNumberStateRef(db, params.campaignId, number),
-  )
-  const numberStateSnapshots = await db.getAll(...numberStateRefs)
-  const stateDataByNumber = new Map<number, DocumentData>()
+  const grouped = mapNumbersByChunkStart({
+    numbers: uniqueNumbers,
+    rangeStart: params.rangeStart,
+    rangeEnd: params.rangeEnd,
+  })
+  const chunkStarts = Array.from(grouped.keys()).sort((a, b) => a - b)
+  const chunkRefs = chunkStarts.map((chunkStart) => getNumberChunkRef(db, params.campaignId, chunkStart))
+  const chunkSnapshots = chunkRefs.length > 0 ? await db.getAll(...chunkRefs) : []
+  const pendingChunkWrites: Array<{ chunkStart: number; state: NumberChunkRuntimeState }> = []
+  const chunkStateByStart = new Map<number, NumberChunkRuntimeState>()
 
-  numberStateSnapshots.forEach((snapshot, index) => {
-    const number = uniqueNumbers[index]
-    if (!snapshot.exists) {
-      return
+  for (let index = 0; index < chunkStarts.length; index += 1) {
+    const chunkStart = chunkStarts[index]
+    const snapshot = chunkSnapshots[index]
+    const chunkState = readChunkState({
+      campaignId: params.campaignId,
+      rangeStart: params.rangeStart,
+      rangeEnd: params.rangeEnd,
+      chunkStart,
+      snapshotData: snapshot?.exists ? (snapshot.data() || null) : null,
+      nowMs: params.nowMs,
+      writes: pendingChunkWrites,
+    })
+    chunkStateByStart.set(chunkStart, chunkState)
+  }
+
+  if (pendingChunkWrites.length > 0) {
+    await persistDirtyChunks(db, params.campaignId, pendingChunkWrites)
+  }
+
+  return uniqueNumbers.map((number) => {
+    const chunkStart = params.rangeStart + Math.floor((number - params.rangeStart) / NUMBER_CHUNK_SIZE) * NUMBER_CHUNK_SIZE
+    const chunkState = chunkStateByStart.get(chunkStart)
+    if (!chunkState) {
+      return {
+        number,
+        status: 'disponivel',
+        reservedBy: null,
+        reservationExpiresAtMs: null,
+      } satisfies NumberStateView
     }
 
-    stateDataByNumber.set(number, snapshot.data() || {})
-  })
-
-  return uniqueNumbers.map((number) =>
-    buildNumberStateView({
+    const view = getChunkNumberView(chunkState, number)
+    return {
       number,
-      nowMs: params.nowMs,
-      numberStateData: stateDataByNumber.get(number) || null,
-    }),
-  )
+      status: view.status,
+      reservedBy: view.reservedBy,
+      reservationExpiresAtMs: view.reservationExpiresAtMs,
+    } satisfies NumberStateView
+  })
+}
+
+async function readNumbersState(
+  db: Firestore,
+  params: {
+    campaignId: string
+    numbers: number[]
+    nowMs: number
+    rangeStart: number
+    rangeEnd: number
+  },
+): Promise<NumberStateView[]> {
+  return readNumbersStateChunked(db, params)
 }
 
 async function readRangeState(
@@ -217,12 +326,16 @@ async function readRangeState(
     start: number
     end: number
     nowMs: number
+    rangeStart: number
+    rangeEnd: number
   },
 ): Promise<NumberStateView[]> {
   return readNumbersState(db, {
     campaignId: params.campaignId,
     numbers: toRange(params.start, params.end),
     nowMs: params.nowMs,
+    rangeStart: params.rangeStart,
+    rangeEnd: params.rangeEnd,
   })
 }
 
@@ -236,20 +349,36 @@ async function findSmallestAvailableNumber(
   },
 ): Promise<number | null> {
   for (
-    let blockStart = params.rangeStart;
-    blockStart <= params.rangeEnd;
-    blockStart += SEARCH_BLOCK_SIZE
+    let chunkStart = params.rangeStart;
+    chunkStart <= params.rangeEnd;
+    chunkStart += NUMBER_CHUNK_SIZE
   ) {
-    const blockEnd = Math.min(blockStart + SEARCH_BLOCK_SIZE - 1, params.rangeEnd)
-    const blockStates = await readRangeState(db, {
+    const bounds = buildChunkBoundsForChunkStart({
       campaignId: params.campaignId,
-      start: blockStart,
-      end: blockEnd,
+      rangeStart: params.rangeStart,
+      rangeEnd: params.rangeEnd,
+      chunkStart,
+    })
+    const chunkRef = getNumberChunkRef(db, params.campaignId, bounds.chunkStart)
+    const chunkSnapshot = await chunkRef.get()
+    const chunkState = readChunkStateFromDoc({
+      bounds,
+      docData: chunkSnapshot.exists ? (chunkSnapshot.data() || null) : null,
       nowMs: params.nowMs,
     })
-    const firstAvailable = blockStates.find((item) => item.status === 'disponivel')
-    if (firstAvailable) {
-      return firstAvailable.number
+
+    if (chunkState.dirty) {
+      await chunkRef.set(writeChunkStateToDoc(chunkState), { merge: true })
+    }
+
+    if (chunkState.availableCount <= 0) {
+      continue
+    }
+
+    for (let number = bounds.chunkStart; number <= bounds.chunkEnd; number += 1) {
+      if (getChunkNumberView(chunkState, number).status === 'disponivel') {
+        return number
+      }
     }
   }
 
@@ -312,6 +441,46 @@ async function resolveCampaignRange(db: Firestore, campaignId: string) {
   const campaignSnapshot = await db.collection('campaigns').doc(campaignId).get()
   const campaignData = campaignSnapshot.exists ? campaignSnapshot.data() : undefined
   return readCampaignNumberRange(campaignData, campaignId)
+}
+
+async function readNumberStatusAndPaidMeta(params: {
+  db: Firestore
+  campaignId: string
+  number: number
+  rangeStart: number
+  rangeEnd: number
+  nowMs: number
+}): Promise<{ state: NumberStateView; paidMeta: NumberChunkPaidMetaEntry | null }> {
+  const bounds = buildChunkBoundsForNumber({
+    campaignId: params.campaignId,
+    number: params.number,
+    rangeStart: params.rangeStart,
+    rangeEnd: params.rangeEnd,
+  })
+  const chunkRef = getNumberChunkRef(params.db, params.campaignId, bounds.chunkStart)
+  const snapshot = await chunkRef.get()
+  const chunkState = readChunkStateFromDoc({
+    bounds,
+    docData: snapshot.exists ? (snapshot.data() || null) : null,
+    nowMs: params.nowMs,
+  })
+
+  if (chunkState.dirty) {
+    await chunkRef.set(writeChunkStateToDoc(chunkState), { merge: true })
+  }
+
+  const view = getChunkNumberView(chunkState, params.number)
+  const paidMeta = getChunkPaidMeta(chunkState, params.number)
+
+  return {
+    state: {
+      number: view.number,
+      status: view.status,
+      reservedBy: view.reservedBy,
+      reservationExpiresAtMs: view.reservationExpiresAtMs,
+    },
+    paidMeta,
+  }
 }
 
 function normalizeTicketDigits(raw: unknown): string | null {
@@ -521,6 +690,7 @@ async function resolveAwardedPrizeFromTopBuyersFallback(
 
 export function createGetNumberWindowHandler(db: Firestore) {
   return async (request: { data: unknown }) => {
+    const startedAtMs = Date.now()
     try {
       const payload = asRecord(request.data) as Partial<GetNumberWindowInput>
       const campaignId = sanitizeCampaignId(payload.campaignId)
@@ -548,13 +718,22 @@ export function createGetNumberWindowHandler(db: Firestore) {
         start: effectivePageStart,
         end: pageEnd,
         nowMs,
+        rangeStart: campaignRange.start,
+        rangeEnd: campaignRange.end,
       })
       const availableInPage = numbers.filter((item) => item.status === 'disponivel').length
+      const chunksRead = listChunkStartsInWindow({
+        pageStart: effectivePageStart,
+        pageSize,
+        rangeStart: campaignRange.start,
+        rangeEnd: campaignRange.end,
+      }).length
       const previousPageStart =
         effectivePageStart > campaignRange.start
           ? Math.max(campaignRange.start, effectivePageStart - pageSize)
           : null
       const nextPageStart = pageEnd < campaignRange.end ? pageEnd + 1 : null
+      const durationMs = Date.now() - startedAtMs
 
       logger.info('getNumberWindow succeeded', {
         campaignId,
@@ -564,6 +743,12 @@ export function createGetNumberWindowHandler(db: Firestore) {
         pageEnd,
         availableInPage,
         smallestAvailableNumber,
+        numbersRequested: numbers.length,
+        conflictsCount: 0,
+        transactionAttempts: 0,
+        chunksRead,
+        chunksWritten: 0,
+        durationMs,
       })
 
       return {
@@ -587,8 +772,15 @@ export function createGetNumberWindowHandler(db: Firestore) {
         })),
       } satisfies GetNumberWindowOutput
     } catch (error) {
+      const durationMs = Date.now() - startedAtMs
       logger.error('getNumberWindow failed', {
         error: String(error),
+        numbersRequested: 0,
+        conflictsCount: 0,
+        transactionAttempts: 0,
+        chunksRead: 0,
+        chunksWritten: 0,
+        durationMs,
       })
 
       if (error instanceof HttpsError) {
@@ -598,6 +790,10 @@ export function createGetNumberWindowHandler(db: Firestore) {
       throw new HttpsError('internal', 'Falha ao carregar numeros da pagina.')
     }
   }
+}
+
+export function createGetNumberChunkWindowHandler(db: Firestore) {
+  return createGetNumberWindowHandler(db)
 }
 
 function randomIntInclusive(min: number, max: number) {
@@ -626,6 +822,7 @@ function buildRandomCandidates(params: {
 
 export function createPickRandomAvailableNumbersHandler(db: Firestore) {
   return async (request: { data: unknown }) => {
+    const startedAtMs = Date.now()
     try {
       const payload = asRecord(request.data) as Partial<PickRandomAvailableNumbersInput>
       const campaignId = sanitizeCampaignId(payload.campaignId)
@@ -655,6 +852,8 @@ export function createPickRandomAvailableNumbersHandler(db: Firestore) {
           campaignId,
           numbers: candidates,
           nowMs,
+          rangeStart: campaignRange.start,
+          rangeEnd: campaignRange.end,
         })
 
         for (const state of states) {
@@ -681,6 +880,8 @@ export function createPickRandomAvailableNumbersHandler(db: Firestore) {
             start: blockStart,
             end: blockEnd,
             nowMs,
+            rangeStart: campaignRange.start,
+            rangeEnd: campaignRange.end,
           })
 
           for (const state of states) {
@@ -701,12 +902,19 @@ export function createPickRandomAvailableNumbersHandler(db: Firestore) {
       }
 
       const numbers = Array.from(selectedNumbers).sort((a, b) => a - b)
+      const durationMs = Date.now() - startedAtMs
 
       logger.info('pickRandomAvailableNumbers succeeded', {
         campaignId,
         quantityRequested: quantity,
         quantitySelected: numbers.length,
         excludedCount: excludedNumbers.size,
+        numbersRequested: quantity,
+        conflictsCount: 0,
+        transactionAttempts: 0,
+        chunksRead: 0,
+        chunksWritten: 0,
+        durationMs,
       })
 
       return {
@@ -716,8 +924,15 @@ export function createPickRandomAvailableNumbersHandler(db: Firestore) {
         exhausted: numbers.length < quantity,
       } satisfies PickRandomAvailableNumbersOutput
     } catch (error) {
+      const durationMs = Date.now() - startedAtMs
       logger.error('pickRandomAvailableNumbers failed', {
         error: String(error),
+        numbersRequested: 0,
+        conflictsCount: 0,
+        transactionAttempts: 0,
+        chunksRead: 0,
+        chunksWritten: 0,
+        durationMs,
       })
 
       if (error instanceof HttpsError) {
@@ -737,12 +952,13 @@ export function createGetPublicNumberLookupHandler(db: Firestore) {
       const campaignRange = await resolveCampaignRange(db, campaignId)
       const number = sanitizeLookupNumber(payload.number, campaignRange.start, campaignRange.end)
       const nowMs = Date.now()
-      const numberStateRef = getNumberStateRef(db, campaignId, number)
-      const numberStateSnapshot = await numberStateRef.get()
-      const state = buildNumberStateView({
+      const { state, paidMeta } = await readNumberStatusAndPaidMeta({
+        db,
+        campaignId,
         number,
         nowMs,
-        numberStateData: numberStateSnapshot.exists ? numberStateSnapshot.data() : null,
+        rangeStart: campaignRange.start,
+        rangeEnd: campaignRange.end,
       })
 
       if (state.status !== 'pago') {
@@ -756,8 +972,8 @@ export function createGetPublicNumberLookupHandler(db: Firestore) {
         } satisfies GetPublicNumberLookupOutput
       }
 
-      const ownerUid = sanitizeString(numberStateSnapshot.get('ownerUid'))
-      let awardedPrize = sanitizeString(numberStateSnapshot.get('awardedPrize')) || null
+      const ownerUid = paidMeta?.ownerUid || null
+      let awardedPrize = paidMeta?.awardedPrize || null
       if (!awardedPrize) {
         awardedPrize = await resolveAwardedPrizeFromTopBuyersFallback(db, campaignId, number)
       }

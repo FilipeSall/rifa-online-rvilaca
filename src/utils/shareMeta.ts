@@ -10,7 +10,7 @@ type ShareMetaPayload = {
   description: string
 }
 
-const FALLBACK_CAMPAIGN_TITLE = 'Sorteio JonnyBarber'
+const FALLBACK_CAMPAIGN_TITLE = 'Sorteio JhonyBarber'
 const FALLBACK_MAIN_PRIZE = 'BMW R1200 GS 2015/2016'
 const FALLBACK_SECOND_PRIZE = 'Honda CG Start 160 2026/2026'
 const FALLBACK_BONUS_PRIZE = '20 PIX de R$ 1.000'
@@ -30,7 +30,7 @@ export function buildCampaignShareMeta(input: ShareMetaInput): ShareMetaPayload 
   const secondPrize = sanitizeText(input.secondPrize, FALLBACK_SECOND_PRIZE)
   const bonusPrize = sanitizeText(input.bonusPrize, FALLBACK_BONUS_PRIZE)
 
-  const title = `Concorra a ${mainPrize}, ${secondPrize} e ${bonusPrize} | JonnyBarber`
+  const title = `Concorra a ${mainPrize}, ${secondPrize} e ${bonusPrize} | JhonyBarber`
   const description = `Participe da ${campaignTitle} e concorra a ${mainPrize}, ${secondPrize} e ${bonusPrize}.`
 
   return { title, description }

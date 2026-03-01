@@ -23,7 +23,10 @@ export default function PurchaseNumbersPage() {
         <Header />
 
         <main className="flex-grow pb-16">
-          <PurchaseHeroSection unitPrice={purchaseState.unitPrice} />
+          <PurchaseHeroSection
+            unitPrice={purchaseState.unitPrice}
+            minQuantity={purchaseState.minSelectableQuantity}
+          />
           <PurchaseNumbersContent purchaseState={purchaseState} />
         </main>
 

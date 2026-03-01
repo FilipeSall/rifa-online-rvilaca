@@ -108,7 +108,10 @@ export default function HomePage() {
               || purchaseState.isReserving
             }
           />
-          <PurchaseHeroSection unitPrice={purchaseState.unitPrice} />
+          <PurchaseHeroSection
+            unitPrice={purchaseState.unitPrice}
+            minQuantity={purchaseState.minSelectableQuantity}
+          />
           <WinnersFaqSection />
           <TrustBadgesSection />
         </main>

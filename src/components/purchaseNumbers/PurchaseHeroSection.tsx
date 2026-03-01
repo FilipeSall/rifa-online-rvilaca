@@ -2,9 +2,10 @@ import { formatCurrency } from '../../utils/purchaseNumbers'
 
 type PurchaseHeroSectionProps = {
   unitPrice: number
+  minQuantity: number
 }
 
-export default function PurchaseHeroSection({ unitPrice }: PurchaseHeroSectionProps) {
+export default function PurchaseHeroSection({ unitPrice, minQuantity }: PurchaseHeroSectionProps) {
   return (
     <section className="hero-bg border-b border-white/5">
       <div className="container mx-auto px-4 py-14 lg:px-8 lg:py-20">
@@ -23,12 +24,18 @@ export default function PurchaseHeroSection({ unitPrice }: PurchaseHeroSectionPr
             </p>
           </div>
 
-          <div className="grid w-full grid-cols-1 gap-3 lg:flex-1 lg:gap-4">
+          <div className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 lg:flex-1 lg:gap-4">
             <div className="rounded-xl border border-white/10 bg-luxury-card p-4">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Valor da cota</p>
+              <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Valor do numero</p>
               <p className="mt-2 text-2xl font-black text-neon-cyan">{formatCurrency(unitPrice)}</p>
             </div>
-            <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4">
+            <div className="rounded-xl border border-white/10 bg-luxury-card p-4">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Compra minima</p>
+              <p className="mt-2 text-xl font-black text-amber-300">
+                {minQuantity} {minQuantity === 1 ? 'numero' : 'numeros'}
+              </p>
+            </div>
+            <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4 md:col-span-2">
               <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-300">Status do pagamento</p>
               <p className="mt-2 text-sm font-semibold text-emerald-100">
                 Numeros so pertencem ao comprador apos confirmacao PIX.

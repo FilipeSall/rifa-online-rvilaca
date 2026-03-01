@@ -31,7 +31,7 @@ Este arquivo explica o contexto backend para outra IA atuar com seguranca.
 - `pixWebhook`:
 - Deve permanecer idempotente.
 - Sempre responde HTTP 200 para evitar retries agressivos.
-- Atualiza `orders`, `payments`, `salesLedger`, metricas e `numberStates`.
+- Atualiza `orders`, `payments`, `salesLedger`, metricas e `numberChunks`.
 
 ## Guardrails de custo
 

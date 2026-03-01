@@ -1,10 +1,9 @@
-import { FieldValue, type DocumentData, type Firestore, type Timestamp } from 'firebase-admin/firestore'
+import type { DocumentData } from 'firebase-admin/firestore'
 import {
   CAMPAIGN_DOC_ID,
   RAFFLE_NUMBER_END,
   RAFFLE_NUMBER_START,
 } from './constants.js'
-import { readString, readTimestampMillis, sanitizeString } from './shared.js'
 
 export type NumberStatus = 'disponivel' | 'reservado' | 'pago'
 
@@ -54,100 +53,5 @@ export function readCampaignNumberRange(
     start,
     end,
     total,
-  }
-}
-
-export function buildNumberStateDocId(campaignId: string, number: number): string {
-  return `${campaignId}_${number}`
-}
-
-export function getNumberStateRef(db: Firestore, campaignId: string, number: number) {
-  return db.collection('numberStates').doc(buildNumberStateDocId(campaignId, number))
-}
-
-export function sanitizeStoredNumberStatus(raw: unknown): NumberStatus {
-  const value = sanitizeString(raw).toLowerCase()
-
-  if (value === 'paid' || value === 'pago') {
-    return 'pago'
-  }
-
-  if (value === 'reserved' || value === 'reservado') {
-    return 'reservado'
-  }
-
-  return 'disponivel'
-}
-
-function parseStoredReservationExpiresAtMs(data: DocumentData | null | undefined): number | null {
-  return readTimestampMillis(data?.reservationExpiresAt || data?.expiresAt)
-}
-
-function parseStoredReservedBy(data: DocumentData | null | undefined): string | null {
-  return readString(data?.reservedBy)
-}
-
-export function buildNumberStateView(params: {
-  number: number
-  nowMs: number
-  numberStateData?: DocumentData | null
-}): NumberStateView {
-  const stateData = params.numberStateData || null
-  const data = stateData
-  const rawStatus = sanitizeStoredNumberStatus(data?.status)
-  const reservationExpiresAtMs = parseStoredReservationExpiresAtMs(data)
-  const reservedBy = parseStoredReservedBy(data)
-  const isExpiredReservation = rawStatus === 'reservado'
-    && reservationExpiresAtMs !== null
-    && reservationExpiresAtMs <= params.nowMs
-
-  return {
-    number: params.number,
-    status: isExpiredReservation ? 'disponivel' : rawStatus,
-    reservedBy,
-    reservationExpiresAtMs,
-  }
-}
-
-export function buildReservedNumberStateData(params: {
-  campaignId: string
-  number: number
-  uid: string
-  expiresAt: Timestamp
-}): DocumentData {
-  return {
-    campaignId: params.campaignId,
-    number: params.number,
-    status: 'reservado',
-    reservedBy: params.uid,
-    reservedAt: FieldValue.serverTimestamp(),
-    reservationExpiresAt: params.expiresAt,
-    ownerUid: null,
-    orderId: null,
-    paidAt: null,
-    updatedAt: FieldValue.serverTimestamp(),
-  }
-}
-
-export function buildPaidNumberStateData(params: {
-  campaignId: string
-  number: number
-  userId: string
-  orderId: string
-}): DocumentData {
-  return {
-    campaignId: params.campaignId,
-    number: params.number,
-    status: 'pago',
-    reservedBy: null,
-    reservedAt: null,
-    reservationExpiresAt: null,
-    ownerUid: params.userId,
-    orderId: params.orderId,
-    paidAt: FieldValue.serverTimestamp(),
-    awardedDrawId: null,
-    awardedPrize: null,
-    awardedAt: null,
-    updatedAt: FieldValue.serverTimestamp(),
   }
 }

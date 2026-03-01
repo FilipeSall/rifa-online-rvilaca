@@ -32,28 +32,29 @@ export default function QuantitySelectionCard({
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="mt-8 grid grid-cols-2 gap-x-3 gap-y-5 md:grid-cols-4">
         {effectivePacks.map((pack) => {
           const isPromotionPack = Boolean(featuredPromotion?.active && featuredPromotion.targetQuantity === pack)
 
           return (
             <div key={pack} className="relative">
               {isPromotionPack ? (
-                <span className="pointer-events-none absolute -top-2 left-1/2 z-10 inline-flex min-w-[120px] max-w-[92%] -translate-x-1/2 items-center justify-center rounded-md border border-amber-300/55 bg-[linear-gradient(120deg,rgba(245,158,11,0.95),rgba(251,191,36,0.92))] px-3 py-1 text-center text-[9px] font-black uppercase tracking-[0.09em] text-black shadow-[0_8px_18px_rgba(245,158,11,0.3)]">
+                <span className="pointer-events-none absolute -top-2 left-1/2 z-10 inline-flex w-[70%] -translate-x-1/2 items-center justify-center rounded-md border border-amber-300/55 bg-[linear-gradient(120deg,rgba(245,158,11,0.95),rgba(251,191,36,0.92))] px-2.5 py-0.5 text-center text-[8px] font-black uppercase tracking-[0.09em] text-black shadow-[0_8px_18px_rgba(245,158,11,0.3)]">
                   {promotionLabel}
                 </span>
               ) : null}
               <button
-                className={`w-full rounded-lg border px-4 py-4 text-left transition-all ${
+                className={`relative w-full overflow-hidden rounded-lg border px-4 py-4 text-left transition-all ${
                   quantity === pack
                     ? 'border-neon-pink bg-neon-pink/10 text-neon-pink shadow-glow-pink'
-                    : isPromotionPack
-                      ? 'border-amber-300/55 bg-amber-500/10 text-amber-100 hover:border-amber-200/75'
-                      : 'border-white/10 bg-luxury-bg text-white hover:border-neon-pink/50'
+                    : 'border-white/10 bg-luxury-bg text-white hover:border-neon-pink/50'
                 }`}
                 type="button"
                 onClick={() => onSetQuantity(pack)}
               >
+                {isPromotionPack ? (
+                  <span className="pointer-events-none absolute left-0 top-0 h-[2px] w-full bg-gradient-to-r from-amber-400 to-yellow-300" />
+                ) : null}
                 <p className="text-lg font-black">+{pack}</p>
                 <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Numeros</p>
               </button>
