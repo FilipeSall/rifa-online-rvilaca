@@ -2,6 +2,7 @@ import { FieldValue, type DocumentData, type Firestore, type Transaction } from 
 import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
 import { CAMPAIGN_DOC_ID, DEFAULT_MAIN_PRIZE } from './constants.js'
+import { getCampaignDocCached, invalidateCampaignDocCache } from './campaignDocCache.js'
 import {
   buildChunkBoundsForNumber,
   getChunkNumberView,
@@ -690,8 +691,7 @@ export function createPublishMainRaffleDrawHandler(db: Firestore) {
     }
     const selectedExtractionValue = Number(selectedExtractionNumber)
 
-    const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
-    const campaignData = campaignSnapshot.data()
+    const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
     const availableDrawPrizes = buildAvailableDrawPrizes(campaignData)
     const drawPrize = sanitizeDrawPrize(payload.drawPrize, availableDrawPrizes)
     const raffleRange = readCampaignNumberRange(campaignData, CAMPAIGN_DOC_ID)
@@ -822,6 +822,7 @@ export function createPublishMainRaffleDrawHandler(db: Firestore) {
           { merge: true },
         )
       })
+      invalidateCampaignDocCache(CAMPAIGN_DOC_ID)
 
       if (!result) {
         throw new HttpsError('internal', 'Nao foi possivel concluir a apuracao.')
@@ -859,8 +860,8 @@ export function createPublishMainRaffleDrawHandler(db: Firestore) {
 export function createGetLatestMainRaffleDrawHandler(db: Firestore) {
   return async (): Promise<GetLatestMainRaffleDrawOutput> => {
     try {
-      const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
-      const raw = asRecord(campaignSnapshot.get('latestMainRaffleDraw'))
+      const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
+      const raw = asRecord(campaignData?.latestMainRaffleDraw)
       const result = parseMainRaffleResult(raw)
       if (!result) {
         return {

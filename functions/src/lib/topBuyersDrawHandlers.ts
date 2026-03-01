@@ -2,6 +2,7 @@ import { FieldValue, type DocumentData, type Firestore } from 'firebase-admin/fi
 import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
 import { CAMPAIGN_DOC_ID, DEFAULT_MAIN_PRIZE } from './constants.js'
+import { getCampaignDocCached, invalidateCampaignDocCache } from './campaignDocCache.js'
 import { asRecord, readString, readTimestampMillis, requireActiveUid, sanitizeString } from './shared.js'
 
 const TOP_BUYERS_DRAW_HISTORY_COLLECTION = 'topBuyersDrawResults'
@@ -617,8 +618,7 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
     const extractionNumbers = sanitizeExtractionNumbers(payload.extractionNumbers)
     const rankingLimit = sanitizeRankingLimit(payload.rankingLimit)
     const rankingWindow = getWeeklyRankingWindow()
-    const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
-    const campaignData = campaignSnapshot.data()
+    const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
     const availableDrawPrizes = buildAvailableDrawPrizes(campaignData)
     const drawPrize = sanitizeDrawPrize(payload.drawPrize, availableDrawPrizes)
     const existingPrizeSnapshot = await db.collection(TOP_BUYERS_DRAW_HISTORY_COLLECTION)
@@ -702,6 +702,7 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
       )
 
       await batch.commit()
+      invalidateCampaignDocCache(CAMPAIGN_DOC_ID)
 
       return result
     } catch (error) {
@@ -720,12 +721,12 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
 export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
   return async (): Promise<GetLatestTopBuyersDrawOutput> => {
     try {
-      const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
-      const rawResult = asRecord(campaignSnapshot.get('latestTopBuyersDraw'))
+      const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
+      const rawResult = asRecord(campaignData?.latestTopBuyersDraw)
 
       const drawId = sanitizeString(rawResult.drawId)
       const drawDate = sanitizeString(rawResult.drawDate)
-      const drawPrize = sanitizeString(rawResult.drawPrize) || sanitizeString(campaignSnapshot.get('mainPrize')) || DEFAULT_MAIN_PRIZE
+      const drawPrize = sanitizeString(rawResult.drawPrize) || sanitizeString(campaignData?.mainPrize) || DEFAULT_MAIN_PRIZE
       const weekId = sanitizeString(rawResult.weekId)
       const weekStartAtMs = Number(rawResult.weekStartAtMs)
       const weekEndAtMs = Number(rawResult.weekEndAtMs)
@@ -875,8 +876,8 @@ export function createGetTopBuyersDrawHistoryHandler(db: Firestore) {
     await assertAdminRole(db, uid)
 
     try {
-      const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
-      const fallbackMainPrize = sanitizeString(campaignSnapshot.get('mainPrize')) || DEFAULT_MAIN_PRIZE
+      const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
+      const fallbackMainPrize = sanitizeString(campaignData?.mainPrize) || DEFAULT_MAIN_PRIZE
       const historySnapshot = await db.collection(TOP_BUYERS_DRAW_HISTORY_COLLECTION)
         .orderBy('publishedAtMs', 'desc')
         .limit(historyLimit)
@@ -1027,8 +1028,8 @@ export function createGetPublicTopBuyersDrawHistoryHandler(db: Firestore) {
     )
 
     try {
-      const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
-      const fallbackMainPrize = sanitizeString(campaignSnapshot.get('mainPrize')) || DEFAULT_MAIN_PRIZE
+      const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
+      const fallbackMainPrize = sanitizeString(campaignData?.mainPrize) || DEFAULT_MAIN_PRIZE
       const historySnapshot = await db.collection(TOP_BUYERS_DRAW_HISTORY_COLLECTION)
         .orderBy('publishedAtMs', 'desc')
         .limit(historyLimit)

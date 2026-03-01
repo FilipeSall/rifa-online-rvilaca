@@ -14,6 +14,7 @@ import {
   type OrderType,
   type PixType,
 } from './constants.js'
+import { getCampaignDocCached } from './campaignDocCache.js'
 import {
   readCampaignCoupons,
   readCampaignFeaturedPromotion,
@@ -576,8 +577,7 @@ async function runPaidDepositBusinessLogic(
     chunksWritten: 0,
   }
 
-  const campaignSnapshot = await db.collection('campaigns').doc(order.campaignId).get()
-  const campaignData = campaignSnapshot.exists ? campaignSnapshot.data() : undefined
+  const campaignData = await getCampaignDocCached(db, order.campaignId)
   const campaignRange = readCampaignNumberRange(campaignData, order.campaignId)
 
   logger.info('runPaidDepositBusinessLogic started', {
@@ -803,8 +803,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         throw new HttpsError('failed-precondition', 'Sua reserva nao foi encontrada. Reserve seus numeros novamente.')
       }
 
-      const campaignSnapshot = await db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get()
-      const campaignData = campaignSnapshot.exists ? campaignSnapshot.data() : undefined
+      const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
       const campaignRange = readCampaignNumberRange(campaignData, CAMPAIGN_DOC_ID)
       const quantityLimits = readCampaignPurchaseQuantityLimits(campaignData)
       const reservationNumbers = readStoredReservationNumbers(

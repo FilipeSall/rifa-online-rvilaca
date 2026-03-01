@@ -19,6 +19,7 @@ import {
 } from './constants.js'
 import { readCampaignNumberRange } from './numberStateStore.js'
 import { asRecord, readMetricNumber, requireActiveUid, sanitizeString } from './shared.js'
+import { getCampaignDocCached, invalidateCampaignDocCache } from './campaignDocCache.js'
 
 type CampaignCouponDiscountType = 'percent' | 'fixed'
 
@@ -151,8 +152,18 @@ function buildDefaultPackPrices(unitPrice: number): CampaignPackPrice[] {
     quantity,
     price: Number((quantity * unitPrice).toFixed(2)),
     active: true,
-    mostPurchasedTag: false,
+    mostPurchasedTag: quantity === 100,
   }))
+}
+
+function buildDefaultFeaturedPromotion(): CampaignFeaturedPromotion {
+  return {
+    active: true,
+    targetQuantity: 500,
+    discountType: 'percent',
+    discountValue: 5,
+    label: 'Mais compradas',
+  }
 }
 
 function sanitizeCampaignTitle(value: unknown): string | null {
@@ -681,14 +692,14 @@ export function readCampaignFeaturedPromotion(data: DocumentData | undefined): C
   try {
     const sanitized = sanitizeCampaignFeaturedPromotion(data?.featuredPromotion)
     if (sanitized === undefined) {
-      return null
+      return buildDefaultFeaturedPromotion()
     }
     return sanitized
   } catch (error) {
-    logger.warn('readCampaignFeaturedPromotion fallback to null due to malformed data', {
+    logger.warn('readCampaignFeaturedPromotion fallback to defaults due to malformed data', {
       error: String(error),
     })
-    return null
+    return buildDefaultFeaturedPromotion()
   }
 }
 
@@ -962,7 +973,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         }
 
         if (updateData.featuredPromotion === undefined) {
-          updateData.featuredPromotion = null
+          updateData.featuredPromotion = buildDefaultFeaturedPromotion()
         }
 
         if (!updateData.midias) {
@@ -1005,6 +1016,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       })
 
       await campaignRef.set(updateData, { merge: true })
+      invalidateCampaignDocCache(CAMPAIGN_DOC_ID)
 
       const updatedCampaign = await campaignRef.get()
       const campaignData = (updatedCampaign.exists ? updatedCampaign.data() : undefined) as DocumentData | undefined
@@ -1094,13 +1106,13 @@ export function createGetDashboardSummaryHandler(db: Firestore) {
 
 export function createGetPublicSalesSnapshotHandler(db: Firestore) {
   return async (): Promise<PublicSalesSnapshotOutput> => {
-    const [campaignSnapshot, summarySnapshot] = await Promise.all([
-      db.collection('campaigns').doc(CAMPAIGN_DOC_ID).get(),
+    const [campaignData, summarySnapshot] = await Promise.all([
+      getCampaignDocCached(db, CAMPAIGN_DOC_ID),
       db.collection('metrics').doc('sales_summary').get(),
     ])
 
     const numberRange = readCampaignNumberRange(
-      campaignSnapshot.exists ? (campaignSnapshot.data() as DocumentData | undefined) : undefined,
+      campaignData,
       CAMPAIGN_DOC_ID,
     )
     const totalNumbers = Math.max(1, numberRange.total)

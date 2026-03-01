@@ -15,6 +15,7 @@ import {
   RAFFLE_NUMBER_START,
   RESERVATION_DURATION_MS,
 } from './constants.js'
+import { getCampaignDocCached } from './campaignDocCache.js'
 import { readCampaignPurchaseQuantityLimits } from './campaignHandlers.js'
 import {
   buildChunkBoundsForNumber,
@@ -338,9 +339,7 @@ export function createReserveNumbersHandler(db: Firestore) {
 
     try {
       const payload = asRecord(request.data) as Partial<ReserveNumbersInput>
-      const campaignRef = db.collection('campaigns').doc(CAMPAIGN_DOC_ID)
-      const campaignSnapshot = await campaignRef.get()
-      const campaignData = campaignSnapshot.exists ? campaignSnapshot.data() : undefined
+      const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
       const campaignRange = readCampaignNumberRange(campaignData, CAMPAIGN_DOC_ID)
       const quantityLimits = readCampaignPurchaseQuantityLimits(campaignData)
       const maxReservationQuantity = Math.min(campaignRange.total, MAX_PURCHASE_QUANTITY, quantityLimits.max)
@@ -511,9 +510,7 @@ export function createReleaseReservationHandler(db: Firestore) {
     const stats = createReservationStats(0)
 
     try {
-      const campaignRef = db.collection('campaigns').doc(CAMPAIGN_DOC_ID)
-      const campaignSnapshot = await campaignRef.get()
-      const campaignData = campaignSnapshot.exists ? campaignSnapshot.data() : undefined
+      const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
       const campaignRange = readCampaignNumberRange(campaignData, CAMPAIGN_DOC_ID)
       const reservationRef = db.collection('numberReservations').doc(uid)
       const nowMs = Date.now()

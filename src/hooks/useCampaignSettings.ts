@@ -10,6 +10,7 @@ import {
     DEFAULT_BONUS_PRIZE,
     DEFAULT_CAMPAIGN_STATUS,
     DEFAULT_CAMPAIGN_TITLE,
+    DEFAULT_CAMPAIGN_FEATURED_PROMOTION,
     DEFAULT_MAIN_PRIZE,
     DEFAULT_SECOND_PRIZE,
     DEFAULT_SUPPORT_WHATSAPP_NUMBER,
@@ -205,6 +206,12 @@ function sanitizeCampaignPackPrices(value: unknown, unitPriceFallback: number): 
 }
 
 function sanitizeCampaignFeaturedPromotion(value: unknown): CampaignFeaturedPromotion | null {
+  if (value === undefined) {
+    return {
+      ...DEFAULT_CAMPAIGN_FEATURED_PROMOTION,
+    }
+  }
+
   if (!value || typeof value !== 'object') {
     return null
   }
@@ -537,7 +544,9 @@ function createDefaultCampaignSettings(): CampaignSettings {
         endsAt: null,
         endsAtTime: null,
         packPrices: buildDefaultCampaignPackPrices(DEFAULT_TICKET_PRICE),
-        featuredPromotion: null,
+        featuredPromotion: {
+          ...DEFAULT_CAMPAIGN_FEATURED_PROMOTION,
+        },
         coupons: [],
         midias: getDefaultCampaignMidias(),
     }
@@ -645,7 +654,9 @@ export function useCampaignSettings() {
                 endsAt: null,
                 endsAtTime: null,
                 packPrices: buildDefaultCampaignPackPrices(DEFAULT_TICKET_PRICE),
-                featuredPromotion: null,
+                featuredPromotion: {
+                  ...DEFAULT_CAMPAIGN_FEATURED_PROMOTION,
+                },
                 coupons: [],
                 midias: getDefaultCampaignMidias(),
             }),

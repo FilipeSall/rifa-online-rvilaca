@@ -24,6 +24,7 @@ import {
   type NumberStateView,
 } from './numberStateStore.js'
 import { asRecord, sanitizeString } from './shared.js'
+import { getCampaignDocCached } from './campaignDocCache.js'
 
 interface GetNumberWindowInput {
   campaignId?: string
@@ -354,8 +355,7 @@ function readOwnerCity(data: Record<string, unknown>): string | null {
 }
 
 async function resolveCampaignRange(db: Firestore, campaignId: string) {
-  const campaignSnapshot = await db.collection('campaigns').doc(campaignId).get()
-  const campaignData = campaignSnapshot.exists ? campaignSnapshot.data() : undefined
+  const campaignData = await getCampaignDocCached(db, campaignId)
   return readCampaignNumberRange(campaignData, campaignId)
 }
 
@@ -569,8 +569,8 @@ async function resolveAwardedPrizeFromTopBuyersFallback(
   campaignId: string,
   number: number,
 ): Promise<string | null> {
-  const campaignSnapshot = await db.collection('campaigns').doc(campaignId).get()
-  const latestTopBuyersDraw = asRecord(campaignSnapshot.get('latestTopBuyersDraw'))
+  const campaignData = await getCampaignDocCached(db, campaignId)
+  const latestTopBuyersDraw = asRecord(campaignData?.latestTopBuyersDraw)
   const latestTopBuyersPrize = sanitizeString(latestTopBuyersDraw.drawPrize)
   const latestTopBuyersNumber = await resolveComparableWinnerTicket(db, campaignId, latestTopBuyersDraw)
 
