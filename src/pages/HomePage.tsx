@@ -16,9 +16,14 @@ export default function HomePage() {
   useScrollToHash()
   const purchaseState = usePurchaseNumbers()
   const [isCartModalOpen, setIsCartModalOpen] = useState(false)
+  const isProceedingToCheckout = purchaseState.isReserving || purchaseState.isAutoSelecting
   const closeCartModal = useCallback(() => {
+    if (isProceedingToCheckout) {
+      return
+    }
+
     setIsCartModalOpen(false)
-  }, [])
+  }, [isProceedingToCheckout])
 
   useEffect(() => {
     const shareMeta = buildCampaignShareMeta({
@@ -59,9 +64,8 @@ export default function HomePage() {
   }, [isCartModalOpen])
 
   const handleHomeSummaryProceed = useCallback(() => {
-    closeCartModal()
     void purchaseState.handleProceed()
-  }, [closeCartModal, purchaseState])
+  }, [purchaseState.handleProceed])
 
   const homeSummaryCardProps = useMemo(
     () => ({
@@ -134,9 +138,10 @@ export default function HomePage() {
           >
             <button
               aria-label="Fechar carrinho"
-              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white"
+              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               onClick={closeCartModal}
+              disabled={isProceedingToCheckout}
             >
               <span className="material-symbols-outlined text-lg">close</span>
             </button>

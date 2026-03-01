@@ -471,7 +471,7 @@ export default function CheckoutPage() {
                     <div className="mt-2 flex gap-2 max-[419px]:flex-col">
                       <input
                         id="checkout-coupon"
-                        className="h-10 flex-1 rounded border border-white/15 bg-luxury-card px-3 text-sm text-white outline-none focus:border-neon-pink"
+                        className="h-10 flex-1 rounded border border-white/15 bg-luxury-card px-3 text-sm text-white outline-none focus:border-neon-pink max-[639px]:h-14 max-[639px]:px-4 max-[639px]:text-lg"
                         type="text"
                         placeholder="Ex: PIX10"
                         value={couponInput}

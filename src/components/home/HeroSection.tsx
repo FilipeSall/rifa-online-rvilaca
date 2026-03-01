@@ -183,27 +183,13 @@ export default function HeroSection({
   }, [])
 
   return (
-    <section className="relative overflow-hidden hero-bg pb-20 lg:h-[calc(100svh-7rem)] lg:py-4">
+    <section className="relative flex items-center overflow-hidden hero-bg min-h-[calc(100vh-5rem)] py-8 md:min-h-[calc(100vh-7rem)] lg:py-10">
       <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-neon-pink/5 to-transparent pointer-events-none" />
-      <div className="container relative z-10 mx-auto h-full px-4 lg:px-8">
-        <div className="grid grid-cols-1 gap-12 lg:h-full lg:grid-cols-12 lg:items-center">
+      <div className="container relative z-10 mx-auto w-full px-4 lg:px-8">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:items-center">
           <div className="order-2 flex flex-col gap-4 lg:col-span-6 lg:order-1">
-            {/* Badges */}
-            <div className="flex items-center gap-3 flex-wrap">
-              {promotionCallout ? (
-                <span className="relative inline-flex items-center gap-2 overflow-hidden rounded-md border border-cyan-300/70 bg-[linear-gradient(120deg,rgba(34,211,238,0.22),rgba(14,116,144,0.22))] px-3 py-1.5 text-[12px] font-black text-cyan-50 shadow-[0_10px_24px_rgba(34,211,238,0.22)]">
-                  <span className="pointer-events-none absolute left-0 top-0 h-[2px] w-full bg-gradient-to-r from-cyan-300 to-sky-300" />
-                  <span className="material-symbols-outlined text-[15px] leading-none text-cyan-200">local_offer</span>
-                  <span>
-                    A partir de <span className="text-amber-200">{promotionCallout.targetQuantityLabel}</span> numeros
-                    escolhidos, ganhe <span className="text-lime-200">{promotionCallout.discountLabel}</span> de desconto.
-                  </span>
-                </span>
-              ) : null}
-            </div>
-
             {/* Title */}
-            <h1 ref={titleRef} className="w-full xl:w-fit text-5xl md:text-6xl lg:text-7xl font-luxury font-black leading-tight text-white">
+            <h1 ref={titleRef} className="w-full xl:w-fit text-5xl md:text-6xl lg:text-7xl max-[1440px]:lg:text-5xl font-luxury font-black leading-tight text-white">
               {campaignTitleHighlight ? (
                 <>
                   {campaignTitlePrefix} <span className="text-neon-pink">{campaignTitleHighlight}</span>
@@ -214,92 +200,112 @@ export default function HeroSection({
             </h1>
 
             {/* Subtitle */}
-            <p className="w-full max-w-none text-base font-light leading-relaxed text-gray-300">
+            <p className="w-full max-w-none text-base font-light leading-relaxed text-gray-300 max-[1440px]:lg:text-xs">
               Além de <span className="text-neon-cyan font-semibold">{mainPrize}</span>, você também concorre a{' '}
               <span className="text-neon-cyan font-semibold">{secondPrize}</span> e{' '}
               <span className="text-neon-cyan font-semibold">{bonusPrize}</span>. Sorteio com transparência total:
               apuração pela{' '}
-              <span className="font-semibold text-amber-300">Loteria Federal</span>{' '}
-              e validação por algoritmo auditável.
+              <span className="font-bold text-amber-300">Loteria Federal</span>.
             </p>
 
-            <article className="mt-1 rounded-2xl border border-white/10 bg-luxury-card/70 p-5 lg:max-w-lg xl:max-w-none" style={heroScaledAlignedSectionStyle}>
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Defina quantos numeros deseja comprar</h2>
+            <article
+              className="relative mt-1 overflow-visible rounded-2xl border border-white/15 bg-[linear-gradient(140deg,rgba(20,12,34,0.9),rgba(7,13,29,0.9))] px-5 py-6 shadow-[0_24px_60px_rgba(0,0,0,0.48)] ring-1 ring-white/5 lg:max-w-lg xl:max-w-none"
+              style={heroScaledAlignedSectionStyle}
+            >
+              <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+                <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-neon-pink/20 blur-3xl" />
+                <div className="absolute -left-14 -bottom-16 h-40 w-40 rounded-full bg-cyan-400/15 blur-3xl" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(255,255,255,0.12),transparent_35%)]" />
+              </div>
+
+              <div className="relative z-10">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-200/80">Selecao rapida</p>
+                    <h2 className="mt-1 text-xl font-black text-white">Defina quantos numeros deseja comprar</h2>
+                  </div>
                 </div>
-              </div>
 
-              <div className="mt-6 grid grid-cols-2 gap-x-2 gap-y-5 md:grid-cols-4">
-                {heroQuickQuantityPacks.map((pack) => {
-                  const isMostPurchasedPack = mostPurchasedPackQuantities.includes(pack)
-                  const isDiscountPack = discountPackQuantities.includes(pack)
-                  const shouldShowBadge = isMostPurchasedPack || isDiscountPack
-                  const discountTooltip = discountTooltipByPack[pack]
+                <div className="mt-8 grid grid-cols-2 gap-x-3 gap-y-6 md:grid-cols-4 md:gap-x-4 md:gap-y-7">
+                  {heroQuickQuantityPacks.map((pack) => {
+                    const isMostPurchasedPack = mostPurchasedPackQuantities.includes(pack)
+                    const isDiscountPack = discountPackQuantities.includes(pack)
+                    const shouldShowBadge = isMostPurchasedPack || isDiscountPack
+                    const discountTooltip = discountTooltipByPack[pack]
 
-                  return (
-                    <div key={pack} className="group relative">
-                      {shouldShowBadge ? (
-                        <>
-                          <span className={`pointer-events-none absolute -top-2 left-1/2 z-10 inline-flex w-[70%] -translate-x-1/2 items-center justify-center rounded-md border px-2.5 py-0.5 text-center text-[8px] font-black uppercase tracking-[0.09em] text-black ${
-                            isMostPurchasedPack
-                              ? 'border-amber-300 bg-[linear-gradient(120deg,rgb(252,211,77),rgb(245,158,11))] shadow-[0_8px_18px_rgba(245,158,11,0.35)]'
-                              : 'border-emerald-200 bg-[linear-gradient(120deg,rgb(110,231,183),rgb(16,185,129))] shadow-[0_8px_18px_rgba(16,185,129,0.22)]'
-                          }`}>
-                            {isMostPurchasedPack ? (
-                              <span className="text-[8px] leading-none">Mais vendidos</span>
-                            ) : (
-                              <span className="text-[8px] leading-none">Desconto</span>
-                            )}
-                          </span>
-                          {isDiscountPack && discountTooltip ? (
-                            <div className={`pointer-events-none absolute -top-2 left-1/2 z-30 w-48 -translate-x-1/2 -translate-y-[125%] scale-95 rounded-md border px-2.5 py-2 text-center text-[10px] font-semibold leading-tight opacity-0 shadow-[0_16px_40px_rgba(0,0,0,0.75)] ring-1 ring-black/70 transition-all duration-200 ease-out group-hover:-translate-y-[135%] group-hover:scale-100 group-hover:opacity-100 ${
-                              isMostPurchasedPack
-                                ? 'border-amber-200/80 bg-[#140d02] text-amber-100'
-                                : 'border-emerald-200/80 bg-[#090611] text-emerald-100'
-                            }`}>
-                              {discountTooltip}
-                              <span className={`absolute left-1/2 top-full h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r ${
-                                isMostPurchasedPack
-                                  ? 'border-amber-200/80 bg-[#140d02]'
-                                  : 'border-emerald-200/80 bg-[#090611]'
-                              }`} />
-                            </div>
-                          ) : null}
-                        </>
-                      ) : null}
-                      <button
-                        className={`relative w-full overflow-hidden rounded-lg border px-4 py-3 text-left transition-all ${
-                          quantity === pack
-                            ? 'border-neon-pink bg-neon-pink/10 text-neon-pink'
-                            : 'border-white/10 bg-luxury-bg text-white hover:border-neon-pink/50'
-                        } disabled:cursor-not-allowed disabled:opacity-60`}
-                        type="button"
-                        disabled={isQuickCheckoutLoading}
-                        onClick={() => onSetQuantity(pack)}
-                      >
+                    return (
+                      <div key={pack} className="group relative">
                         {shouldShowBadge ? (
-                          <span className={`pointer-events-none absolute left-0 top-0 h-[2px] w-full ${
-                            isMostPurchasedPack
-                              ? 'bg-gradient-to-r from-amber-300 to-yellow-400'
-                              : 'bg-gradient-to-r from-emerald-400 to-emerald-300'
-                          }`} />
+                          <>
+                            <span className={`pointer-events-none absolute left-1/2 top-0 z-10 inline-flex w-[75%] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border px-2.5 py-0.5 text-center text-[8px] font-black uppercase tracking-[0.09em] text-black ${
+                              isMostPurchasedPack
+                                ? 'border-amber-300 bg-[linear-gradient(120deg,rgb(252,211,77),rgb(245,158,11))] shadow-[0_8px_18px_rgba(245,158,11,0.35)]'
+                                : 'border-emerald-200 bg-[linear-gradient(120deg,rgb(110,231,183),rgb(16,185,129))] shadow-[0_8px_18px_rgba(16,185,129,0.22)]'
+                            }`}>
+                              {isMostPurchasedPack ? (
+                                <span className="text-[8px] leading-none">Mais vendidos</span>
+                              ) : (
+                                <span className="text-[8px] leading-none">Desconto</span>
+                              )}
+                            </span>
+                            {isDiscountPack && discountTooltip ? (
+                              <div className={`pointer-events-none absolute left-1/2 top-0 z-50 w-48 -translate-x-1/2 -translate-y-[125%] scale-95 rounded-md border px-2.5 py-2 text-center text-[10px] font-semibold leading-tight opacity-0 shadow-[0_16px_40px_rgba(0,0,0,0.75)] ring-1 ring-black transition-all duration-200 ease-out group-hover:-translate-y-[135%] group-hover:scale-100 group-hover:opacity-100 ${
+                                isMostPurchasedPack
+                                  ? 'border-amber-200 bg-[#140d02] text-amber-100'
+                                  : 'border-emerald-200 bg-[#090611] text-emerald-100'
+                              }`}>
+                                {discountTooltip}
+                                <span className={`absolute left-1/2 top-full h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r ${
+                                  isMostPurchasedPack
+                                    ? 'border-amber-200 bg-[#140d02]'
+                                    : 'border-emerald-200 bg-[#090611]'
+                                }`} />
+                              </div>
+                            ) : null}
+                          </>
                         ) : null}
-                        <p className="text-lg font-black">+{pack}</p>
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Numeros</p>
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
+                        <button
+                          className={`relative w-full overflow-hidden rounded-xl border px-4 py-3.5 text-left transition-all duration-300 ${
+                            quantity === pack
+                              ? 'border-neon-pink/90 bg-[linear-gradient(140deg,rgba(255,0,204,0.16),rgba(6,14,28,0.98))] text-neon-pink shadow-[0_0_0_1px_rgba(255,0,204,0.35),0_14px_28px_rgba(255,0,204,0.2)]'
+                              : 'border-white/15 bg-[linear-gradient(160deg,rgba(15,23,42,0.9),rgba(8,13,24,0.95))] text-white hover:-translate-y-0.5 hover:border-cyan-300/45 hover:shadow-[0_14px_30px_rgba(34,211,238,0.14)]'
+                          } disabled:cursor-not-allowed disabled:opacity-60`}
+                          type="button"
+                          disabled={isQuickCheckoutLoading}
+                          onClick={() => onSetQuantity(pack)}
+                        >
+                          {shouldShowBadge ? (
+                            <span className={`pointer-events-none absolute left-0 top-0 h-[2px] w-full ${
+                              isMostPurchasedPack
+                                ? 'bg-gradient-to-r from-amber-300 to-yellow-400'
+                                : 'bg-gradient-to-r from-emerald-400 to-emerald-300'
+                            }`} />
+                          ) : null}
+                          {quantity === pack ? (
+                            <span className="pointer-events-none absolute right-2 top-2 h-2 w-2 rounded-full bg-neon-pink shadow-[0_0_14px_rgba(255,0,204,0.85)]" />
+                          ) : null}
+                          <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgba(255,255,255,0.1),transparent_45%)]" />
+                          <div className="relative z-10">
+                            <p className="text-xl font-black tracking-tight">+{pack}</p>
+                            <p className={`mt-0.5 text-[10px] uppercase tracking-[0.18em] ${quantity === pack ? 'text-neon-pink/85' : 'text-gray-400'}`}>
+                              Numeros
+                            </p>
+                          </div>
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
 
-              <div className="mt-5 border-t border-white/10 pt-4 text-center">
-                <Link
-                  className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200 transition hover:text-cyan-100"
-                  to="/comprar-manualmente?mode=manual"
-                >
-                  Escolher numeros manualmente
-                </Link>
+                <div className="mt-3 flex justify-center border-t border-white/10 pt-2">
+                  <Link
+                    className="mx-auto inline-flex items-center gap-2 rounded-full border border-cyan-300/35 bg-cyan-300/5 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-cyan-200 transition-all hover:border-cyan-200/60 hover:bg-cyan-300/10 hover:text-cyan-100"
+                    to="/comprar-manualmente?mode=manual"
+                  >
+                    <span className="material-symbols-outlined text-[13px] leading-none">grid_view</span>
+                    Escolher numeros manualmente
+                  </Link>
+                </div>
               </div>
             </article>
 
@@ -333,7 +339,22 @@ export default function HeroSection({
           {/* Moto image */}
           <div className="relative order-1 lg:col-span-6 lg:order-2">
             <div className="absolute inset-0 bg-neon-pink/20 blur-[100px] rounded-full opacity-20" />
+            {promotionCallout ? (
+              <div className="pointer-events-none absolute left-0 right-0 top-[2px] z-30 flex justify-center">
+                <span className="relative inline-flex w-[85%] -translate-y-1/2 items-center justify-center gap-1.5 rounded-md border border-amber-300 bg-[linear-gradient(120deg,rgb(252,211,77),rgb(245,158,11))] px-3 py-1.5 text-center text-[10px] font-black uppercase tracking-[0.09em] text-black shadow-[0_8px_18px_rgba(245,158,11,0.35)] sm:w-[75%] sm:text-[11px]">
+                  <span className="pointer-events-none absolute left-0 top-0 h-[2px] w-full bg-gradient-to-r from-amber-300 to-yellow-400" />
+                  <span className="material-symbols-outlined text-[13px] leading-none text-black sm:text-[14px]">local_offer</span>
+                  <span>
+                    A partir de <span className="text-[#7a2500]">{promotionCallout.targetQuantityLabel}</span> numeros, ganhe{' '}
+                    <span className="text-[#7a2500]">{promotionCallout.discountLabel}</span> de desconto
+                  </span>
+                </span>
+              </div>
+            ) : null}
             <div className="relative z-10 mx-auto aspect-square w-full max-w-[680px] hero-carousel-frame max-[639px]:left-1/2 max-[639px]:w-screen max-[639px]:max-w-none max-[639px]:-translate-x-1/2 lg:w-[min(40vw,640px)]">
+              {promotionCallout ? (
+                <span className="pointer-events-none absolute left-0 top-0 z-20 h-[2px] w-full bg-gradient-to-r from-amber-300 to-yellow-400" />
+              ) : null}
               {heroCarouselImages.length > 0 ? (
                 <Swiper
                   modules={[Autoplay, Pagination]}

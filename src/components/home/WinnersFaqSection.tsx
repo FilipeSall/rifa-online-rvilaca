@@ -193,7 +193,7 @@ function FaqSection() {
               <article
                 key={q}
                 className={`group overflow-hidden rounded-xl border bg-luxury-bg transition-all duration-300 hover:border-neon-pink/30 ${
-                  isOpen ? 'border-neon-pink shadow-glow-pink' : 'border-white/5'
+                  isOpen ? 'border-neon-pink shadow-[0_0_0_1px_rgba(255,0,204,0.2),0_10px_22px_rgba(255,0,204,0.14)]' : 'border-white/5'
                 }`}
               >
                 <button

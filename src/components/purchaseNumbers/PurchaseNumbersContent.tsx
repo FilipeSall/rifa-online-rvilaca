@@ -72,12 +72,17 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     resolveConflictWithAutomaticNumber,
     resolveConflictManually,
   } = purchaseState
+  const isProceedingToCheckout = isReserving || isAutoSelecting
 
   const closeMobileOverlay = useCallback(() => {
+    if (isProceedingToCheckout) {
+      return
+    }
+
     setIsMobileCartOpen(false)
     setMobileModalView('cart')
     setShouldProceedAfterMobileAuth(false)
-  }, [])
+  }, [isProceedingToCheckout])
   const openCartOverlay = useCallback(() => {
     setMobileModalView('cart')
     setIsMobileCartOpen(true)
@@ -167,7 +172,6 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
 
     setShouldProceedAfterMobileAuth(false)
     setMobileModalView('cart')
-    setIsMobileCartOpen(false)
     void handleProceed()
   }, [handleProceed, isLoggedIn, isMobileCartOpen, mobileModalView, shouldProceedAfterMobileAuth])
 
@@ -317,9 +321,10 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
             {mobileModalView !== 'auth' ? (
               <button
                 aria-label="Fechar carrinho"
-                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white"
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 onClick={closeMobileOverlay}
+                disabled={isProceedingToCheckout}
               >
                 <span className="material-symbols-outlined text-lg">close</span>
               </button>

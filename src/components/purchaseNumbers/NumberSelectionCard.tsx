@@ -255,7 +255,7 @@ export default function NumberSelectionCard({
               <button
                 key={slot.number}
                 className={`h-11 rounded border text-xs font-bold tracking-wide transition-all ${
-                  isSelected ? 'border-neon-pink bg-neon-pink/20 text-neon-pink shadow-glow-pink' : getSlotStyle(slot.status)
+                  isSelected ? 'border-neon-pink bg-neon-pink/20 text-neon-pink shadow-[0_0_0_1px_rgba(255,0,204,0.22),0_8px_16px_rgba(255,0,204,0.16)]' : getSlotStyle(slot.status)
                 } ${isBlocked ? 'cursor-not-allowed opacity-65' : ''}`}
                 type="button"
                 onClick={() => onToggleNumber(slot)}
