@@ -16,7 +16,6 @@ import {
   readChunkStateFromDoc,
   type NumberChunkPaidMetaEntry,
   type NumberChunkRuntimeState,
-  writeChunkStateToDoc,
   listChunkStartsInWindow,
   NUMBER_CHUNK_SIZE,
 } from './numberChunkStore.js'
@@ -40,7 +39,6 @@ interface GetNumberWindowOutput {
   rangeStart: number
   rangeEnd: number
   totalNumbers: number
-  smallestAvailableNumber: number | null
   availableInPage: number
   hasPreviousPage: boolean
   hasNextPage: boolean
@@ -192,7 +190,6 @@ function readChunkState(params: {
   chunkStart: number
   snapshotData: DocumentData | null
   nowMs: number
-  writes: Array<{ chunkStart: number; state: NumberChunkRuntimeState }>
 }): NumberChunkRuntimeState {
   const bounds = buildChunkBoundsForChunkStart({
     campaignId: params.campaignId,
@@ -207,36 +204,7 @@ function readChunkState(params: {
     nowMs: params.nowMs,
   })
 
-  if (chunkState.dirty) {
-    params.writes.push({ chunkStart: params.chunkStart, state: chunkState })
-  }
   return chunkState
-}
-
-async function persistDirtyChunks(
-  db: Firestore,
-  campaignId: string,
-  writes: Array<{ chunkStart: number; state: NumberChunkRuntimeState }>,
-) {
-  if (writes.length === 0) {
-    return
-  }
-
-  const uniqueByChunk = new Map<number, NumberChunkRuntimeState>()
-  for (const item of writes) {
-    uniqueByChunk.set(item.chunkStart, item.state)
-  }
-
-  const chunkEntries = Array.from(uniqueByChunk.entries())
-  for (let offset = 0; offset < chunkEntries.length; offset += 400) {
-    const batch = db.batch()
-    const slice = chunkEntries.slice(offset, offset + 400)
-    for (const [chunkStart, state] of slice) {
-      const ref = getNumberChunkRef(db, campaignId, chunkStart)
-      batch.set(ref, writeChunkStateToDoc(state), { merge: true })
-    }
-    await batch.commit()
-  }
 }
 
 async function readNumbersStateChunked(
@@ -262,7 +230,6 @@ async function readNumbersStateChunked(
   const chunkStarts = Array.from(grouped.keys()).sort((a, b) => a - b)
   const chunkRefs = chunkStarts.map((chunkStart) => getNumberChunkRef(db, params.campaignId, chunkStart))
   const chunkSnapshots = chunkRefs.length > 0 ? await db.getAll(...chunkRefs) : []
-  const pendingChunkWrites: Array<{ chunkStart: number; state: NumberChunkRuntimeState }> = []
   const chunkStateByStart = new Map<number, NumberChunkRuntimeState>()
 
   for (let index = 0; index < chunkStarts.length; index += 1) {
@@ -275,13 +242,8 @@ async function readNumbersStateChunked(
       chunkStart,
       snapshotData: snapshot?.exists ? (snapshot.data() || null) : null,
       nowMs: params.nowMs,
-      writes: pendingChunkWrites,
     })
     chunkStateByStart.set(chunkStart, chunkState)
-  }
-
-  if (pendingChunkWrites.length > 0) {
-    await persistDirtyChunks(db, params.campaignId, pendingChunkWrites)
   }
 
   return uniqueNumbers.map((number) => {
@@ -337,52 +299,6 @@ async function readRangeState(
     rangeStart: params.rangeStart,
     rangeEnd: params.rangeEnd,
   })
-}
-
-async function findSmallestAvailableNumber(
-  db: Firestore,
-  params: {
-    campaignId: string
-    rangeStart: number
-    rangeEnd: number
-    nowMs: number
-  },
-): Promise<number | null> {
-  for (
-    let chunkStart = params.rangeStart;
-    chunkStart <= params.rangeEnd;
-    chunkStart += NUMBER_CHUNK_SIZE
-  ) {
-    const bounds = buildChunkBoundsForChunkStart({
-      campaignId: params.campaignId,
-      rangeStart: params.rangeStart,
-      rangeEnd: params.rangeEnd,
-      chunkStart,
-    })
-    const chunkRef = getNumberChunkRef(db, params.campaignId, bounds.chunkStart)
-    const chunkSnapshot = await chunkRef.get()
-    const chunkState = readChunkStateFromDoc({
-      bounds,
-      docData: chunkSnapshot.exists ? (chunkSnapshot.data() || null) : null,
-      nowMs: params.nowMs,
-    })
-
-    if (chunkState.dirty) {
-      await chunkRef.set(writeChunkStateToDoc(chunkState), { merge: true })
-    }
-
-    if (chunkState.availableCount <= 0) {
-      continue
-    }
-
-    for (let number = bounds.chunkStart; number <= bounds.chunkEnd; number += 1) {
-      if (getChunkNumberView(chunkState, number).status === 'disponivel') {
-        return number
-      }
-    }
-  }
-
-  return null
 }
 
 function clampPageStart(pageStart: number, rangeStart: number, rangeEnd: number): number {
@@ -464,10 +380,6 @@ async function readNumberStatusAndPaidMeta(params: {
     docData: snapshot.exists ? (snapshot.data() || null) : null,
     nowMs: params.nowMs,
   })
-
-  if (chunkState.dirty) {
-    await chunkRef.set(writeChunkStateToDoc(chunkState), { merge: true })
-  }
 
   const view = getChunkNumberView(chunkState, params.number)
   const paidMeta = getChunkPaidMeta(chunkState, params.number)
@@ -703,13 +615,7 @@ export function createGetNumberWindowHandler(db: Firestore) {
       }
 
       const nowMs = Date.now()
-      const smallestAvailableNumber = await findSmallestAvailableNumber(db, {
-        campaignId,
-        rangeStart: campaignRange.start,
-        rangeEnd: campaignRange.end,
-        nowMs,
-      })
-      const pageStart = requestedPageStart ?? smallestAvailableNumber ?? campaignRange.start
+      const pageStart = requestedPageStart ?? campaignRange.start
 
       const effectivePageStart = clampPageStart(pageStart, campaignRange.start, campaignRange.end)
       const pageEnd = Math.min(effectivePageStart + pageSize - 1, campaignRange.end)
@@ -742,7 +648,6 @@ export function createGetNumberWindowHandler(db: Firestore) {
         effectivePageStart,
         pageEnd,
         availableInPage,
-        smallestAvailableNumber,
         numbersRequested: numbers.length,
         conflictsCount: 0,
         transactionAttempts: 0,
@@ -759,7 +664,6 @@ export function createGetNumberWindowHandler(db: Firestore) {
         rangeStart: campaignRange.start,
         rangeEnd: campaignRange.end,
         totalNumbers: campaignRange.total,
-        smallestAvailableNumber,
         availableInPage,
         hasPreviousPage: previousPageStart !== null,
         hasNextPage: nextPageStart !== null,

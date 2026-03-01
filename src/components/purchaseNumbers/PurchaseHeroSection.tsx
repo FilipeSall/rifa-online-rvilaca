@@ -14,7 +14,7 @@ export default function PurchaseHeroSection({ unitPrice, minQuantity }: Purchase
             <span className="inline-flex items-center rounded-full border border-neon-pink/40 bg-neon-pink/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-neon-pink">
               Pagina de compra de numeros
             </span>
-            <h1 className="mt-5 text-3xl font-luxury font-bold leading-tight lg:text-5xl">
+            <h1 className="mt-5 text-3xl font-display font-bold leading-tight lg:text-5xl">
               Escolha suas cotas e
               <span className="text-neon-pink"> garanta sua chance</span> no sorteio.
             </h1>

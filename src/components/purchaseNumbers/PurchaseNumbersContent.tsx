@@ -32,7 +32,6 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     totalNumbers,
     pageStart,
     pageEnd,
-    smallestAvailableNumber,
     previousPageStart,
     nextPageStart,
     currentPage,
@@ -283,7 +282,6 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
               totalNumbers={totalNumbers}
               pageStart={pageStart}
               pageEnd={pageEnd}
-              smallestAvailableNumber={smallestAvailableNumber}
               hasPreviousPage={previousPageStart !== null}
               hasNextPage={nextPageStart !== null}
               currentPage={currentPage}

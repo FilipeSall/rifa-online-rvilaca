@@ -82,7 +82,7 @@ export default function DashboardTab() {
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         <article className="flex h-full min-w-0 flex-col rounded-2xl border border-white/10 bg-luxury-card p-5 xl:col-span-7">
           <div className="mb-4 flex items-center justify-between gap-4">
-            <h3 className="font-luxury text-xl font-bold text-white">Faturamento por dia</h3>
+            <h3 className="font-display text-xl font-bold text-white">Faturamento por dia</h3>
           </div>
           <div ref={revenueContainer.ref} className="h-[360px] min-w-0 xl:flex-1">
             {isInitialLoading ? (
@@ -145,7 +145,7 @@ export default function DashboardTab() {
         </article>
 
         <article className="flex h-full min-w-0 flex-col rounded-2xl border border-white/10 bg-luxury-card p-5 xl:col-span-5">
-          <h3 className="font-luxury text-xl font-bold text-white">Funil de conversao</h3>
+          <h3 className="font-display text-xl font-bold text-white">Funil de conversao</h3>
           <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gray-500">Distribuicao real dos volumes</p>
           <div ref={conversionContainer.ref} className="h-72 min-w-0 pt-2">
             {isInitialLoading ? (
@@ -198,7 +198,7 @@ export default function DashboardTab() {
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-luxury-card p-5">
-        <h3 className="font-luxury text-xl font-bold text-white">Volume de pedidos por dia</h3>
+        <h3 className="font-display text-xl font-bold text-white">Volume de pedidos por dia</h3>
         <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gray-500">
           Fonte: métricas reais dos últimos 14 dias
           {salesSeries.length > 0 ? ` (${kpis.latestDayLabel} mais recente)` : ''}

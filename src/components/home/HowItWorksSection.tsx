@@ -6,7 +6,7 @@ export default function HowItWorksSection() {
       <div className="container mx-auto px-4 lg:px-8 relative z-10">
         <div className="text-center mb-16">
           <span className="text-neon-pink font-bold text-xs uppercase tracking-[0.2em] mb-2 block">Passo a Passo</span>
-          <h2 className="text-3xl font-luxury font-bold text-white">Como Participar</h2>
+          <h2 className="text-3xl font-display font-bold text-white">Como Participar</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-12 relative">
           <div className="hidden md:block absolute top-8 left-[16%] right-[16%] h-[1px] bg-gradient-to-r from-transparent via-neon-pink/30 to-transparent z-0" />

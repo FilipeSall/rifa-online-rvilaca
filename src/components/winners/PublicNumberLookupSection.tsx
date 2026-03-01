@@ -86,7 +86,7 @@ export default function PublicNumberLookupSection() {
     <section className="pt-10 pb-6">
       <div className="container mx-auto px-4 lg:px-8">
         <article className="rounded-[1.5rem] border border-white/10 bg-[linear-gradient(145deg,rgba(245,158,11,0.13),rgba(7,10,15,0.95)_55%,rgba(34,197,94,0.1))] p-5 pt-7 lg:p-6 lg:pt-8">
-          <h2 className="font-luxury text-2xl font-black text-white lg:text-3xl">Busca publica de numero</h2>
+          <h2 className="font-display text-2xl font-black text-white lg:text-3xl">Busca publica de numero</h2>
           <p className="mt-2 max-w-2xl text-sm text-gray-300">
             Consulte qualquer numero da rifa para verificar se esta disponivel, reservado ou vendido.
           </p>

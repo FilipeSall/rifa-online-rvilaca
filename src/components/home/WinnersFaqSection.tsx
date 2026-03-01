@@ -50,7 +50,7 @@ function RankingBoard({
     <article className="bg-luxury-card border border-white/10 rounded-2xl overflow-hidden shadow-2xl relative">
       <div className={`h-1 w-full ${accentClassName}`} />
       <div className="px-5 py-4 border-b border-white/10 bg-white/5">
-        <h3 className="text-xl font-luxury font-bold text-white">{title}</h3>
+        <h3 className="text-xl font-display font-bold text-white">{title}</h3>
         <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
       </div>
 
@@ -130,7 +130,7 @@ function RankingSection() {
           <span className="text-neon-pink font-bold text-xs uppercase tracking-[0.2em] mb-2 block">Top Compradores</span>
           <div className="flex items-center justify-center gap-3">
             <span className="material-symbols-outlined text-neon-pink text-4xl">trophy</span>
-            <h2 className="text-3xl lg:text-4xl font-luxury font-bold text-white">Ranking Geral + Ranking Semanal</h2>
+            <h2 className="text-3xl lg:text-4xl font-display font-bold text-white">Ranking Geral + Ranking Semanal</h2>
           </div>
           <p className="text-gray-400 mt-4 max-w-3xl mx-auto">
             Transparencia total com dois painéis: desempenho histórico da campanha e Top 50 da semana com regras oficiais.
@@ -182,7 +182,7 @@ function FaqSection() {
           <span className="text-neon-pink font-bold text-xs uppercase tracking-[0.2em] mb-2 block">Dúvidas?</span>
           <div className="flex items-center justify-center gap-3">
             <span className="material-symbols-outlined text-neon-pink text-4xl">help</span>
-            <h2 className="text-3xl lg:text-4xl font-luxury font-bold text-white">Perguntas Frequentes</h2>
+            <h2 className="text-3xl lg:text-4xl font-display font-bold text-white">Perguntas Frequentes</h2>
           </div>
         </div>
 

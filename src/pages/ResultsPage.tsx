@@ -38,7 +38,7 @@ export default function ResultsPage() {
           <div className="container relative z-10 mx-auto px-4 lg:px-8">
             <div className="max-w-4xl rounded-2xl border border-white/15 bg-black/35 p-5 backdrop-blur-sm lg:p-7">
               <p className="text-[10px] font-black uppercase tracking-[0.28em] text-amber-300">Auditoria pública</p>
-              <h1 className="mt-3 max-w-3xl font-luxury text-4xl font-black leading-[1.1] text-white lg:text-6xl">
+              <h1 className="mt-3 max-w-3xl font-display text-4xl font-black leading-[1.1] text-white lg:text-6xl">
                 Premiação e Ganhadores
               </h1>
               <p className="mt-4 max-w-2xl text-sm text-gray-100 lg:text-base">

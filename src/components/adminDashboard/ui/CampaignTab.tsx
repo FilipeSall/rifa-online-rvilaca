@@ -848,7 +848,7 @@ export default function CampaignTab() {
         <div className="relative z-10 grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr] lg:items-end">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-neon-pink">Central da Campanha</p>
-            <h3 className="mt-2 font-luxury text-3xl font-bold text-white">Operacao comercial com controle total</h3>
+            <h3 className="mt-2 font-display text-3xl font-bold text-white">Operacao comercial com controle total</h3>
             <p className="mt-3 max-w-2xl text-sm text-gray-300">
               Configure preco, brackets de tickets, tag mais compradas, desconto progressivo e cupons da campanha.
             </p>
@@ -882,7 +882,7 @@ export default function CampaignTab() {
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,0,204,0.16),transparent_48%)]" />
             <div className="relative z-10 xl:flex xl:h-full xl:flex-col">
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon-pink">Preview ao vivo</p>
-              <h4 className="mt-3 font-luxury text-2xl font-bold text-white">{title.trim() || DEFAULT_CAMPAIGN_TITLE}</h4>
+              <h4 className="mt-3 font-display text-2xl font-bold text-white">{title.trim() || DEFAULT_CAMPAIGN_TITLE}</h4>
               <p className="mt-2 text-sm text-gray-300">
                 Visual de como a comunicação principal da campanha fica após o salvamento.
               </p>

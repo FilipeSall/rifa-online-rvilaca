@@ -158,12 +158,12 @@ async function loadChunkStatesForNumbers(params: {
 
   params.stats.chunksRead = chunkStarts.length
 
-  const chunkSnapshots = await Promise.all(
-    chunkStarts.map((chunkStart) => {
-      const ref = chunkRefs.get(chunkStart)
-      return ref ? params.transaction.get(ref) : Promise.resolve(null)
-    }),
-  )
+  const orderedChunkRefs = chunkStarts
+    .map((chunkStart) => chunkRefs.get(chunkStart))
+    .filter((ref): ref is ReturnType<typeof getNumberChunkRef> => Boolean(ref))
+  const chunkSnapshots = orderedChunkRefs.length > 0
+    ? await params.transaction.getAll(...orderedChunkRefs)
+    : []
 
   const chunkStatesByStart = new Map<number, NumberChunkRuntimeState>()
 

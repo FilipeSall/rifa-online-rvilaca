@@ -189,7 +189,7 @@ export default function HeroSection({
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:items-center">
           <div className="order-2 flex flex-col gap-4 lg:col-span-6 lg:order-1">
             {/* Title */}
-            <h1 ref={titleRef} className="w-full xl:w-fit text-5xl md:text-6xl lg:text-7xl max-[1440px]:lg:text-5xl font-luxury font-black leading-tight text-white">
+            <h1 ref={titleRef} className="w-full xl:w-fit text-5xl md:text-6xl lg:text-7xl max-[1440px]:lg:text-5xl font-display font-black leading-tight text-white">
               {campaignTitleHighlight ? (
                 <>
                   {campaignTitlePrefix} <span className="text-neon-pink">{campaignTitleHighlight}</span>

@@ -111,6 +111,42 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "numberChunks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "campaignId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "hasEligiblePaidUnawarded",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "chunkStart",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "numberChunks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "campaignId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "hasEligiblePaidUnawarded",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "chunkStart",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

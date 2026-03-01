@@ -207,7 +207,7 @@ export default function PrizesPage() {
             <div className="grid gap-10 xl:grid-cols-[1.06fr_0.94fr] xl:items-center">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.28em] text-amber-300">Arquivo oficial</p>
-                <h1 className="mt-3 max-w-4xl font-luxury text-4xl font-black leading-[1.05] text-white lg:text-6xl">
+                <h1 className="mt-3 max-w-4xl font-display text-4xl font-black leading-[1.05] text-white lg:text-6xl">
                   Premiação transparente, ganhadores reais.
                 </h1>
                 <p className="mt-4 max-w-3xl text-sm leading-relaxed text-gray-200 lg:text-base">
@@ -281,7 +281,7 @@ export default function PrizesPage() {
               <div className="pointer-events-none absolute right-0 top-0 h-48 w-48 rounded-full bg-neon-pink/10 blur-3xl" />
 
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300">Sorteio principal</p>
-              <h2 className="mt-2 font-luxury text-3xl font-black text-white">BMW / CG / PIX por número da rifa</h2>
+              <h2 className="mt-2 font-display text-3xl font-black text-white">BMW / CG / PIX por número da rifa</h2>
               <p className="mt-2 text-sm text-gray-300">
                 Fórmula oficial: número alvo = resultado da extração selecionada MOD total da rifa. Se não houver número pago
                 elegível no alvo, aplica fallback para o próximo pago acima e, se necessário, abaixo.
@@ -357,7 +357,7 @@ export default function PrizesPage() {
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300">Histórico auditável</p>
-                  <h2 className="mt-1 font-luxury text-3xl font-black text-white">Ganhadores e cálculo usado</h2>
+                  <h2 className="mt-1 font-display text-3xl font-black text-white">Ganhadores e cálculo usado</h2>
                 </div>
                 <span className="rounded-lg border border-white/10 bg-black/35 px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-gray-400">
                   {visibleResults.length} resultados

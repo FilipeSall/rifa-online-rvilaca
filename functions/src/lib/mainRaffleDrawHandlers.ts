@@ -21,6 +21,8 @@ const EXTRACTION_COUNT = 5
 const MAX_EXTRACTION_VALUE = 9_999_999
 const DEFAULT_PUBLIC_MAIN_HISTORY_LIMIT = 20
 const MAX_PUBLIC_MAIN_HISTORY_LIMIT = 40
+const CHUNK_FETCH_BATCH_SIZE = 12
+const ELIGIBLE_CHUNK_QUERY_LIMIT = 60
 
 interface PublishMainRaffleDrawInput {
   extractionNumbers?: Array<number | string>
@@ -276,9 +278,179 @@ async function findNearestCandidateByDirection(
     rangeStart: number
     rangeEnd: number
     direction: 'above' | 'below'
+    nowMs: number
+    chunkStateCache: Map<number, NumberChunkRuntimeState>
   },
 ): Promise<ResolvedCandidate | null> {
-  const { campaignId, targetNumber, rangeStart, rangeEnd, direction } = params
+  const { campaignId, targetNumber, rangeStart, rangeEnd, direction, nowMs, chunkStateCache } = params
+  const targetBounds = buildChunkBoundsForNumber({
+    campaignId,
+    number: targetNumber,
+    rangeStart,
+    rangeEnd,
+  })
+  const searchedChunkStarts = new Set<number>()
+
+  const metadataChunkStarts = await listEligibleChunkStartsByDirection(transaction, db, {
+    campaignId,
+    rangeStart,
+    rangeEnd,
+    targetChunkStart: targetBounds.chunkStart,
+    direction,
+  })
+  const prioritizedChunkStarts = [targetBounds.chunkStart, ...metadataChunkStarts]
+    .filter((chunkStart, index, list) => list.indexOf(chunkStart) === index)
+  for (const chunkStart of prioritizedChunkStarts) {
+    searchedChunkStarts.add(chunkStart)
+  }
+
+  const indexedCandidate = await findCandidateByChunkStarts(transaction, db, {
+    campaignId,
+    targetNumber,
+    rangeStart,
+    rangeEnd,
+    direction,
+    fallbackDirection: direction,
+    chunkStarts: prioritizedChunkStarts,
+    nowMs,
+    chunkStateCache,
+  })
+  if (indexedCandidate) {
+    return indexedCandidate
+  }
+
+  const fallbackChunkStarts: number[] = []
+  if (direction === 'above') {
+    for (let chunkStart = targetBounds.chunkStart; chunkStart <= rangeEnd; chunkStart += NUMBER_CHUNK_SIZE) {
+      if (!searchedChunkStarts.has(chunkStart)) {
+        fallbackChunkStarts.push(chunkStart)
+      }
+    }
+  } else {
+    for (let chunkStart = targetBounds.chunkStart; chunkStart >= rangeStart; chunkStart -= NUMBER_CHUNK_SIZE) {
+      if (!searchedChunkStarts.has(chunkStart)) {
+        fallbackChunkStarts.push(chunkStart)
+      }
+    }
+  }
+
+  return findCandidateByChunkStarts(transaction, db, {
+    campaignId,
+    targetNumber,
+    rangeStart,
+    rangeEnd,
+    direction,
+    fallbackDirection: direction,
+    chunkStarts: fallbackChunkStarts,
+    nowMs,
+    chunkStateCache,
+  })
+}
+
+async function listEligibleChunkStartsByDirection(
+  transaction: Transaction,
+  db: Firestore,
+  params: {
+    campaignId: string
+    rangeStart: number
+    rangeEnd: number
+    targetChunkStart: number
+    direction: 'above' | 'below'
+  },
+): Promise<number[]> {
+  try {
+    let query = db.collection('numberChunks')
+      .where('campaignId', '==', params.campaignId)
+      .where('hasEligiblePaidUnawarded', '==', true)
+
+    if (params.direction === 'above') {
+      query = query
+        .where('chunkStart', '>', params.targetChunkStart)
+        .where('chunkStart', '<=', params.rangeEnd)
+        .orderBy('chunkStart', 'asc')
+    } else {
+      query = query
+        .where('chunkStart', '>=', params.rangeStart)
+        .where('chunkStart', '<', params.targetChunkStart)
+        .orderBy('chunkStart', 'desc')
+    }
+
+    const snapshots = await transaction.get(query.limit(ELIGIBLE_CHUNK_QUERY_LIMIT))
+    const chunkStarts: number[] = []
+
+    for (const doc of snapshots.docs) {
+      const data = doc.data()
+      const chunkStart = Number(data.chunkStart)
+      if (!Number.isInteger(chunkStart) || chunkStart < params.rangeStart || chunkStart > params.rangeEnd) {
+        continue
+      }
+      chunkStarts.push(chunkStart)
+    }
+
+    return chunkStarts
+  } catch (error) {
+    logger.warn('listEligibleChunkStartsByDirection fallback to sequential scan', {
+      direction: params.direction,
+      error: String(error),
+    })
+    return []
+  }
+}
+
+async function loadChunkStatesByStarts(
+  transaction: Transaction,
+  db: Firestore,
+  params: {
+    campaignId: string
+    rangeStart: number
+    rangeEnd: number
+    chunkStarts: number[]
+    nowMs: number
+    chunkStateCache: Map<number, NumberChunkRuntimeState>
+  },
+) {
+  const toFetch = params.chunkStarts.filter((chunkStart) => !params.chunkStateCache.has(chunkStart))
+  if (toFetch.length === 0) {
+    return
+  }
+
+  const refs = toFetch.map((chunkStart) => getNumberChunkRef(db, params.campaignId, chunkStart))
+  const snapshots = await transaction.getAll(...refs)
+
+  for (let index = 0; index < toFetch.length; index += 1) {
+    const chunkStart = toFetch[index]
+    const snapshot = snapshots[index]
+    const bounds = buildChunkBoundsForNumber({
+      campaignId: params.campaignId,
+      number: chunkStart,
+      rangeStart: params.rangeStart,
+      rangeEnd: params.rangeEnd,
+    })
+    const chunkState = readChunkStateFromDoc({
+      bounds,
+      docData: snapshot.exists ? (snapshot.data() || null) : null,
+      nowMs: params.nowMs,
+    })
+    params.chunkStateCache.set(chunkStart, chunkState)
+  }
+}
+
+async function findCandidateByChunkStarts(
+  transaction: Transaction,
+  db: Firestore,
+  params: {
+    campaignId: string
+    targetNumber: number
+    rangeStart: number
+    rangeEnd: number
+    direction: 'above' | 'below'
+    fallbackDirection: 'above' | 'below'
+    chunkStarts: number[]
+    nowMs: number
+    chunkStateCache: Map<number, NumberChunkRuntimeState>
+  },
+): Promise<ResolvedCandidate | null> {
+  const { campaignId, targetNumber, rangeStart, rangeEnd, direction, fallbackDirection } = params
   const targetBounds = buildChunkBoundsForNumber({
     campaignId,
     number: targetNumber,
@@ -286,27 +458,36 @@ async function findNearestCandidateByDirection(
     rangeEnd,
   })
 
-  if (direction === 'above') {
-    for (let chunkStart = targetBounds.chunkStart; chunkStart <= rangeEnd; chunkStart += NUMBER_CHUNK_SIZE) {
+  for (let offset = 0; offset < params.chunkStarts.length; offset += CHUNK_FETCH_BATCH_SIZE) {
+    const batchChunkStarts = params.chunkStarts.slice(offset, offset + CHUNK_FETCH_BATCH_SIZE)
+    await loadChunkStatesByStarts(transaction, db, {
+      campaignId,
+      rangeStart,
+      rangeEnd,
+      chunkStarts: batchChunkStarts,
+      nowMs: params.nowMs,
+      chunkStateCache: params.chunkStateCache,
+    })
+
+    for (const chunkStart of batchChunkStarts) {
+      const chunkState = params.chunkStateCache.get(chunkStart)
+      if (!chunkState) {
+        continue
+      }
+
       const bounds = buildChunkBoundsForNumber({
         campaignId,
         number: chunkStart,
         rangeStart,
         rangeEnd,
       })
-      const ref = getNumberChunkRef(db, campaignId, bounds.chunkStart)
-      const snapshot = await transaction.get(ref)
-      const chunkState = readChunkStateFromDoc({
-        bounds,
-        docData: snapshot.exists ? (snapshot.data() || null) : null,
-        nowMs: Date.now(),
-      })
 
-      const startNumber = chunkStart === targetBounds.chunkStart
-        ? Math.max(targetNumber + 1, bounds.chunkStart)
-        : bounds.chunkStart
-      const endNumber = bounds.chunkEnd
-      if (startNumber > endNumber) {
+      const startNumber = direction === 'above'
+        ? (chunkStart === targetBounds.chunkStart ? Math.max(targetNumber + 1, bounds.chunkStart) : bounds.chunkStart)
+        : (chunkStart === targetBounds.chunkStart ? Math.min(targetNumber - 1, bounds.chunkEnd) : bounds.chunkEnd)
+      const endNumber = direction === 'above' ? bounds.chunkEnd : bounds.chunkStart
+
+      if ((direction === 'above' && startNumber > endNumber) || (direction === 'below' && startNumber < endNumber)) {
         continue
       }
 
@@ -316,48 +497,11 @@ async function findNearestCandidateByDirection(
         startNumber,
         endNumber,
         direction,
-        fallbackDirection: 'above',
+        fallbackDirection,
       })
       if (candidate) {
         return candidate
       }
-    }
-    return null
-  }
-
-  for (let chunkStart = targetBounds.chunkStart; chunkStart >= rangeStart; chunkStart -= NUMBER_CHUNK_SIZE) {
-    const bounds = buildChunkBoundsForNumber({
-      campaignId,
-      number: chunkStart,
-      rangeStart,
-      rangeEnd,
-    })
-    const ref = getNumberChunkRef(db, campaignId, bounds.chunkStart)
-    const snapshot = await transaction.get(ref)
-    const chunkState = readChunkStateFromDoc({
-      bounds,
-      docData: snapshot.exists ? (snapshot.data() || null) : null,
-      nowMs: Date.now(),
-    })
-
-    const startNumber = chunkStart === targetBounds.chunkStart
-      ? Math.min(targetNumber - 1, bounds.chunkEnd)
-      : bounds.chunkEnd
-    const endNumber = bounds.chunkStart
-    if (startNumber < endNumber) {
-      continue
-    }
-
-    const candidate = findCandidateInChunkRange({
-      chunkState,
-      chunkStart: bounds.chunkStart,
-      startNumber,
-      endNumber,
-      direction,
-      fallbackDirection: 'below',
-    })
-    if (candidate) {
-      return candidate
     }
   }
 
@@ -375,19 +519,26 @@ async function findEligiblePaidNumber(
   },
 ): Promise<ResolvedCandidate | null> {
   const { campaignId, targetNumber, rangeStart, rangeEnd } = params
+  const nowMs = Date.now()
+  const chunkStateCache = new Map<number, NumberChunkRuntimeState>()
   const exactBounds = buildChunkBoundsForNumber({
     campaignId,
     number: targetNumber,
     rangeStart,
     rangeEnd,
   })
-  const exactRef = getNumberChunkRef(db, campaignId, exactBounds.chunkStart)
-  const exactSnapshot = await transaction.get(exactRef)
-  const exactChunkState = readChunkStateFromDoc({
-    bounds: exactBounds,
-    docData: exactSnapshot.exists ? (exactSnapshot.data() || null) : null,
-    nowMs: Date.now(),
+  await loadChunkStatesByStarts(transaction, db, {
+    campaignId,
+    rangeStart,
+    rangeEnd,
+    chunkStarts: [exactBounds.chunkStart],
+    nowMs,
+    chunkStateCache,
   })
+  const exactChunkState = chunkStateCache.get(exactBounds.chunkStart)
+  if (!exactChunkState) {
+    return null
+  }
 
   const exactView = getChunkNumberView(exactChunkState, targetNumber)
   const exactPaidMeta = getChunkPaidMeta(exactChunkState, targetNumber)
@@ -411,6 +562,8 @@ async function findEligiblePaidNumber(
     rangeStart,
     rangeEnd,
     direction: 'above',
+    nowMs,
+    chunkStateCache,
   })
   aboveCandidate = chooseDirectionalCandidate('above', aboveCandidate, above)
 
@@ -420,6 +573,8 @@ async function findEligiblePaidNumber(
     rangeStart,
     rangeEnd,
     direction: 'below',
+    nowMs,
+    chunkStateCache,
   })
   belowCandidate = chooseDirectionalCandidate('below', belowCandidate, below)
 

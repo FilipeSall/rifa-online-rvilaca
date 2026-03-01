@@ -27,7 +27,7 @@ function PrizeCard({ badge, badgeClassName, title, description, imageSrc, imageA
         )}
       </div>
       <div className="p-6">
-        <h3 className="text-xl font-luxury font-bold text-white mb-2">{title}</h3>
+        <h3 className="text-xl font-display font-bold text-white mb-2">{title}</h3>
         <p className="text-sm text-gray-400">{description}</p>
       </div>
     </div>
@@ -59,7 +59,7 @@ export default function PrizesSection() {
           <span className="text-neon-pink font-bold text-xs uppercase tracking-[0.2em] mb-2 block">
             O que você pode ganhar
           </span>
-          <h2 className="text-3xl font-luxury font-bold text-white">Prêmios da Edição</h2>
+          <h2 className="text-3xl font-display font-bold text-white">Prêmios da Edição</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {dynamicPrizes.map((prize, index) => (

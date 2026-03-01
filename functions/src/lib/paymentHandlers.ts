@@ -606,8 +606,10 @@ async function runPaidDepositBusinessLogic(
 
   await db.runTransaction(async (transaction) => {
     transactionStats.transactionAttempts += 1
-    const reservationSnapshot = reservationRef ? await transaction.get(reservationRef) : null
-    const salesLedgerSnapshot = await transaction.get(salesLedgerRef)
+    const headerRefs = reservationRef ? [reservationRef, salesLedgerRef] : [salesLedgerRef]
+    const headerSnapshots = await transaction.getAll(...headerRefs)
+    const reservationSnapshot = reservationRef ? headerSnapshots[0] : null
+    const salesLedgerSnapshot = reservationRef ? headerSnapshots[1] : headerSnapshots[0]
     transactionStats.uniqueStateReads = order.reservedNumbers.length
 
     const chunkStatesByStart = new Map<number, NumberChunkRuntimeState>()
@@ -625,12 +627,12 @@ async function runPaidDepositBusinessLogic(
       }
       transactionStats.chunksRead = chunkStarts.length
 
-      const chunkSnapshots = await Promise.all(
-        chunkStarts.map((chunkStart) => {
-          const ref = chunkRefs.get(chunkStart)
-          return ref ? transaction.get(ref) : Promise.resolve(null)
-        }),
-      )
+      const orderedChunkRefs = chunkStarts
+        .map((chunkStart) => chunkRefs.get(chunkStart))
+        .filter((ref): ref is ReturnType<typeof getNumberChunkRef> => Boolean(ref))
+      const chunkSnapshots = orderedChunkRefs.length > 0
+        ? await transaction.getAll(...orderedChunkRefs)
+        : []
 
       for (let index = 0; index < chunkStarts.length; index += 1) {
         const chunkStart = chunkStarts[index]

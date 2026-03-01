@@ -282,7 +282,7 @@ export default function TopBuyersDrawTab() {
         <div className="relative z-10 grid grid-cols-1 gap-5 lg:grid-cols-[1.2fr_1fr]">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-amber-300">Operacao de sorteio</p>
-            <h3 className="mt-2 font-luxury text-3xl font-bold text-white">Sorteio Federal com redundancia</h3>
+            <h3 className="mt-2 font-display text-3xl font-bold text-white">Sorteio Federal com redundancia</h3>
             <p className="mt-3 max-w-2xl text-sm text-gray-300">
               Regras ativas: 5 extracoes oficiais, comparacao por digitos dinamicos (minimo 3) e fallback por codigo mais proximo.
             </p>
@@ -330,7 +330,7 @@ export default function TopBuyersDrawTab() {
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         <article className="rounded-3xl border border-white/10 bg-luxury-card p-5 xl:col-span-5">
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon-pink">Entrada administrativa</p>
-          <h4 className="mt-2 font-luxury text-2xl font-bold text-white">Publicacao oficial do sorteio</h4>
+          <h4 className="mt-2 font-display text-2xl font-bold text-white">Publicacao oficial do sorteio</h4>
 
           <div className="mt-5 space-y-4">
             <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">

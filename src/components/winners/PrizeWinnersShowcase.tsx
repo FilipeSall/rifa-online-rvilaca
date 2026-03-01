@@ -150,7 +150,7 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
             <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-amber-300">Premiacao oficial</p>
-                <h1 className="mt-2 font-luxury text-3xl font-black text-white lg:text-4xl">Premiação e Ganhadores</h1>
+                <h1 className="mt-2 font-display text-3xl font-black text-white lg:text-4xl">Premiação e Ganhadores</h1>
                 <p className="mt-2 max-w-2xl text-sm text-gray-200">
                   Transparência auditável com apuração pela Loteria Federal, regra de redundância e registro público das tentativas.
                 </p>

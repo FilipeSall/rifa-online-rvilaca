@@ -13,7 +13,6 @@ type NumberSelectionCardProps = {
   totalNumbers: number
   pageStart: number | null
   pageEnd: number | null
-  smallestAvailableNumber: number | null
   hasPreviousPage: boolean
   hasNextPage: boolean
   currentPage: number
@@ -53,7 +52,6 @@ export default function NumberSelectionCard({
   totalNumbers,
   pageStart,
   pageEnd,
-  smallestAvailableNumber,
   hasPreviousPage,
   hasNextPage,
   currentPage,
@@ -129,7 +127,7 @@ export default function NumberSelectionCard({
           <h2 className="text-xl font-bold text-white">Escolha seus numeros com controle total</h2>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           <div className="rounded-xl border border-white/10 bg-black/20 p-3">
             <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Faixa da pagina</p>
             <p className="mt-1 text-sm font-bold text-white">{displayedRange}</p>
@@ -143,12 +141,6 @@ export default function NumberSelectionCard({
           <div className="rounded-xl border border-white/10 bg-black/20 p-3">
             <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Universo da campanha</p>
             <p className="mt-1 text-sm font-bold text-white">{totalNumbers.toLocaleString('pt-BR')} numeros</p>
-          </div>
-          <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 p-3">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-300">Menor disponivel</p>
-            <p className="mt-1 text-sm font-bold text-emerald-200">
-              {smallestAvailableNumber !== null ? formatTicketNumber(smallestAvailableNumber) : '--'}
-            </p>
           </div>
         </div>
 

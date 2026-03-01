@@ -8,7 +8,7 @@ export default function BuySection() {
         <div className="max-w-4xl mx-auto bg-luxury-bg border border-white/10 rounded-2xl p-6 md:p-10 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neon-pink to-transparent" />
           <div className="text-center mb-8">
-            <h2 className="text-2xl font-luxury font-bold text-white mb-2">Garanta sua participação</h2>
+            <h2 className="text-2xl font-display font-bold text-white mb-2">Garanta sua participação</h2>
             <p className="text-gray-400 text-sm">
               Por apenas <span className="text-neon-pink font-bold">R$ 0,99</span> cada número.
             </p>

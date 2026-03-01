@@ -51,7 +51,6 @@ type GetNumberChunkWindowResponse = {
   rangeStart: number
   rangeEnd: number
   totalNumbers: number
-  smallestAvailableNumber: number | null
   availableInPage: number
   hasPreviousPage: boolean
   hasNextPage: boolean
@@ -242,9 +241,6 @@ function sanitizeWindowResponse(
     rangeStart,
     rangeEnd,
     totalNumbers,
-    smallestAvailableNumber: Number.isInteger(payload.smallestAvailableNumber ?? null)
-      ? Number(payload.smallestAvailableNumber)
-      : null,
     availableInPage: Number.isInteger(payload.availableInPage)
       ? payload.availableInPage
       : numbers.filter((item) => item.status === 'disponivel').length,
@@ -481,7 +477,6 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   const availableNumbersCount = numberWindow
     ? numberWindow.availableInPage
     : numberPool.filter((item) => item.status === 'disponivel').length
-  const smallestAvailableNumber = numberWindow?.smallestAvailableNumber ?? rangeStart
 
   const reservationCap = Math.max(
     1,
@@ -1158,7 +1153,6 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     totalNumbers,
     pageStart,
     pageEnd,
-    smallestAvailableNumber,
     previousPageStart,
     nextPageStart,
     currentPage,

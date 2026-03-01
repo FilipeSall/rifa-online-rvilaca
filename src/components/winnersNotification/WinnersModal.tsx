@@ -73,7 +73,7 @@ export default function WinnersModal({
         <header className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-6">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300">Premiacao</p>
-            <h2 id="winners-modal-title" className="mt-1 font-luxury text-2xl font-black text-white sm:text-3xl">
+            <h2 id="winners-modal-title" className="mt-1 font-display text-2xl font-black text-white sm:text-3xl">
               Novos ganhadores
             </h2>
           </div>
@@ -124,7 +124,7 @@ export default function WinnersModal({
               ))}
 
               <section className="mt-4 rounded-2xl border border-neon-pink/35 bg-[linear-gradient(140deg,rgba(255,0,204,0.22),rgba(15,23,42,0.95))] p-5 text-center">
-                <p className="font-luxury text-2xl font-black text-amber-100">O próximo pode ser você!</p>
+                <p className="font-display text-2xl font-black text-amber-100">O próximo pode ser você!</p>
                 <p className="mt-2 text-sm text-amber-50/90">Garanta seus números e participe dos próximos sorteios.</p>
                 <Link
                   to="/comprar-manualmente"

@@ -139,7 +139,7 @@ export default function MainRaffleDrawTab() {
     <section className="space-y-6">
       <article className="rounded-3xl border border-white/10 bg-luxury-card p-6">
         <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-300">Sorteio principal</p>
-        <h3 className="mt-2 font-luxury text-3xl font-bold text-white">BMW / CG / PIX por numero da rifa</h3>
+        <h3 className="mt-2 font-display text-3xl font-bold text-white">BMW / CG / PIX por numero da rifa</h3>
         <p className="mt-2 max-w-2xl text-sm text-gray-300">
           Apuracao com 5 extracoes da Loteria Federal, modulo da faixa da rifa e fallback para numero pago mais proximo
           (abaixo/acima).
@@ -163,7 +163,7 @@ export default function MainRaffleDrawTab() {
       </article>
 
       <article className="rounded-3xl border border-white/10 bg-luxury-card p-6">
-        <h4 className="font-luxury text-2xl font-bold text-white">Publicar sorteio principal</h4>
+        <h4 className="font-display text-2xl font-bold text-white">Publicar sorteio principal</h4>
 
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div>
@@ -245,7 +245,7 @@ export default function MainRaffleDrawTab() {
       </article>
 
       <article className="rounded-3xl border border-white/10 bg-luxury-card p-6">
-        <h4 className="font-luxury text-2xl font-bold text-white">Historico do sorteio principal</h4>
+        <h4 className="font-display text-2xl font-bold text-white">Historico do sorteio principal</h4>
 
         {isLoading || isHistoryLoading ? (
           <div className="mt-4 space-y-2">

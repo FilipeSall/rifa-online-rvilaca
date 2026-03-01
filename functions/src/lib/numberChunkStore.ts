@@ -586,6 +586,14 @@ export function writeChunkStateToDoc(
   state: NumberChunkRuntimeState,
   timestampValue: unknown = FieldValue.serverTimestamp(),
 ): DocumentData {
+  let eligiblePaidUnawardedCount = 0
+  for (const paidEntry of Object.values(state.paidMeta)) {
+    if (!paidEntry?.ownerUid || !paidEntry.orderId || paidEntry.awardedDrawId) {
+      continue
+    }
+    eligiblePaidUnawardedCount += 1
+  }
+
   recountChunk(state)
   return {
     campaignId: state.campaignId,
@@ -599,6 +607,9 @@ export function writeChunkStateToDoc(
     reservedCount: state.reservedCount,
     paidCount: state.paidCount,
     availableCount: state.availableCount,
+    hasAvailable: state.availableCount > 0,
+    eligiblePaidUnawardedCount,
+    hasEligiblePaidUnawarded: eligiblePaidUnawardedCount > 0,
     updatedAt: timestampValue,
   }
 }

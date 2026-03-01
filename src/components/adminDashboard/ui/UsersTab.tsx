@@ -103,7 +103,7 @@ export default function UsersTab() {
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neon-pink">Gestão de usuários</p>
-            <h2 className="mt-2 font-luxury text-3xl font-bold text-white">Usuários</h2>
+            <h2 className="mt-2 font-display text-3xl font-bold text-white">Usuários</h2>
             <p className="mt-2 max-w-2xl text-sm text-gray-400">
               Busca otimizada por prefixo em campos indexados (email, CPF, número e nome) com limite controlado para reduzir leituras.
             </p>
@@ -144,7 +144,7 @@ export default function UsersTab() {
 
       <section className="rounded-2xl border border-white/10 bg-luxury-card p-5">
         <div className="flex items-center justify-between">
-          <h3 className="font-luxury text-xl font-bold text-white">Resultados</h3>
+          <h3 className="font-display text-xl font-bold text-white">Resultados</h3>
           <span className="text-xs uppercase tracking-[0.16em] text-gray-500">
             {formatInteger(results.length)} encontrado(s)
           </span>
@@ -210,7 +210,7 @@ export default function UsersTab() {
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.2em] text-neon-pink">Detalhes do usuário</p>
-                <h3 className="mt-1 font-luxury text-2xl font-bold text-white">Painel de perfil</h3>
+                <h3 className="mt-1 font-display text-2xl font-bold text-white">Painel de perfil</h3>
               </div>
               <button
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-gray-300 hover:text-white"

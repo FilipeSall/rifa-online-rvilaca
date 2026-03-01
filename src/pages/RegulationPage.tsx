@@ -78,7 +78,7 @@ export default function RegulationPage() {
 
           <div className="container relative z-10 mx-auto px-4 lg:px-8">
             <p className="text-[10px] font-black uppercase tracking-[0.28em] text-amber-300">Documento oficial</p>
-            <h1 className="mt-3 max-w-4xl font-luxury text-4xl font-black leading-[1.1] text-white lg:text-6xl">
+            <h1 className="mt-3 max-w-4xl font-display text-4xl font-black leading-[1.1] text-white lg:text-6xl">
               Regulamento do Sorteio e do Ranking Semanal
             </h1>
             <p className="mt-4 max-w-3xl text-sm text-gray-200 lg:text-base">
@@ -123,7 +123,7 @@ export default function RegulationPage() {
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {ruleBlocks.map((block) => (
                 <article key={block.title} className="rounded-2xl border border-white/10 bg-[linear-gradient(160deg,rgba(29,36,57,0.9),rgba(10,14,22,0.92))] p-5 lg:p-6">
-                  <h2 className="font-luxury text-2xl font-bold leading-tight text-white">{block.title}</h2>
+                  <h2 className="font-display text-2xl font-bold leading-tight text-white">{block.title}</h2>
                   <ul className="mt-4 space-y-2 text-sm text-gray-200">
                     {block.items.map((item, index) => (
                       <li key={item} className="flex gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-3">
