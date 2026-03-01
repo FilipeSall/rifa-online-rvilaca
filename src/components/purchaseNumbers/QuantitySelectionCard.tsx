@@ -39,7 +39,7 @@ export default function QuantitySelectionCard({
           return (
             <div key={pack} className="relative">
               {isPromotionPack ? (
-                <span className="pointer-events-none absolute -top-2 left-1/2 z-10 inline-flex w-[70%] -translate-x-1/2 items-center justify-center rounded-md border border-amber-300/55 bg-[linear-gradient(120deg,rgba(245,158,11,0.95),rgba(251,191,36,0.92))] px-2.5 py-0.5 text-center text-[8px] font-black uppercase tracking-[0.09em] text-black shadow-[0_8px_18px_rgba(245,158,11,0.3)]">
+                <span className="pointer-events-none absolute -top-2 left-1/2 z-10 inline-flex w-[70%] -translate-x-1/2 items-center justify-center rounded-md border border-amber-300 bg-[linear-gradient(120deg,rgb(245,158,11),rgb(251,191,36))] px-2.5 py-0.5 text-center text-[8px] font-black uppercase tracking-[0.09em] text-black shadow-[0_8px_18px_rgba(245,158,11,0.3)]">
                   {promotionLabel}
                 </span>
               ) : null}
