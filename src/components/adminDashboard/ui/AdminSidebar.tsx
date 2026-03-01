@@ -16,7 +16,7 @@ export default function AdminSidebar({ activeTab, onTabChange, onSignOut }: Admi
             key={tab.id}
             className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all ${
               activeTab === tab.id
-                ? 'border-neon-pink/35 bg-neon-pink/15 text-neon-pink shadow-glow-pink'
+                ? 'border-neon-pink/35 bg-neon-pink/15 text-neon-pink shadow-[0_2px_8px_rgba(255,0,204,0.14)]'
                 : 'border-transparent text-gray-400 hover:border-white/10 hover:bg-white/5 hover:text-white'
             }`}
             type="button"

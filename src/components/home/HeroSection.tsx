@@ -191,7 +191,7 @@ export default function HeroSection({
             {/* Badges */}
             <div className="flex items-center gap-3 flex-wrap">
               {promotionCallout ? (
-                <span className="relative inline-flex items-center gap-2 overflow-hidden rounded-md border border-cyan-300/70 bg-[linear-gradient(120deg,rgba(34,211,238,0.22),rgba(14,116,144,0.22))] px-3 py-1.5 text-[11px] font-black text-cyan-50 shadow-[0_10px_24px_rgba(34,211,238,0.22)]">
+                <span className="relative inline-flex items-center gap-2 overflow-hidden rounded-md border border-cyan-300/70 bg-[linear-gradient(120deg,rgba(34,211,238,0.22),rgba(14,116,144,0.22))] px-3 py-1.5 text-[12px] font-black text-cyan-50 shadow-[0_10px_24px_rgba(34,211,238,0.22)]">
                   <span className="pointer-events-none absolute left-0 top-0 h-[2px] w-full bg-gradient-to-r from-cyan-300 to-sky-300" />
                   <span className="material-symbols-outlined text-[15px] leading-none text-cyan-200">local_offer</span>
                   <span>
