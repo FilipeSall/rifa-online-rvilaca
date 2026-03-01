@@ -37,6 +37,7 @@ interface GetWeeklyTopBuyersRankingOutput {
 const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
 const MAX_PUBLIC_RANKING_LIMIT = 50
 const RANKING_CACHE_TTL_MS = 3 * 60 * 1000
+const MAX_WEEKLY_FALLBACK_LOOKBACK = 8
 const CHAMPIONS_PUBLIC_CACHE_DOC_ID = '_public-champions-ranking'
 const WEEKLY_PUBLIC_CACHE_DOC_ID = '_public-weekly-top-buyers-ranking'
 
@@ -144,6 +145,18 @@ function getWeeklyRankingWindow(nowMs = Date.now()): RankingWindow {
     weekId: formatBrazilDateId(toUtcFromBrazilLocal(localWeekStartMs)),
     startMs: toUtcFromBrazilLocal(localWeekStartMs),
     endMs: toUtcFromBrazilLocal(localWeekEndMs),
+  }
+}
+
+function shiftRankingWindowByWeeks(baseWindow: RankingWindow, weeksBack: number): RankingWindow {
+  const stepMs = 7 * 24 * 60 * 60 * 1000
+  const shiftedStartMs = baseWindow.startMs - (weeksBack * stepMs)
+  const shiftedEndMs = baseWindow.endMs - (weeksBack * stepMs)
+
+  return {
+    weekId: formatBrazilDateId(shiftedStartMs),
+    startMs: shiftedStartMs,
+    endMs: shiftedEndMs,
   }
 }
 
@@ -373,15 +386,36 @@ export function createGetWeeklyTopBuyersRankingHandler(db: Firestore) {
     const rankingWindow = getWeeklyRankingWindow()
 
     try {
-      const cached = await loadWeeklyRankingCached(db, rankingWindow)
-      await publishWeeklyRankingCache(db, rankingWindow, cached)
+      let selectedWindow = rankingWindow
+      let cached = await loadWeeklyRankingCached(db, selectedWindow)
+
+      if (cached.items.length === 0) {
+        for (let weeksBack = 1; weeksBack <= MAX_WEEKLY_FALLBACK_LOOKBACK; weeksBack += 1) {
+          const fallbackWindow = shiftRankingWindowByWeeks(rankingWindow, weeksBack)
+          const fallbackCache = await loadWeeklyRankingCached(db, fallbackWindow)
+
+          if (fallbackCache.items.length > 0) {
+            selectedWindow = fallbackWindow
+            cached = fallbackCache
+            logger.info('getWeeklyTopBuyersRanking using fallback window', {
+              currentWeekId: rankingWindow.weekId,
+              fallbackWeekId: fallbackWindow.weekId,
+              fallbackWeeksBack: weeksBack,
+              itemsCount: fallbackCache.items.length,
+            })
+            break
+          }
+        }
+      }
+
+      await publishWeeklyRankingCache(db, selectedWindow, cached)
 
       return {
         campaignId: CAMPAIGN_DOC_ID,
         updatedAtMs: cached.updatedAtMs,
-        weekId: rankingWindow.weekId,
-        weekStartAtMs: rankingWindow.startMs,
-        weekEndAtMs: rankingWindow.endMs,
+        weekId: selectedWindow.weekId,
+        weekStartAtMs: selectedWindow.startMs,
+        weekEndAtMs: selectedWindow.endMs,
         items: cached.items.slice(0, limit),
       }
     } catch (error) {

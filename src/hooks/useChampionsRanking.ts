@@ -123,7 +123,9 @@ export function useChampionsRanking() {
         setErrorMessage(null)
         setIsLoading(false)
 
-        if (shouldRefreshRanking(nextUpdatedAtMs)) {
+        // Se o snapshot vier apenas do cache local (ou vazio), força refresh
+        // para evitar ficar preso em estado antigo do IndexedDB.
+        if (snapshot.metadata.fromCache || nextItems.length === 0 || shouldRefreshRanking(nextUpdatedAtMs)) {
           void refreshRanking()
         }
       },
