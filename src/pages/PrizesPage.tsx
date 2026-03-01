@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import prizesPortrait from '../assets/IMG_9378.webp'
 import Footer from '../components/home/Footer'
@@ -191,6 +191,7 @@ export default function PrizesPage() {
   const latestPublicationLabel = latestPublicationMs > 0
     ? formatPublishedAt(latestPublicationMs)
     : 'Aguardando primeira publicação'
+  const [isPrizesPortraitLoaded, setIsPrizesPortraitLoaded] = useState(false)
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-luxury-bg font-display text-white selection:bg-neon-pink selection:text-black">
@@ -249,12 +250,20 @@ export default function PrizesPage() {
                 <div className="pointer-events-none absolute -left-7 top-10 h-48 w-48 rounded-full bg-cyan-400/20 blur-3xl" />
                 <div className="pointer-events-none absolute -right-8 bottom-6 h-48 w-48 rounded-full bg-neon-pink/20 blur-3xl" />
                 <div className="relative overflow-hidden rounded-[2.1rem] border border-white/15 bg-[linear-gradient(155deg,rgba(255,255,255,0.08),rgba(15,20,32,0.92))] p-2 shadow-[0_35px_80px_rgba(0,0,0,0.52)]">
-                  <div className="relative overflow-hidden rounded-[1.65rem] border border-white/10 bg-black">
+                  <div className="relative min-h-[260px] overflow-hidden rounded-[1.65rem] border border-white/10 bg-black sm:min-h-[320px]">
+                    {!isPrizesPortraitLoaded ? (
+                      <div
+                        aria-hidden="true"
+                        className="absolute inset-0 z-10 animate-pulse bg-[linear-gradient(140deg,rgba(255,255,255,0.1),rgba(255,255,255,0.03))]"
+                      />
+                    ) : null}
                     <img
                       src={prizesPortrait}
                       alt="Foto oficial da campanha com a moto de premiação"
-                      className="h-auto w-full object-contain"
+                      className={`h-auto w-full object-contain transition-opacity duration-500 ${isPrizesPortraitLoaded ? 'opacity-100' : 'opacity-0'}`}
                       loading="lazy"
+                      onLoad={() => setIsPrizesPortraitLoaded(true)}
+                      onError={() => setIsPrizesPortraitLoaded(true)}
                     />
                   </div>
                 </div>
