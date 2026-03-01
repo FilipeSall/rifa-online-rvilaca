@@ -48,7 +48,9 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     couponHint,
     unitPrice,
     subtotal,
-    discountAmount,
+    promotionDiscountAmount,
+    promotionDiscountPercent,
+    couponDiscountAmount,
     totalAmount,
     canProceed,
     isReserving,
@@ -185,7 +187,9 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
       minQuantity: minSelectableQuantity,
       unitPrice,
       subtotal,
-      discountAmount,
+      promotionDiscountAmount,
+      promotionDiscountPercent,
+      couponDiscountAmount,
       totalAmount,
       appliedCoupon,
       couponCode,
@@ -207,7 +211,9 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
       minSelectableQuantity,
       unitPrice,
       subtotal,
-      discountAmount,
+      promotionDiscountAmount,
+      promotionDiscountPercent,
+      couponDiscountAmount,
       totalAmount,
       appliedCoupon,
       couponCode,
@@ -225,6 +231,26 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
       setSelectionMode,
     ],
   )
+  const mostPurchasedPackQuantities = useMemo(
+    () => purchaseState.campaign.packPrices
+      .filter((pack) => pack.active && pack.mostPurchasedTag)
+      .map((pack) => pack.quantity),
+    [purchaseState.campaign.packPrices],
+  )
+  const discountPackQuantities = useMemo(() => {
+    const progressiveDiscount = purchaseState.campaign.featuredPromotion
+    if (
+      !progressiveDiscount
+      || !progressiveDiscount.active
+      || progressiveDiscount.discountValue <= 0
+    ) {
+      return []
+    }
+
+    return purchaseState.campaign.packPrices
+      .filter((pack) => pack.active && pack.quantity >= progressiveDiscount.targetQuantity)
+      .map((pack) => pack.quantity)
+  }, [purchaseState.campaign.featuredPromotion, purchaseState.campaign.packPrices])
 
   return (
     <>
@@ -236,6 +262,8 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
               minQuantity={minSelectableQuantity}
               packQuantities={availablePackQuantities}
               featuredPromotion={purchaseState.campaign.featuredPromotion}
+              mostPurchasedPackQuantities={mostPurchasedPackQuantities}
+              discountPackQuantities={discountPackQuantities}
               maxSelectable={maxSelectable}
               onSetQuantity={handleSetQuantity}
             />

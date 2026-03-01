@@ -374,7 +374,7 @@ function calculatePromotionDiscount(
   quantity: number,
   featuredPromotion: ReturnType<typeof readCampaignFeaturedPromotion>,
 ) {
-  if (!featuredPromotion || !featuredPromotion.active || featuredPromotion.targetQuantity !== quantity) {
+  if (!featuredPromotion || !featuredPromotion.active || quantity < featuredPromotion.targetQuantity) {
     return {
       discount: 0,
       label: null as string | null,

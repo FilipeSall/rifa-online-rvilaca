@@ -14,6 +14,7 @@ import type {
   CampaignFeaturedPromotion,
   CampaignFeaturedVideoMedia,
   CampaignCoupon,
+  CampaignCouponDiscountType,
   CampaignHeroCarouselMedia,
   CampaignMidias,
   CampaignPackPrice,
@@ -144,11 +145,26 @@ function sanitizePackPrices(value: unknown, unitPrice: number): CampaignPackPric
       quantity,
       price: Number((quantity * unitPrice).toFixed(2)),
       active: item.active !== false,
+      mostPurchasedTag: item.mostPurchasedTag === true,
     }
   })
 
   if (normalized.length >= CAMPAIGN_PACK_QUANTITIES.length) {
-    return normalized
+    let hasMostPurchasedTag = false
+    return normalized.map((item) => {
+      if (!item.mostPurchasedTag) {
+        return item
+      }
+      if (hasMostPurchasedTag) {
+        return {
+          ...item,
+          mostPurchasedTag: false,
+        }
+      }
+
+      hasMostPurchasedTag = true
+      return item
+    })
   }
 
   const used = new Set(normalized.map((item) => item.quantity))
@@ -163,39 +179,56 @@ function sanitizePackPrices(value: unknown, unitPrice: number): CampaignPackPric
       quantity: fallbackQuantity,
       price: Number((fallbackQuantity * unitPrice).toFixed(2)),
       active: true,
+      mostPurchasedTag: false,
     })
   }
 
-  return normalized
+  let hasMostPurchasedTag = false
+  return normalized.map((item) => {
+    if (!item.mostPurchasedTag) {
+      return item
+    }
+    if (hasMostPurchasedTag) {
+      return {
+        ...item,
+        mostPurchasedTag: false,
+      }
+    }
+
+    hasMostPurchasedTag = true
+    return item
+  })
 }
 
-function sanitizeFeaturedPromotion(value: unknown, allowedQuantities: number[]): CampaignFeaturedPromotion | null {
+function sanitizePromotionDiscountType(value: unknown): CampaignCouponDiscountType {
+  return value === 'fixed' ? 'fixed' : 'percent'
+}
+
+function sanitizeFeaturedPromotion(value: unknown): CampaignFeaturedPromotion | null {
   if (!value || typeof value !== 'object') {
     return null
   }
 
   const payload = value as Partial<CampaignFeaturedPromotion>
   const targetQuantity = Number(payload.targetQuantity)
-  if (!Number.isInteger(targetQuantity) || targetQuantity <= 0 || !allowedQuantities.includes(targetQuantity)) {
+  if (!Number.isInteger(targetQuantity) || targetQuantity <= 0 || targetQuantity > MAX_QUANTITY) {
     return null
   }
 
-  const discountType = payload.discountType === 'fixed' ? 'fixed' : 'percent'
+  const discountType = sanitizePromotionDiscountType(payload.discountType)
   const rawValue = Number(payload.discountValue)
   if (!Number.isFinite(rawValue) || rawValue < 0) {
     return null
   }
 
-  const discountValue = discountType === 'percent'
-    ? Number(Math.min(rawValue, 100).toFixed(2))
-    : Number(rawValue.toFixed(2))
+  const discountValue = Number((discountType === 'percent' ? Math.min(rawValue, 100) : rawValue).toFixed(2))
 
   return {
     active: payload.active === true,
     targetQuantity,
     discountType,
     discountValue,
-    label: `${payload.label ?? ''}`.trim().slice(0, 80),
+    label: 'Mais compradas',
   }
 }
 
@@ -279,7 +312,7 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
     }
   }
 
-  const normalizedFeaturedPromotion = sanitizeFeaturedPromotion(formState.featuredPromotion, packQuantities)
+  const normalizedFeaturedPromotion = sanitizeFeaturedPromotion(formState.featuredPromotion)
 
   return {
     errorToastId: null,

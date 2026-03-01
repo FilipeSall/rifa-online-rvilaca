@@ -55,34 +55,85 @@ export default function HeroSection({
       }))
   }, [campaign.midias.heroCarousel])
   const activeFeaturedPromotion = useMemo(
-    () => (campaign.featuredPromotion?.active ? campaign.featuredPromotion : null),
+    () => {
+      const promotion = campaign.featuredPromotion
+      if (!promotion?.active) {
+        return null
+      }
+
+      const discountType = promotion.discountType === 'fixed' ? ('fixed' as const) : ('percent' as const)
+      const normalizedDiscount = Number(promotion.discountValue)
+      if (!Number.isFinite(normalizedDiscount) || normalizedDiscount <= 0) {
+        return null
+      }
+
+      return {
+        ...promotion,
+        discountType,
+        discountValue: Number((discountType === 'percent' ? Math.min(normalizedDiscount, 100) : normalizedDiscount).toFixed(2)),
+      }
+    },
     [campaign.featuredPromotion],
   )
-  const featuredPromotionInsight = useMemo(() => {
+  const mostPurchasedPackQuantities = useMemo(
+    () => campaign.packPrices
+      .filter((pack) => pack.active && pack.mostPurchasedTag)
+      .map((pack) => pack.quantity),
+    [campaign.packPrices],
+  )
+  const discountPackQuantities = useMemo(() => {
+    if (!activeFeaturedPromotion) {
+      return []
+    }
+
+    return campaign.packPrices
+      .filter((pack) => pack.active && pack.quantity >= activeFeaturedPromotion.targetQuantity)
+      .map((pack) => pack.quantity)
+  }, [activeFeaturedPromotion, campaign.packPrices])
+  const discountTooltipByPack = useMemo(() => {
+    if (!activeFeaturedPromotion) {
+      return {} as Record<number, string>
+    }
+
+    return heroQuickQuantityPacks.reduce<Record<number, string>>((accumulator, pack) => {
+      if (pack < activeFeaturedPromotion.targetQuantity) {
+        return accumulator
+      }
+
+      const pricing = calculateCampaignPricing(pack, {
+        pricePerCota: campaign.pricePerCota,
+        packPrices: campaign.packPrices,
+        featuredPromotion: activeFeaturedPromotion,
+      })
+      if (pricing.promotionDiscount <= 0) {
+        return accumulator
+      }
+
+      const discountLabel = activeFeaturedPromotion.discountType === 'percent'
+        ? `${activeFeaturedPromotion.discountValue.toFixed(2).replace(/\.00$/, '')}%`
+        : formatCurrency(activeFeaturedPromotion.discountValue)
+      accumulator[pack] = `Economize ${discountLabel} e pague ${formatCurrency(pricing.subtotalAfterPromotion)}.`
+      return accumulator
+    }, {})
+  }, [
+    activeFeaturedPromotion,
+    campaign.packPrices,
+    campaign.pricePerCota,
+    heroQuickQuantityPacks,
+  ])
+  const promotionCallout = useMemo(() => {
     if (!activeFeaturedPromotion) {
       return null
     }
 
-    const pricing = calculateCampaignPricing(activeFeaturedPromotion.targetQuantity, {
-      pricePerCota: campaign.pricePerCota,
-      packPrices: campaign.packPrices,
-      featuredPromotion: activeFeaturedPromotion,
-    })
-
-    const hasTooltip = pricing.promotionDiscount > 0
-    const tooltip = hasTooltip
-      ? (activeFeaturedPromotion.discountType === 'percent'
-          ? `Economize ${activeFeaturedPromotion.discountValue}% nesse pacote e pague ${formatCurrency(pricing.subtotalAfterPromotion)}.`
-          : `Economize ${formatCurrency(pricing.promotionDiscount)} nesse pacote e pague ${formatCurrency(pricing.subtotalAfterPromotion)}.`)
-      : null
-
+    const discountLabel = activeFeaturedPromotion.discountType === 'percent'
+      ? `${activeFeaturedPromotion.discountValue.toFixed(2).replace(/\.00$/, '')}%`
+      : formatCurrency(activeFeaturedPromotion.discountValue)
     return {
-      targetQuantity: activeFeaturedPromotion.targetQuantity,
-      label: activeFeaturedPromotion.label.trim() || 'Promocao ativa',
-      tooltip,
-      hasTooltip,
+      targetQuantityLabel: String(activeFeaturedPromotion.targetQuantity),
+      discountLabel,
     }
-  }, [activeFeaturedPromotion, campaign.packPrices, campaign.pricePerCota])
+  }, [activeFeaturedPromotion])
 
   const handleImageLoaded = useCallback((imageSrc: string) => {
     setLoadedImages((currentState) => {
@@ -139,9 +190,16 @@ export default function HeroSection({
           <div className="order-2 flex flex-col gap-4 lg:col-span-6 lg:order-1">
             {/* Badges */}
             <div className="flex items-center gap-3 flex-wrap">
-              <span className="inline-flex items-center rounded-full bg-red-500/15 border border-red-500/40 px-3 py-1 text-[10px] font-bold text-red-400 uppercase tracking-widest">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse mr-2" /> Edição Limitada
-              </span>
+              {promotionCallout ? (
+                <span className="relative inline-flex items-center gap-2 overflow-hidden rounded-md border border-cyan-300/70 bg-[linear-gradient(120deg,rgba(34,211,238,0.22),rgba(14,116,144,0.22))] px-3 py-1.5 text-[11px] font-black text-cyan-50 shadow-[0_10px_24px_rgba(34,211,238,0.22)]">
+                  <span className="pointer-events-none absolute left-0 top-0 h-[2px] w-full bg-gradient-to-r from-cyan-300 to-sky-300" />
+                  <span className="material-symbols-outlined text-[15px] leading-none text-cyan-200">local_offer</span>
+                  <span>
+                    A partir de <span className="text-amber-200">{promotionCallout.targetQuantityLabel}</span> numeros
+                    escolhidos, ganhe <span className="text-lime-200">{promotionCallout.discountLabel}</span> de desconto.
+                  </span>
+                </span>
+              ) : null}
             </div>
 
             {/* Title */}
@@ -174,18 +232,38 @@ export default function HeroSection({
 
               <div className="mt-6 grid grid-cols-2 gap-x-2 gap-y-5 md:grid-cols-4">
                 {heroQuickQuantityPacks.map((pack) => {
-                  const isPromotionPack = featuredPromotionInsight?.targetQuantity === pack
+                  const isMostPurchasedPack = mostPurchasedPackQuantities.includes(pack)
+                  const isDiscountPack = discountPackQuantities.includes(pack)
+                  const shouldShowBadge = isMostPurchasedPack || isDiscountPack
+                  const discountTooltip = discountTooltipByPack[pack]
 
                   return (
                     <div key={pack} className="group relative">
-                      {isPromotionPack ? (
+                      {shouldShowBadge ? (
                         <>
-                          <span className="pointer-events-none absolute -top-2 left-1/2 z-10 inline-flex w-[70%] -translate-x-1/2 items-center justify-center rounded-md border border-amber-300 bg-[linear-gradient(120deg,rgb(245,158,11),rgb(251,191,36))] px-2.5 py-0.5 text-center text-[8px] font-black uppercase tracking-[0.09em] text-black shadow-[0_8px_18px_rgba(245,158,11,0.3)]">
-                            {featuredPromotionInsight.label}
+                          <span className={`pointer-events-none absolute -top-2 left-1/2 z-10 inline-flex w-[70%] -translate-x-1/2 items-center justify-center rounded-md border px-2.5 py-0.5 text-center text-[8px] font-black uppercase tracking-[0.09em] text-black ${
+                            isMostPurchasedPack
+                              ? 'border-amber-300 bg-[linear-gradient(120deg,rgb(252,211,77),rgb(245,158,11))] shadow-[0_8px_18px_rgba(245,158,11,0.35)]'
+                              : 'border-emerald-200 bg-[linear-gradient(120deg,rgb(110,231,183),rgb(16,185,129))] shadow-[0_8px_18px_rgba(16,185,129,0.22)]'
+                          }`}>
+                            {isMostPurchasedPack ? (
+                              <span className="text-[8px] leading-none">Mais vendidos</span>
+                            ) : (
+                              <span className="text-[8px] leading-none">Desconto</span>
+                            )}
                           </span>
-                          {featuredPromotionInsight.hasTooltip ? (
-                            <div className="pointer-events-none absolute -top-2 left-1/2 z-30 w-48 -translate-x-1/2 -translate-y-[125%] scale-95 rounded-md border border-amber-200/80 bg-[#090611] px-2.5 py-2 text-center text-[10px] font-semibold leading-tight text-amber-100 opacity-0 shadow-[0_16px_40px_rgba(0,0,0,0.75)] ring-1 ring-black/70 transition-all duration-200 ease-out group-hover:-translate-y-[135%] group-hover:scale-100 group-hover:opacity-100 group-focus-within:-translate-y-[135%] group-focus-within:scale-100 group-focus-within:opacity-100">
-                              {featuredPromotionInsight.tooltip}
+                          {isDiscountPack && discountTooltip ? (
+                            <div className={`pointer-events-none absolute -top-2 left-1/2 z-30 w-48 -translate-x-1/2 -translate-y-[125%] scale-95 rounded-md border px-2.5 py-2 text-center text-[10px] font-semibold leading-tight opacity-0 shadow-[0_16px_40px_rgba(0,0,0,0.75)] ring-1 ring-black/70 transition-all duration-200 ease-out group-hover:-translate-y-[135%] group-hover:scale-100 group-hover:opacity-100 ${
+                              isMostPurchasedPack
+                                ? 'border-amber-200/80 bg-[#140d02] text-amber-100'
+                                : 'border-emerald-200/80 bg-[#090611] text-emerald-100'
+                            }`}>
+                              {discountTooltip}
+                              <span className={`absolute left-1/2 top-full h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r ${
+                                isMostPurchasedPack
+                                  ? 'border-amber-200/80 bg-[#140d02]'
+                                  : 'border-emerald-200/80 bg-[#090611]'
+                              }`} />
                             </div>
                           ) : null}
                         </>
@@ -200,8 +278,12 @@ export default function HeroSection({
                         disabled={isQuickCheckoutLoading}
                         onClick={() => onSetQuantity(pack)}
                       >
-                        {isPromotionPack ? (
-                          <span className="pointer-events-none absolute left-0 top-0 h-[2px] w-full bg-gradient-to-r from-amber-400 to-yellow-300" />
+                        {shouldShowBadge ? (
+                          <span className={`pointer-events-none absolute left-0 top-0 h-[2px] w-full ${
+                            isMostPurchasedPack
+                              ? 'bg-gradient-to-r from-amber-300 to-yellow-400'
+                              : 'bg-gradient-to-r from-emerald-400 to-emerald-300'
+                          }`} />
                         ) : null}
                         <p className="text-lg font-black">+{pack}</p>
                         <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Numeros</p>

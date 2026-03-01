@@ -33,6 +33,11 @@ Fluxo principal:
 - Hosting:
   - Firebase Hosting (SPA rewrite para `index.html`)
 
+### 2.1) Padrao de componentes de formulario (obrigatorio)
+
+- Sempre usar o componente `CustomSelect` (`src/components/ui/CustomSelect.tsx`) no lugar de `<select>` nativo nas telas do projeto.
+- Nao introduzir novos `<select>` nativos em interfaces administrativas ou publicas sem aprovacao explicita.
+
 ## 3) Estrutura relevante do repositorio
 
 - Frontend app: `src/`

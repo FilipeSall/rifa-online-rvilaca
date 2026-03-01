@@ -34,6 +34,7 @@ interface CampaignPackPrice {
   quantity: number
   price: number
   active: boolean
+  mostPurchasedTag: boolean
 }
 
 interface CampaignFeaturedPromotion {
@@ -150,6 +151,7 @@ function buildDefaultPackPrices(unitPrice: number): CampaignPackPrice[] {
     quantity,
     price: Number((quantity * unitPrice).toFixed(2)),
     active: true,
+    mostPurchasedTag: false,
   }))
 }
 
@@ -344,6 +346,7 @@ function sanitizeCampaignPackPrices(value: unknown, unitPriceFallback: number): 
       quantity,
       price: Number((quantity * unitPriceFallback).toFixed(2)),
       active: item.active !== false,
+      mostPurchasedTag: item.mostPurchasedTag === true,
     })
     usedQuantities.add(quantity)
   }
@@ -352,7 +355,21 @@ function sanitizeCampaignPackPrices(value: unknown, unitPriceFallback: number): 
     throw new HttpsError('invalid-argument', `packPrices deve conter exatamente ${CAMPAIGN_PACK_QUANTITIES.length} brackets.`)
   }
 
-  return normalized
+  let hasMostPurchasedTag = false
+  return normalized.map((item) => {
+    if (!item.mostPurchasedTag) {
+      return item
+    }
+    if (hasMostPurchasedTag) {
+      return {
+        ...item,
+        mostPurchasedTag: false,
+      }
+    }
+
+    hasMostPurchasedTag = true
+    return item
+  })
 }
 
 function sanitizeCampaignFeaturedPromotion(value: unknown): CampaignFeaturedPromotion | null | undefined {
@@ -370,7 +387,7 @@ function sanitizeCampaignFeaturedPromotion(value: unknown): CampaignFeaturedProm
     throw new HttpsError('invalid-argument', 'featuredPromotion.targetQuantity invalido.')
   }
 
-  const discountType = payload.discountType === 'fixed' ? 'fixed' : 'percent'
+  const discountType = sanitizeCouponDiscountType(payload.discountType)
   const rawDiscountValue = Number(payload.discountValue)
   if (!Number.isFinite(rawDiscountValue) || rawDiscountValue < 0) {
     throw new HttpsError('invalid-argument', 'featuredPromotion.discountValue invalido.')
@@ -385,7 +402,7 @@ function sanitizeCampaignFeaturedPromotion(value: unknown): CampaignFeaturedProm
     targetQuantity,
     discountType,
     discountValue: Number(rawDiscountValue.toFixed(2)),
-    label: sanitizeString(payload.label).slice(0, 80),
+    label: 'Mais compradas',
   }
 }
 
@@ -808,14 +825,6 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       const nextFeaturedPromotion = sanitizeCampaignFeaturedPromotion(payload.featuredPromotion)
       const nextCoupons = sanitizeCoupons(payload.coupons)
       const nextMidias = sanitizeCampaignMidias(payload.midias)
-      const effectivePackPrices = nextPackPrices ?? readCampaignPackPrices(currentData)
-
-      if (
-        nextFeaturedPromotion
-        && !effectivePackPrices.some((pack) => pack.quantity === nextFeaturedPromotion.targetQuantity)
-      ) {
-        throw new HttpsError('invalid-argument', 'featuredPromotion.targetQuantity deve existir nos brackets configurados.')
-      }
 
       const updateData: DocumentData = {
         updatedAt: FieldValue.serverTimestamp(),

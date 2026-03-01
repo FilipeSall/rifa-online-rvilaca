@@ -5,6 +5,30 @@ import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 import { storage } from '../../lib/firebase'
 
 const BADGE_DISMISSED_STORAGE_KEY = 'rifa-online:featured-video-badge-dismissed'
+const VIDEO_URL_CACHE_PREFIX = 'rifa-online:video-url:'
+
+function getCachedVideoUrl(storagePath: string): string | null {
+  try {
+    return window.localStorage.getItem(VIDEO_URL_CACHE_PREFIX + storagePath)
+  } catch {
+    return null
+  }
+}
+
+function setCachedVideoUrl(storagePath: string, url: string): void {
+  try {
+    // Remove entradas antigas de outros storagePaths
+    for (let i = window.localStorage.length - 1; i >= 0; i--) {
+      const key = window.localStorage.key(i)
+      if (key?.startsWith(VIDEO_URL_CACHE_PREFIX) && key !== VIDEO_URL_CACHE_PREFIX + storagePath) {
+        window.localStorage.removeItem(key)
+      }
+    }
+    window.localStorage.setItem(VIDEO_URL_CACHE_PREFIX + storagePath, url)
+  } catch {
+    // localStorage indisponível ou cheio — ignora
+  }
+}
 
 type FeaturedVideoFloatingButtonProps = {
   topSlot?: ReactNode
@@ -55,10 +79,17 @@ export default function FeaturedVideoFloatingButton({
       }
 
       if (featuredVideo.storagePath) {
+        const cached = getCachedVideoUrl(featuredVideo.storagePath)
+        if (cached) {
+          if (!isCancelled) setResolvedVideoUrl(cached)
+          return
+        }
         try {
           const url = await getDownloadURL(storageRef(storage, featuredVideo.storagePath))
           if (!isCancelled) {
-            setResolvedVideoUrl(isHttpUrl(url) ? url : null)
+            const validUrl = isHttpUrl(url) ? url : null
+            if (validUrl) setCachedVideoUrl(featuredVideo.storagePath, validUrl)
+            setResolvedVideoUrl(validUrl)
           }
           return
         } catch {
@@ -118,9 +149,15 @@ export default function FeaturedVideoFloatingButton({
         {resolvedVideoUrl ? (
           <div className="relative">
             {showNotificationBadge ? (
-              <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-amber-300/45 bg-amber-500/90 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-black shadow-[0_10px_25px_rgba(0,0,0,0.35)]">
-                Video novo
-              </span>
+              <div className="pointer-events-none absolute -top-12 left-1/2 flex -translate-x-1/2 flex-col items-center">
+                <span className="whitespace-nowrap rounded-full border border-amber-300 bg-amber-500 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-black shadow-[0_10px_25px_rgba(0,0,0,0.35)]">
+                  Video novo
+                </span>
+                <span className="relative -mt-[1px] h-[7px] w-3">
+                  <span className="absolute left-1/2 top-0 -translate-x-1/2 h-0 w-0 border-x-[6px] border-t-[7px] border-x-transparent border-t-amber-300" />
+                  <span className="absolute left-1/2 top-0 -translate-x-1/2 h-0 w-0 border-x-[5px] border-t-[6px] border-x-transparent border-t-amber-500" />
+                </span>
+              </div>
             ) : null}
             <button
               aria-label="Abrir video em destaque"
@@ -128,8 +165,17 @@ export default function FeaturedVideoFloatingButton({
               type="button"
               onClick={handleOpenModal}
             >
-              <span className="pointer-events-none absolute -inset-2 rounded-full bg-black/85 blur-md" />
-              <span className="absolute inset-0 rounded-full bg-black/85" />
+              {/* Frame do vídeo como capa — sem crossOrigin, sem CORS */}
+              <video
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                muted
+                playsInline
+                preload="metadata"
+                src={resolvedVideoUrl ?? undefined}
+                onLoadedMetadata={(e) => { e.currentTarget.currentTime = 1 }}
+              />
+              <span className="pointer-events-none absolute -inset-2 rounded-full bg-black/40 blur-md" />
+              <span className="absolute inset-0 rounded-full bg-black/40" />
               <span className="absolute inset-0 rounded-full border border-neon-pink/35 animate-ping opacity-35" />
               <span className="material-symbols-outlined relative z-10 text-3xl">play_circle</span>
             </button>

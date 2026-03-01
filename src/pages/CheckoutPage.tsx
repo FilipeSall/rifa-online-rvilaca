@@ -435,11 +435,15 @@ export default function CheckoutPage() {
                       <span className="font-black text-white">{formatCurrency(pricing.subtotalBase)}</span>
                     </div>
                     <div className="flex items-center justify-between text-gray-300">
-                      <span>Promoção destacada</span>
+                      <span>
+                        {pricing.appliedPromotion?.discountType === 'percent'
+                          ? `Desconto por quantidade (${pricing.appliedPromotion.discountValue.toFixed(2).replace(/\.00$/, '')}%)`
+                          : 'Desconto por quantidade'}
+                      </span>
                       <span className="font-black text-emerald-300">- {formatCurrency(pricing.promotionDiscount)}</span>
                     </div>
                     <div className="flex items-center justify-between text-gray-300">
-                      <span>Subtotal após promoção</span>
+                      <span>Subtotal apos desconto por quantidade</span>
                       <span className="font-black text-white">{formatCurrency(pricing.subtotalAfterPromotion)}</span>
                     </div>
                     <div className="flex items-center justify-between text-gray-300">
@@ -453,9 +457,9 @@ export default function CheckoutPage() {
                     <p className="mt-1 text-4xl font-black text-white">
                       {amount > 0 ? formatCurrency(amount) : 'Informar valor'}
                     </p>
-                    {pricing.appliedPromotion?.label ? (
+                    {pricing.appliedPromotion?.targetQuantity ? (
                       <p className="mt-1 text-xs text-amber-100">
-                        Promoção ativa: {pricing.appliedPromotion.label}
+                        Desconto progressivo ativo para {pricing.appliedPromotion.targetQuantity}+ numeros.
                       </p>
                     ) : null}
                   </div>

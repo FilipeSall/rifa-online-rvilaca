@@ -518,13 +518,16 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   )
   const subtotal = pricingWithoutCoupon.subtotalBase
   const promotionDiscountAmount = pricingWithoutCoupon.promotionDiscount
+  const promotionDiscountPercent = pricingWithoutCoupon.appliedPromotion?.discountType === 'percent'
+    ? pricingWithoutCoupon.appliedPromotion.discountValue
+    : null
   const subtotalAfterPromotion = pricingWithoutCoupon.subtotalAfterPromotion
   const couponDiscountAmount = calculateCouponDiscount(
     subtotalAfterPromotion,
     appliedCouponDiscountType,
     appliedCouponDiscountValue,
   )
-  const discountAmount = couponDiscountAmount
+  const discountAmount = Number((promotionDiscountAmount + couponDiscountAmount).toFixed(2))
   const totalAmount = Math.max(subtotalAfterPromotion - couponDiscountAmount, 0)
   const canProceed = selectedCount >= minSelectableQuantity && !isReserving && !isAutoSelecting
 
@@ -1176,7 +1179,9 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     subtotal,
     promotionDiscountAmount,
     subtotalAfterPromotion,
+    promotionDiscountPercent,
     discountAmount,
+    couponDiscountAmount,
     totalAmount,
     canProceed,
     isReserving,

@@ -18,7 +18,6 @@ import type {
   CampaignHeroCarouselMedia,
 } from '../../../types/campaign'
 import { useCampaignForm } from '../hooks/useCampaignForm'
-import { CustomSelect } from '../../ui/CustomSelect'
 import {
   deleteCampaignFeaturedVideo,
   deleteCampaignHeroCarouselImage,
@@ -28,7 +27,7 @@ import {
 import { buildCampaignSettingsInput } from '../services/campaignSettingsFormService'
 import { formatCurrency } from '../utils/formatters'
 import { getScheduleStatusLabel, resolveCampaignScheduleStatus } from '../../../utils/campaignSchedule'
-import { calculateCampaignPricing } from '../../../utils/campaignPricing'
+import { CustomSelect } from '../../ui/CustomSelect'
 
 function applyPhoneMask(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 13)
@@ -54,13 +53,13 @@ function formatCouponValue(coupon: CampaignCoupon) {
   return formatCurrency(coupon.discountValue)
 }
 
-function createDefaultFeaturedPromotion(): CampaignFeaturedPromotion {
+function createDefaultFeaturedPromotion(targetQuantity: number): CampaignFeaturedPromotion {
   return {
     active: true,
-    targetQuantity: CAMPAIGN_PACK_QUANTITIES[0],
+    targetQuantity,
     discountType: 'percent',
     discountValue: 0,
-    label: 'Oferta especial',
+    label: 'Mais compradas',
   }
 }
 
@@ -83,13 +82,6 @@ function parseErrorMessage(error: unknown, fallback: string) {
 
   return fallback
 }
-
-const FEATURED_PROMOTION_LABEL_SUGGESTIONS = [
-  'Melhor escolha',
-  'Mais vantajoso',
-  'Oferta inteligente',
-  'O que mais compensa',
-]
 
 export default function CampaignTab() {
   const location = useLocation()
@@ -150,10 +142,16 @@ export default function CampaignTab() {
   const [isUploadingFeaturedVideo, setIsUploadingFeaturedVideo] = useState(false)
   const [isRemovingFeaturedVideo, setIsRemovingFeaturedVideo] = useState(false)
   const [shouldHighlightScheduleInputs, setShouldHighlightScheduleInputs] = useState(false)
-  const [activeCommercialPanel, setActiveCommercialPanel] = useState<'pricing' | 'promotion'>('pricing')
 
   const activeCoupons = useMemo(() => coupons.filter((item) => item.active).length, [coupons])
   const activePackPrices = useMemo(() => packPrices.filter((item) => item.active).length, [packPrices])
+  const promotionDiscountTypeOptions = useMemo(
+    () => [
+      { value: 'percent', label: 'Percentual (%)' },
+      { value: 'fixed', label: 'Valor fixo (R$)' },
+    ] as const,
+    [],
+  )
   const heroCarouselItems = useMemo(
     () => normalizeHeroCarouselOrder(midias.heroCarousel),
     [midias.heroCarousel],
@@ -285,70 +283,31 @@ export default function CampaignTab() {
     : 'rounded-xl border border-white/10 bg-black/25 px-4 py-3'
   const isEndOnSameDayAsStart = Boolean(startsAt && endsAt && startsAt === endsAt)
   const minEndTime = isEndOnSameDayAsStart && startsAtTime ? startsAtTime : undefined
-  const hasActiveFeaturedPromotion = Boolean(featuredPromotion?.active)
   const safePricePerCota = useMemo(() => {
     const parsed = Number(pricePerCotaInput.replace(',', '.'))
     return Number.isFinite(parsed) && parsed > 0 ? Number(parsed.toFixed(2)) : campaign.pricePerCota
   }, [campaign.pricePerCota, pricePerCotaInput])
-  const computedPackPrices = useMemo(
-    () =>
-      packPrices.slice(0, CAMPAIGN_PACK_QUANTITIES.length).map((item, index) => {
-        const fallbackQuantity = CAMPAIGN_PACK_QUANTITIES[index] ?? CAMPAIGN_PACK_QUANTITIES[0]
-        const quantity = Number.isInteger(item.quantity) && item.quantity > 0 ? item.quantity : fallbackQuantity
-        return {
-          quantity,
-          price: Number((quantity * safePricePerCota).toFixed(2)),
-          active: item.active !== false,
-        }
-      }),
-    [packPrices, safePricePerCota],
-  )
-  const availablePromotionQuantities = useMemo(
-    () =>
-      computedPackPrices
-        .filter((item) => item.active)
-        .map((item) => item.quantity)
-        .filter((quantity, index, list) => list.indexOf(quantity) === index)
-        .sort((left, right) => left - right),
-    [computedPackPrices],
-  )
-  const fallbackPromotionQuantity = availablePromotionQuantities[0] ?? CAMPAIGN_PACK_QUANTITIES[0]
-  const promotionDraft = featuredPromotion || {
-    ...createDefaultFeaturedPromotion(),
-    targetQuantity: fallbackPromotionQuantity,
-  }
-  const featuredPromotionPreview = useMemo(() => {
-    const promotion = featuredPromotion || createDefaultFeaturedPromotion()
-    const targetQuantity = availablePromotionQuantities.some((quantity) => quantity === promotion.targetQuantity)
-      ? promotion.targetQuantity
-      : fallbackPromotionQuantity
-    const pricing = calculateCampaignPricing(targetQuantity, {
-      pricePerCota: safePricePerCota,
-      packPrices: computedPackPrices,
-      featuredPromotion: {
-        ...promotion,
-        targetQuantity,
-        active: true,
-      },
-    })
-
-    const normalizedLabel = promotion.label.trim().slice(0, 80)
-    const label = normalizedLabel || FEATURED_PROMOTION_LABEL_SUGGESTIONS[0]
-    const savings = Number((pricing.subtotalBase - pricing.subtotalAfterPromotion).toFixed(2))
-    const copy = savings > 0
-      ? (promotion.discountType === 'percent'
-          ? `Economize ${promotion.discountValue}% e pague ${formatCurrency(pricing.subtotalAfterPromotion)}`
-          : `Economize ${formatCurrency(savings)} e pague ${formatCurrency(pricing.subtotalAfterPromotion)}`)
-      : 'Sem desconto no momento. Use a label para destacar o bracket no site.'
+  const defaultPromotionQuantity = CAMPAIGN_PACK_QUANTITIES[2] ?? CAMPAIGN_PACK_QUANTITIES[0]
+  const promotionDraft = useMemo(() => {
+    const base = featuredPromotion || createDefaultFeaturedPromotion(defaultPromotionQuantity)
+    const targetQuantity = Number.isInteger(base.targetQuantity) && base.targetQuantity > 0
+      ? Math.min(base.targetQuantity, MAX_QUANTITY)
+      : defaultPromotionQuantity
+    const discountType: CampaignCouponDiscountType = base.discountType === 'fixed' ? 'fixed' : 'percent'
+    const rawDiscount = Number(base.discountValue)
+    const discountValue = Number.isFinite(rawDiscount) && rawDiscount >= 0
+      ? Number((discountType === 'percent' ? Math.min(rawDiscount, 100) : rawDiscount).toFixed(2))
+      : 0
 
     return {
-      label,
-      copy,
-      promotion,
-      pricing,
-      savings,
+      ...base,
+      active: true,
+      targetQuantity,
+      discountType,
+      discountValue,
+      label: 'Mais compradas',
     }
-  }, [availablePromotionQuantities, computedPackPrices, fallbackPromotionQuantity, featuredPromotion, safePricePerCota])
+  }, [defaultPromotionQuantity, featuredPromotion])
 
   useEffect(() => {
     if (!heroAltInput.trim()) {
@@ -417,75 +376,82 @@ export default function CampaignTab() {
     )))
   }
 
-  const handleConfigurePackPromotion = (quantity: number) => {
-    const nextPromotionBase = featuredPromotion || createDefaultFeaturedPromotion()
-    setActiveCommercialPanel('promotion')
-    setFeaturedPromotion({
-      ...nextPromotionBase,
-      targetQuantity: quantity,
-      active: true,
-      label: nextPromotionBase.label.trim() || FEATURED_PROMOTION_LABEL_SUGGESTIONS[0],
-    })
+  const handleToggleMostPurchasedTag = (packIndex: number) => {
+    setPackPrices((current) => {
+      const selectedPack = current[packIndex]
+      const isActive = selectedPack?.mostPurchasedTag !== true
 
-    toast.success(`Promocao configurada para o bracket de ${quantity} numeros.`, {
-      toastId: 'campaign-promotion-row-activated',
-      icon: (
-        <span className="material-symbols-outlined text-[18px] leading-none text-amber-300">
-          trending_up
-        </span>
-      ),
-      style: {
-        border: '1px solid rgba(251, 191, 36, 0.65)',
-        background: 'linear-gradient(135deg, rgba(38,31,10,0.95) 0%, rgba(72,55,10,0.92) 100%)',
-        boxShadow: '0 0 0 1px rgba(251,191,36,0.2), 0 12px 30px rgba(245,158,11,0.22)',
-        color: '#fef3c7',
-      },
+      if (!isActive) {
+        return current.map((item, index) => (
+          index === packIndex
+            ? {
+                ...item,
+                mostPurchasedTag: false,
+              }
+            : item
+        ))
+      }
+
+      return current.map((item, index) => ({
+        ...item,
+        mostPurchasedTag: index === packIndex,
+      }))
     })
   }
 
-  const handleAddFeaturedPromotion = () => {
-    const nextPromotionBase = featuredPromotion || createDefaultFeaturedPromotion()
-    const targetQuantity = availablePromotionQuantities.some((quantity) => quantity === nextPromotionBase.targetQuantity)
-      ? nextPromotionBase.targetQuantity
-      : fallbackPromotionQuantity
+  const handlePromotionMinimumQuantityChange = (rawValue: string) => {
+    const parsed = Number(rawValue.replace(/[^0-9]/g, ''))
 
-    setActiveCommercialPanel('promotion')
-    setFeaturedPromotion({
-      ...nextPromotionBase,
-      targetQuantity,
-      active: true,
-      label: nextPromotionBase.label.trim() || FEATURED_PROMOTION_LABEL_SUGGESTIONS[0],
-    })
-  }
-
-  const handleRemoveFeaturedPromotion = () => {
-    setFeaturedPromotion(null)
-  }
-
-  const handleFeaturedPromotionFieldChange = (
-    field: keyof CampaignFeaturedPromotion,
-    value: string | number | boolean,
-  ) => {
     setFeaturedPromotion((current) => {
-      const base = current || createDefaultFeaturedPromotion()
-      if (field === 'targetQuantity') {
-        return { ...base, targetQuantity: Number(value) }
-      }
-      if (field === 'discountValue') {
-        const parsed = Number(value)
-        return { ...base, discountValue: Number.isFinite(parsed) && parsed >= 0 ? Number(parsed.toFixed(2)) : 0 }
-      }
-      if (field === 'active') {
-        return { ...base, active: Boolean(value) }
-      }
-      if (field === 'discountType') {
-        return { ...base, discountType: value === 'fixed' ? 'fixed' : 'percent' }
-      }
-      if (field === 'label') {
-        return { ...base, label: `${value}`.slice(0, 80) }
+      const base = current || createDefaultFeaturedPromotion(defaultPromotionQuantity)
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        return {
+          ...base,
+          active: true,
+          label: 'Mais compradas',
+        }
       }
 
-      return base
+      return {
+        ...base,
+        active: true,
+        targetQuantity: Math.min(parsed, MAX_QUANTITY),
+        label: 'Mais compradas',
+      }
+    })
+  }
+
+  const handlePromotionDiscountTypeChange = (nextDiscountType: CampaignCouponDiscountType) => {
+    setFeaturedPromotion((current) => {
+      const base = current || createDefaultFeaturedPromotion(defaultPromotionQuantity)
+      const normalizedValue = nextDiscountType === 'percent'
+        ? Number(Math.min(base.discountValue, 100).toFixed(2))
+        : Number(base.discountValue.toFixed(2))
+
+      return {
+        ...base,
+        active: true,
+        discountType: nextDiscountType,
+        discountValue: normalizedValue,
+        label: 'Mais compradas',
+      }
+    })
+  }
+
+  const handlePromotionDiscountInputChange = (rawValue: string) => {
+    const parsed = Number(rawValue.replace(',', '.'))
+
+    setFeaturedPromotion((current) => {
+      const base = current || createDefaultFeaturedPromotion(defaultPromotionQuantity)
+      const normalizedValue = Number.isFinite(parsed) && parsed >= 0
+        ? Number((base.discountType === 'percent' ? Math.min(parsed, 100) : parsed).toFixed(2))
+        : 0
+      return {
+        ...base,
+        active: true,
+        discountValue: normalizedValue,
+        label: 'Mais compradas',
+      }
     })
   }
 
@@ -884,7 +850,7 @@ export default function CampaignTab() {
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-neon-pink">Central da Campanha</p>
             <h3 className="mt-2 font-luxury text-3xl font-bold text-white">Operacao comercial com controle total</h3>
             <p className="mt-3 max-w-2xl text-sm text-gray-300">
-              Configure preco, brackets de tickets, promocao e cupons da campanha em tempo real.
+              Configure preco, brackets de tickets, tag mais compradas, desconto progressivo e cupons da campanha.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -952,7 +918,7 @@ export default function CampaignTab() {
           <article className="rounded-3xl border border-white/10 bg-luxury-card p-5">
             <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
               <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-100">3. Regras comerciais</p>
-              <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
                   <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-ticket-price">
                     Preco por cota (R$)
@@ -966,257 +932,131 @@ export default function CampaignTab() {
                     onChange={(event) => setPricePerCotaInput(event.target.value)}
                   />
                 </div>
+                <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 md:col-span-2">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Desconto por venda</p>
+                  <p className="mt-1 text-[11px] text-gray-300">
+                    Numero de ingressos para obter descontos por venda.
+                  </p>
+                  <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div className="md:col-span-1">
+                      <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-discount-min-quantity">
+                        Quantidade minima
+                      </label>
+                      <input
+                        id="campaign-discount-min-quantity"
+                        className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-neon-pink/60"
+                        inputMode="numeric"
+                        type="text"
+                        value={String(promotionDraft.targetQuantity)}
+                        onChange={(event) => handlePromotionMinimumQuantityChange(event.target.value)}
+                      />
+                    </div>
+                    <div className="md:col-span-1">
+                      <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-discount-type">
+                        Tipo de desconto
+                      </label>
+                      <CustomSelect
+                        id="campaign-discount-type"
+                        value={promotionDraft.discountType}
+                        options={promotionDiscountTypeOptions}
+                        onChange={(nextValue) => handlePromotionDiscountTypeChange(nextValue === 'fixed' ? 'fixed' : 'percent')}
+                      />
+                    </div>
+                    <div className="md:col-span-1">
+                      <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-discount-value">
+                        {promotionDraft.discountType === 'percent' ? 'Valor do desconto (%)' : 'Valor fixo do desconto (R$)'}
+                      </label>
+                      <input
+                        id="campaign-discount-value"
+                        className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-neon-pink/60"
+                        inputMode="decimal"
+                        type="text"
+                        value={promotionDraft.discountValue.toString().replace('.', ',')}
+                        onChange={(event) => handlePromotionDiscountInputChange(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
+              <p className="mt-3 text-[11px] text-gray-400">
+                O desconto progressivo aplica automaticamente quando a compra atingir a quantidade minima configurada.
+              </p>
 
               <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">Tabela de 8 brackets e promocao</p>
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">Tabela de 8 brackets e tag mais compradas</p>
                   <span className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-100">
                     {activePackPrices} ativos
                   </span>
                 </div>
 
-                <div className="mt-3 inline-flex rounded-lg border border-white/10 bg-black/35 p-1">
-                  <button
-                    type="button"
-                    className={`rounded-md px-3 py-2 text-[11px] font-bold uppercase tracking-[0.1em] ${
-                      activeCommercialPanel === 'pricing'
-                        ? 'bg-cyan-300 text-black'
-                        : 'text-gray-300 hover:text-white'
-                    }`}
-                    onClick={() => setActiveCommercialPanel('pricing')}
-                  >
-                    Selecao de precos
-                  </button>
-                  <button
-                    type="button"
-                    className={`rounded-md px-3 py-2 text-[11px] font-bold uppercase tracking-[0.1em] ${
-                      activeCommercialPanel === 'promotion'
-                        ? 'bg-amber-300 text-black'
-                        : 'text-gray-300 hover:text-white'
-                    }`}
-                    onClick={() => setActiveCommercialPanel('promotion')}
-                  >
-                    Promocao em destaque
-                  </button>
-                </div>
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {packPrices.slice(0, CAMPAIGN_PACK_QUANTITIES.length).map((pack, index) => {
+                    const quantity = pack.quantity
+                    const currentPrice = Number((quantity * safePricePerCota).toFixed(2))
+                    const isMostPurchasedTagForRow = pack.mostPurchasedTag === true
 
-                {activeCommercialPanel === 'pricing' ? (
-                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {packPrices.slice(0, CAMPAIGN_PACK_QUANTITIES.length).map((pack, index) => {
-                      const quantity = pack.quantity
-                      const currentPrice = Number((quantity * safePricePerCota).toFixed(2))
-                      const isPromotionActiveForRow = Boolean(
-                        featuredPromotion?.active && featuredPromotion.targetQuantity === quantity,
-                      )
-
-                      return (
-                        <div
-                          key={`pack-${index}`}
-                          className={`rounded-lg border p-3 transition-colors ${
-                            isPromotionActiveForRow
-                              ? 'border-amber-300/45 bg-amber-500/10'
-                              : 'border-white/10 bg-black/30'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-xs font-bold uppercase tracking-[0.13em] text-white">Bracket {index + 1}</p>
-                            <button
-                              type="button"
-                              className={`rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${
-                                pack.active
-                                  ? 'border border-emerald-300/40 bg-emerald-500/15 text-emerald-200'
-                                  : 'border border-gray-500/40 bg-gray-500/10 text-gray-300'
-                              }`}
-                              onClick={() => handlePackPriceActiveToggle(index)}
-                            >
-                              {pack.active ? 'Ativo' : 'Inativo'}
-                            </button>
-                          </div>
-                          <label className="mt-2 block text-[10px] uppercase tracking-[0.13em] text-cyan-100" htmlFor={`campaign-pack-quantity-${index}`}>
-                            Numero de cotas
-                          </label>
-                          <input
-                            id={`campaign-pack-quantity-${index}`}
-                            className="mt-2 h-9 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none focus:border-cyan-200/70"
-                            inputMode="numeric"
-                            type="text"
-                            value={String(quantity)}
-                            onChange={(event) => handlePackQuantityInputChange(index, event.target.value)}
-                          />
-                          <div className="mt-2 flex items-center gap-2">
-                            <span className="text-xs font-semibold text-cyan-100">Valor automatico:</span>
-                            <span className="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm font-semibold text-white">
-                              {formatCurrency(currentPrice)}
-                            </span>
-                          </div>
+                    return (
+                      <div
+                        key={`pack-${index}`}
+                        className={`relative rounded-lg border p-3 transition-colors ${
+                          isMostPurchasedTagForRow
+                            ? 'border-amber-300/45 bg-amber-500/10'
+                            : 'border-white/10 bg-black/30'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-bold uppercase tracking-[0.13em] text-white">Bracket {index + 1}</p>
                           <button
                             type="button"
-                            className={`mt-3 inline-flex h-8 w-full items-center justify-center rounded-md border px-2 text-[10px] font-black uppercase tracking-[0.11em] transition ${
-                              isPromotionActiveForRow
-                                ? 'border-amber-300/55 bg-amber-300/25 text-amber-100'
-                                : 'border-amber-300/35 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'
-                            } disabled:cursor-not-allowed disabled:opacity-55`}
-                            onClick={() => handleConfigurePackPromotion(quantity)}
-                            disabled={pack.active === false}
+                            className={`rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${
+                              pack.active
+                                ? 'border border-emerald-300/40 bg-emerald-500/15 text-emerald-200'
+                                : 'border border-gray-500/40 bg-gray-500/10 text-gray-300'
+                            }`}
+                            onClick={() => handlePackPriceActiveToggle(index)}
                           >
-                            {isPromotionActiveForRow ? 'Editar promocao' : 'Adicionar promocao'}
+                            {pack.active ? 'Ativo' : 'Inativo'}
                           </button>
-                          {pack.active === false ? (
-                            <p className="mt-2 text-[10px] text-gray-500">
-                              Ative este pacote para permitir promocao.
-                            </p>
-                          ) : null}
                         </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div
-                    className={`mt-4 rounded-2xl p-4 transition-all ${
-                      hasActiveFeaturedPromotion
-                        ? 'bg-[linear-gradient(130deg,rgba(120,90,8,0.22),rgba(10,10,10,0.55))] shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_0_40px_rgba(245,158,11,0.12)]'
-                        : 'bg-amber-500/5'
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.16em] text-amber-200">Promocao em destaque</p>
-                        <p className="mt-1 text-xs text-amber-100/85">
-                          Escolha um bracket, opcionalmente informe desconto e defina a label exibida no site.
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
+                        <label className="mt-2 block text-[10px] uppercase tracking-[0.13em] text-cyan-100" htmlFor={`campaign-pack-quantity-${index}`}>
+                          Numero de cotas
+                        </label>
+                        <input
+                          id={`campaign-pack-quantity-${index}`}
+                          className="mt-2 h-9 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none focus:border-cyan-200/70"
+                          inputMode="numeric"
+                          type="text"
+                          value={String(quantity)}
+                          onChange={(event) => handlePackQuantityInputChange(index, event.target.value)}
+                        />
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className="text-xs font-semibold text-cyan-100">Valor automatico:</span>
+                          <span className="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm font-semibold text-white">
+                            {formatCurrency(currentPrice)}
+                          </span>
+                        </div>
                         <button
                           type="button"
-                          className="rounded-md border border-amber-300/35 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-amber-200 hover:bg-amber-500/20"
-                          onClick={handleAddFeaturedPromotion}
+                          className={`mt-3 inline-flex h-8 w-full items-center justify-center rounded-md border px-2 text-[10px] font-black uppercase tracking-[0.11em] transition ${
+                            isMostPurchasedTagForRow
+                              ? 'border-amber-300/55 bg-amber-300/25 text-amber-100'
+                              : 'border-amber-300/35 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'
+                          } disabled:cursor-not-allowed disabled:opacity-55`}
+                          onClick={() => handleToggleMostPurchasedTag(index)}
+                          disabled={pack.active === false}
                         >
-                          Adicionar promocao
+                          {isMostPurchasedTagForRow ? 'Tag ativa' : 'Tag mais compradas'}
                         </button>
-                        {hasActiveFeaturedPromotion ? (
-                          <button
-                            type="button"
-                            className="rounded-md border border-gray-500/40 bg-gray-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-300 hover:bg-gray-500/20"
-                            onClick={handleRemoveFeaturedPromotion}
-                          >
-                            Remover
-                          </button>
+                        {pack.active === false ? (
+                          <p className="mt-2 text-[10px] text-gray-500">
+                            Ative este pacote para selecionar a tag.
+                          </p>
                         ) : null}
                       </div>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-                      <div className="rounded-xl border border-amber-300/25 bg-black/30 p-3">
-                        <label className="text-[10px] uppercase tracking-[0.13em] text-amber-100" htmlFor="featured-promotion-bracket">
-                          Bracket da promocao
-                        </label>
-                        <CustomSelect
-                          id="featured-promotion-bracket"
-                          className="mt-0"
-                          value={String(promotionDraft.targetQuantity)}
-                          disabled={availablePromotionQuantities.length === 0 || !hasActiveFeaturedPromotion}
-                          onChange={(value) => handleFeaturedPromotionFieldChange('targetQuantity', Number(value))}
-                          options={availablePromotionQuantities.map((quantity) => ({
-                            value: String(quantity),
-                            label: `Bracket de ${quantity} numeros`,
-                          }))}
-                        />
-                      </div>
-
-                      <div className="rounded-xl border border-amber-300/25 bg-black/30 p-3">
-                        <p className="text-[10px] uppercase tracking-[0.13em] text-amber-100">Tipo do desconto</p>
-                        <div className="mt-2 inline-flex rounded-md border border-amber-300/30 bg-black/35 p-1">
-                          <button
-                            type="button"
-                            className={`rounded px-3 py-1.5 text-xs font-bold ${
-                              promotionDraft.discountType === 'percent' ? 'bg-amber-300 text-black' : 'text-gray-300'
-                            }`}
-                            disabled={!hasActiveFeaturedPromotion}
-                            onClick={() => handleFeaturedPromotionFieldChange('discountType', 'percent')}
-                          >
-                            %
-                          </button>
-                          <button
-                            type="button"
-                            className={`rounded px-3 py-1.5 text-xs font-bold ${
-                              promotionDraft.discountType === 'fixed' ? 'bg-amber-300 text-black' : 'text-gray-300'
-                            }`}
-                            disabled={!hasActiveFeaturedPromotion}
-                            onClick={() => handleFeaturedPromotionFieldChange('discountType', 'fixed')}
-                          >
-                            Fixo
-                          </button>
-                        </div>
-                        <label className="text-[10px] uppercase tracking-[0.13em] text-amber-100" htmlFor="featured-promotion-discount">
-                          Valor do desconto (opcional)
-                        </label>
-                        <input
-                          id="featured-promotion-discount"
-                          className="mt-2 h-10 w-full rounded-md border border-amber-300/30 bg-black/35 px-3 text-sm font-semibold text-white outline-none focus:border-amber-200/80"
-                          inputMode="decimal"
-                          type="text"
-                          value={(promotionDraft.discountValue ?? 0).toString().replace('.', ',')}
-                          placeholder={promotionDraft.discountType === 'percent' ? 'Ex: 10' : 'Ex: 25,00'}
-                          disabled={!hasActiveFeaturedPromotion}
-                          onChange={(event) => handleFeaturedPromotionFieldChange('discountValue', Number(event.target.value.replace(',', '.')))}
-                        />
-                        <p className="mt-2 text-[11px] text-gray-300">
-                          {promotionDraft.discountType === 'percent'
-                            ? 'Informe percentual. Ex: 10 = 10% de desconto.'
-                            : 'Informe valor fixo em reais. Ex: 25 = R$ 25,00 de desconto.'}
-                        </p>
-                      </div>
-
-                      <div className="rounded-xl border border-amber-300/25 bg-black/30 p-3 lg:col-span-2">
-                        <label className="text-[10px] uppercase tracking-[0.13em] text-amber-100" htmlFor="featured-promotion-label">
-                          Label promocional
-                        </label>
-                        <input
-                          id="featured-promotion-label"
-                          className="mt-2 h-10 w-full rounded-md border border-amber-300/30 bg-black/35 px-3 text-sm font-semibold text-white outline-none focus:border-amber-200/80"
-                          type="text"
-                          value={promotionDraft.label}
-                          disabled={!hasActiveFeaturedPromotion}
-                          onChange={(event) => handleFeaturedPromotionFieldChange('label', event.target.value)}
-                          placeholder="Ex: Melhor escolha"
-                        />
-                        <p className="mt-2 text-[11px] text-gray-300">
-                          Essa label aparece sobre o bracket na home e na pagina de compra manual.
-                        </p>
-                      </div>
-
-                      <div className="rounded-xl border border-cyan-300/25 bg-cyan-500/10 p-3 lg:col-span-2">
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-100">Preview ao vivo na home</p>
-                        <div className="mt-3 rounded-lg border border-white/15 bg-black/35 p-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="rounded-full border border-amber-300/45 bg-amber-400/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-amber-100">
-                              {featuredPromotionPreview.label}
-                            </span>
-                            <span className="text-xs font-semibold text-white">
-                              {featuredPromotionPreview.promotion.targetQuantity} cotas
-                            </span>
-                          </div>
-                          <p className="mt-3 text-sm font-semibold text-cyan-50">{featuredPromotionPreview.copy}</p>
-                          <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
-                            <div className="rounded-md border border-white/10 bg-black/30 px-2.5 py-2">
-                              <p className="text-[10px] uppercase tracking-[0.11em] text-gray-400">Base</p>
-                              <p className="mt-1 font-bold text-white">{formatCurrency(featuredPromotionPreview.pricing.subtotalBase)}</p>
-                            </div>
-                            <div className="rounded-md border border-emerald-300/20 bg-emerald-500/10 px-2.5 py-2">
-                              <p className="text-[10px] uppercase tracking-[0.11em] text-emerald-200">Desconto</p>
-                              <p className="mt-1 font-bold text-emerald-100">- {formatCurrency(featuredPromotionPreview.savings)}</p>
-                            </div>
-                            <div className="rounded-md border border-amber-300/25 bg-amber-500/10 px-2.5 py-2">
-                              <p className="text-[10px] uppercase tracking-[0.11em] text-amber-100">Preco final</p>
-                              <p className="mt-1 font-bold text-amber-50">{formatCurrency(featuredPromotionPreview.pricing.subtotalAfterPromotion)}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                    )
+                  })}
+                </div>
               </div>
             </section>
           </article>

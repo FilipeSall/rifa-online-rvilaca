@@ -43,7 +43,7 @@ function calculatePromotionDiscount(
   quantity: number,
   promotion: CampaignFeaturedPromotion | null,
 ) {
-  if (!promotion || !promotion.active || subtotalBase <= 0 || promotion.targetQuantity !== quantity) {
+  if (!promotion || !promotion.active || subtotalBase <= 0 || quantity < promotion.targetQuantity) {
     return 0
   }
 
@@ -92,7 +92,7 @@ export function calculateCampaignPricing(
     couponDiscount,
     total,
     appliedPromotion:
-      campaign.featuredPromotion && campaign.featuredPromotion.active && campaign.featuredPromotion.targetQuantity === safeQuantity
+      campaign.featuredPromotion && campaign.featuredPromotion.active && safeQuantity >= campaign.featuredPromotion.targetQuantity
         ? campaign.featuredPromotion
         : null,
   }

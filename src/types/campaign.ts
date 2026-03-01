@@ -13,6 +13,7 @@ export type CampaignPackPrice = {
   quantity: number
   price: number
   active: boolean
+  mostPurchasedTag: boolean
 }
 
 export type CampaignFeaturedPromotion = {

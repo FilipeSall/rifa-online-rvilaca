@@ -8,7 +8,9 @@ type PurchaseSummaryCardProps = {
   minQuantity: number
   unitPrice: number
   subtotal: number
-  discountAmount: number
+  promotionDiscountAmount: number
+  promotionDiscountPercent: number | null
+  couponDiscountAmount: number
   totalAmount: number
   appliedCoupon: string | null
   couponCode: string
@@ -32,7 +34,9 @@ export default function PurchaseSummaryCard({
   minQuantity,
   unitPrice,
   subtotal,
-  discountAmount,
+  promotionDiscountAmount,
+  promotionDiscountPercent,
+  couponDiscountAmount,
   totalAmount,
   appliedCoupon,
   couponCode,
@@ -52,6 +56,9 @@ export default function PurchaseSummaryCard({
 }: PurchaseSummaryCardProps) {
   const formattedSelectedNumbers = formatTicketNumbers(selectedNumbers)
   const isAutomaticSelection = selectionMode === 'automatico'
+  const promotionDiscountLabel = promotionDiscountPercent !== null
+    ? `Desconto (${promotionDiscountPercent.toFixed(2).replace(/\.00$/, '')}%)`
+    : 'Desconto por quantidade'
 
   return (
     <div className={`${isSticky ? 'sticky top-24 ' : ''}rounded-2xl border border-neon-pink/25 bg-luxury-card p-6 shadow-2xl`}>
@@ -72,8 +79,12 @@ export default function PurchaseSummaryCard({
           <span className="font-bold text-white">{formatCurrency(subtotal)}</span>
         </div>
         <div className="flex justify-between text-gray-300">
-          <span>Desconto ({appliedCoupon ?? 'sem cupom'})</span>
-          <span className="font-bold text-emerald-300">- {formatCurrency(discountAmount)}</span>
+          <span>{promotionDiscountLabel}</span>
+          <span className="font-bold text-emerald-300">- {formatCurrency(promotionDiscountAmount)}</span>
+        </div>
+        <div className="flex justify-between text-gray-300">
+          <span>Desconto cupom ({appliedCoupon ?? 'sem cupom'})</span>
+          <span className="font-bold text-cyan-200">- {formatCurrency(couponDiscountAmount)}</span>
         </div>
       </div>
 

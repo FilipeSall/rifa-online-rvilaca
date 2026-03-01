@@ -162,6 +162,7 @@ function sanitizeCampaignPackPrices(value: unknown, unitPriceFallback: number): 
             quantity,
             price: Number((quantity * unitPriceFallback).toFixed(2)),
             active: item.active !== false,
+            mostPurchasedTag: item.mostPurchasedTag === true,
         })
         used.add(quantity)
 
@@ -181,46 +182,54 @@ function sanitizeCampaignPackPrices(value: unknown, unitPriceFallback: number): 
             quantity: fallbackQuantity,
             price: Number((fallbackQuantity * unitPriceFallback).toFixed(2)),
             active: true,
+            mostPurchasedTag: false,
         })
         used.add(fallbackQuantity)
     }
 
-    return normalized
+    let hasMostPurchasedTag = false
+    return normalized.map((item) => {
+      if (!item.mostPurchasedTag) {
+        return item
+      }
+      if (hasMostPurchasedTag) {
+        return {
+          ...item,
+          mostPurchasedTag: false,
+        }
+      }
+
+      hasMostPurchasedTag = true
+      return item
+    })
 }
 
-function sanitizeCampaignFeaturedPromotion(value: unknown, allowedQuantities?: number[]): CampaignFeaturedPromotion | null {
-    if (!value || typeof value !== 'object') {
-        return null
-    }
+function sanitizeCampaignFeaturedPromotion(value: unknown): CampaignFeaturedPromotion | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
 
     const payload = value as Record<string, unknown>
-    const targetQuantity = Number(payload.targetQuantity)
-    if (!Number.isInteger(targetQuantity) || targetQuantity <= 0 || targetQuantity > MAX_QUANTITY) {
-        return null
-    }
-    if (Array.isArray(allowedQuantities) && !allowedQuantities.includes(targetQuantity)) {
-        return null
-    }
+  const targetQuantity = Number(payload.targetQuantity)
+  if (!Number.isInteger(targetQuantity) || targetQuantity <= 0 || targetQuantity > MAX_QUANTITY) {
+    return null
+  }
 
-    const discountType: CampaignCouponDiscountType = payload.discountType === 'fixed' ? 'fixed' : 'percent'
-    const rawValue = Number(payload.discountValue)
-    if (!Number.isFinite(rawValue) || rawValue < 0) {
-        return null
-    }
+  const discountType = sanitizeCouponDiscountType(payload.discountType)
+  const rawValue = Number(payload.discountValue)
+  if (!Number.isFinite(rawValue) || rawValue < 0) {
+    return null
+  }
 
-    const discountValue = discountType === 'percent'
-        ? Number(Math.min(rawValue, 100).toFixed(2))
-        : Number(rawValue.toFixed(2))
+  const discountValue = Number((discountType === 'percent' ? Math.min(rawValue, 100) : rawValue).toFixed(2))
 
-    const label = typeof payload.label === 'string' ? payload.label.trim().slice(0, 80) : ''
-
-    return {
-        active: payload.active === true,
-        targetQuantity,
-        discountType,
-        discountValue,
-        label,
-    }
+  return {
+    active: payload.active === true,
+    targetQuantity,
+    discountType,
+    discountValue,
+    label: 'Mais compradas',
+  }
 }
 
 function sanitizeCouponDiscountType(value: unknown): CampaignCouponDiscountType {
@@ -504,10 +513,7 @@ function mapSnapshotToSettings(raw: unknown): CampaignSettings {
         endsAt: sanitizeCampaignDate(payload.endsAt),
         endsAtTime: sanitizeCampaignTime(payload.endsAtTime),
         packPrices,
-        featuredPromotion: sanitizeCampaignFeaturedPromotion(
-            payload.featuredPromotion,
-            packPrices.map((item) => item.quantity),
-        ),
+        featuredPromotion: sanitizeCampaignFeaturedPromotion(payload.featuredPromotion),
         coupons: sanitizeCoupons(payload.coupons),
         midias: sanitizeCampaignMidias(payload.midias ?? payload.media),
     }
@@ -603,10 +609,7 @@ export function useCampaignSettings() {
                     endsAt: sanitizeCampaignDate(payload.endsAt),
                     endsAtTime: sanitizeCampaignTime(payload.endsAtTime),
                     packPrices,
-                    featuredPromotion: sanitizeCampaignFeaturedPromotion(
-                        payload.featuredPromotion,
-                        packPrices.map((item) => item.quantity),
-                    ),
+                    featuredPromotion: sanitizeCampaignFeaturedPromotion(payload.featuredPromotion),
                     coupons: sanitizeCoupons(payload.coupons),
                     midias: sanitizeCampaignMidias(payload.midias),
                 })

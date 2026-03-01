@@ -22,5 +22,6 @@ export function buildDefaultCampaignPackPrices(unitPrice: number = DEFAULT_TICKE
     quantity,
     price: Number((quantity * unitPrice).toFixed(2)),
     active: true,
+    mostPurchasedTag: false,
   }))
 }
