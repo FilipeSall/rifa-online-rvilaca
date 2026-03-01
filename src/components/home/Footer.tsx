@@ -1,8 +1,20 @@
 import logo from '../../assets/logo.webp'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { FOOTER_NAV_LINKS, FOOTER_SUPPORT_LINKS } from '../../const/home'
+import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 
 export default function Footer() {
+  const { campaign } = useCampaignSettings()
+
+  const whatsappLink = useMemo(() => {
+    const digitsOnly = campaign.supportWhatsappNumber.replace(/\D/g, '').slice(0, 15)
+    if (digitsOnly.length < 10) return null
+    const baseUrl = `https://wa.me/${digitsOnly}`
+    const message = campaign.whatsappContactMessage?.trim()
+    return message ? `${baseUrl}?text=${encodeURIComponent(message)}` : baseUrl
+  }, [campaign.supportWhatsappNumber, campaign.whatsappContactMessage])
+
   return (
     <footer className="bg-luxury-card border-t border-white/5 pt-16 pb-8">
       <div className="container mx-auto px-4 lg:px-8">
@@ -49,13 +61,26 @@ export default function Footer() {
           <div>
             <h3 className="text-white font-bold text-xs uppercase tracking-widest mb-6">Suporte</h3>
             <ul className="space-y-3 text-sm text-gray-500">
-              {FOOTER_SUPPORT_LINKS.map((item) => (
-                <li key={item.label}>
-                  <Link className="hover:text-neon-pink transition-colors" to={item.href}>
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
+              {FOOTER_SUPPORT_LINKS.map((item) =>
+                item.label === 'Fale Conosco' ? (
+                  <li key={item.label}>
+                    <a
+                      className="hover:text-neon-pink transition-colors"
+                      href={whatsappLink ?? item.href}
+                      target={whatsappLink ? '_blank' : undefined}
+                      rel={whatsappLink ? 'noopener noreferrer' : undefined}
+                    >
+                      {item.label}
+                    </a>
+                  </li>
+                ) : (
+                  <li key={item.label}>
+                    <Link className="hover:text-neon-pink transition-colors" to={item.href}>
+                      {item.label}
+                    </Link>
+                  </li>
+                ),
+              )}
             </ul>
           </div>
 
