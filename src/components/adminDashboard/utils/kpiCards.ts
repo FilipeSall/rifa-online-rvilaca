@@ -16,6 +16,8 @@ export type KpiCardConfig = {
   metricKey: keyof DashboardKpis
   value: (value: number) => string
   tone: string
+  tag: string
+  tooltip: string
 }
 
 export const KPI_CARDS: KpiCardConfig[] = [
@@ -26,6 +28,8 @@ export const KPI_CARDS: KpiCardConfig[] = [
     metricKey: 'totalRevenue',
     value: (value: number) => formatCurrency(value),
     tone: 'from-emerald-400/20 to-emerald-500/5',
+    tag: 'acumulado',
+    tooltip: 'Soma de todos os pagamentos PIX confirmados até o momento.',
   },
   {
     id: 'vendidos',
@@ -34,6 +38,8 @@ export const KPI_CARDS: KpiCardConfig[] = [
     metricKey: 'soldNumbers',
     value: (value: number) => formatInteger(Math.round(value)),
     tone: 'from-neon-pink/30 to-neon-pink/5',
+    tag: 'confirmados',
+    tooltip: 'Cotas com pagamento PIX confirmado. Cada número pertence definitivamente ao comprador.',
   },
   {
     id: 'pedidos-pagos',
@@ -42,6 +48,8 @@ export const KPI_CARDS: KpiCardConfig[] = [
     metricKey: 'paidOrders',
     value: (value: number) => formatInteger(Math.round(value)),
     tone: 'from-sky-400/20 to-sky-500/5',
+    tag: 'transações',
+    tooltip: 'Quantidade de transações PIX concluídas. Um pedido pode conter vários números de uma vez.',
   },
   {
     id: 'receita-media-dia',
@@ -50,6 +58,8 @@ export const KPI_CARDS: KpiCardConfig[] = [
     metricKey: 'dailyRevenue',
     value: (value: number) => formatCurrency(value),
     tone: 'from-violet-400/20 to-violet-500/5',
+    tag: 'média 14d',
+    tooltip: 'Receita média diária calculada com base nos últimos 14 dias de vendas confirmadas.',
   },
   {
     id: 'ticket',
@@ -58,6 +68,8 @@ export const KPI_CARDS: KpiCardConfig[] = [
     metricKey: 'avgTicket',
     value: (value: number) => formatCurrency(value),
     tone: 'from-amber-300/20 to-amber-500/5',
+    tag: 'por pedido',
+    tooltip: 'Valor médio por pedido pago. Calculado como: faturamento total ÷ pedidos pagos.',
   },
   {
     id: 'pedidos-dia',
@@ -66,5 +78,7 @@ export const KPI_CARDS: KpiCardConfig[] = [
     metricKey: 'dailyOrders',
     value: (value: number) => formatInteger(Math.round(value)),
     tone: 'from-rose-400/20 to-rose-500/5',
+    tag: 'média 14d',
+    tooltip: 'Média de pedidos pagos por dia, calculada com base nos últimos 14 dias.',
   },
 ]

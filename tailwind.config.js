@@ -40,6 +40,7 @@ export default {
       animation: {
         'pulse-gold': 'pulseGold 2s infinite',
         shimmer: 'shimmer 1.4s infinite linear',
+        'fade-in-up': 'fadeInUp 0.18s ease-out forwards',
       },
       keyframes: {
         pulseGold: {
@@ -49,6 +50,10 @@ export default {
         shimmer: {
           '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
+        },
+        fadeInUp: {
+          '0%': { opacity: '0', transform: 'translateY(6px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
         },
       },
       backgroundImage: {

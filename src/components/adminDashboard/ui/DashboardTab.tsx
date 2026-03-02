@@ -146,8 +146,8 @@ export default function DashboardTab() {
 
         <article className="flex h-full min-w-0 flex-col rounded-2xl border border-white/10 bg-luxury-card p-5 xl:col-span-5">
           <h3 className="font-display text-xl font-bold text-white">Funil de conversao</h3>
-          <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gray-500">Distribuicao real dos volumes</p>
-          <div ref={conversionContainer.ref} className="h-72 min-w-0 pt-2">
+          <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gray-500">Pagos vs cancelados — pedidos totais</p>
+          <div ref={conversionContainer.ref} className="h-64 min-w-0 pt-2">
             {isInitialLoading ? (
               <div className="h-full w-full animate-pulse rounded-xl bg-white/[0.03]" />
             ) : canRenderConversionChart ? (
@@ -161,8 +161,8 @@ export default function DashboardTab() {
                   cy="50%"
                   dataKey="value"
                   nameKey="stage"
-                  innerRadius={55}
-                  outerRadius={98}
+                  innerRadius={50}
+                  outerRadius={88}
                   isAnimationActive
                   animationBegin={120}
                   animationDuration={900}
@@ -179,18 +179,25 @@ export default function DashboardTab() {
               <div className="h-full w-full animate-pulse rounded-xl bg-white/[0.03]" />
             )}
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="mt-3 space-y-2">
             {isInitialLoading
               ? [1, 2].map((item) => (
-                <div key={item} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div key={item} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2.5">
                   <div className="h-3 w-24 animate-pulse rounded bg-white/10" />
                   <div className="mt-2 h-4 w-12 animate-pulse rounded bg-white/10" />
                 </div>
               ))
               : distributionSeries.map((entry) => (
-                <div key={entry.stage} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-gray-500">{entry.stage}</p>
-                  <p className="mt-1 text-sm font-bold text-white">{entry.value}%</p>
+                <div key={entry.stage} className="flex items-center gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2.5">
+                  <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ backgroundColor: entry.fill }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.15em] text-gray-400">{entry.stage}</p>
+                    <p className="text-[10px] text-gray-600 truncate">{entry.description}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-bold text-white">{formatInteger(entry.value)}</p>
+                    <p className="text-[10px] text-gray-500">{entry.pct}</p>
+                  </div>
                 </div>
               ))}
           </div>

@@ -116,6 +116,7 @@ interface DashboardSummaryOutput {
   totalRevenue: number
   paidOrders: number
   soldNumbers: number
+  cancelledOrders: number
   avgTicket: number
   daily: Array<{
     date: string
@@ -1074,12 +1075,17 @@ export function createGetDashboardSummaryHandler(db: Firestore) {
     const uid = requireActiveUid(request.auth)
     await assertAdminRole(db, uid)
 
-    const [summarySnapshot, dailySnapshot] = await Promise.all([
+    const [summarySnapshot, dailySnapshot, cancelledCountResult] = await Promise.all([
       db.collection('metrics').doc('sales_summary').get(),
       db
         .collection('salesMetricsDaily')
         .orderBy('date', 'desc')
         .limit(14)
+        .get(),
+      db.collection('orders')
+        .where('status', '==', 'failed')
+        .where('type', '==', 'deposit')
+        .count()
         .get(),
     ])
 
@@ -1087,6 +1093,7 @@ export function createGetDashboardSummaryHandler(db: Firestore) {
     const paidOrders = Math.max(0, Math.floor(readMetricNumber(summarySnapshot.get('paidOrders'))))
     const soldNumbers = Math.max(0, Math.floor(readMetricNumber(summarySnapshot.get('soldNumbers'))))
     const avgTicket = paidOrders > 0 ? Number((totalRevenue / paidOrders).toFixed(2)) : 0
+    const cancelledOrders = cancelledCountResult.data().count
     const daily = dailySnapshot.docs.map((dailyDoc) => ({
       date: sanitizeString(dailyDoc.get('date')) || dailyDoc.id,
       revenue: readMetricNumber(dailyDoc.get('revenue')),
@@ -1098,6 +1105,7 @@ export function createGetDashboardSummaryHandler(db: Firestore) {
       totalRevenue,
       paidOrders,
       soldNumbers,
+      cancelledOrders,
       avgTicket,
       daily,
     } satisfies DashboardSummaryOutput

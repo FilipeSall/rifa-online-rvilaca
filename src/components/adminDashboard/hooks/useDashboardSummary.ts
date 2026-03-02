@@ -13,6 +13,7 @@ type DashboardSummaryResponse = {
   totalRevenue: number
   paidOrders: number
   soldNumbers: number
+  cancelledOrders: number
   avgTicket: number
   daily: DashboardDailyPoint[]
 }
@@ -53,6 +54,7 @@ export function useDashboardSummary() {
     totalRevenue: 0,
     paidOrders: 0,
     soldNumbers: 0,
+    cancelledOrders: 0,
     avgTicket: 0,
     daily: [],
   })
@@ -87,6 +89,7 @@ export function useDashboardSummary() {
           totalRevenue: Number(payload.totalRevenue) || 0,
           paidOrders: Number(payload.paidOrders) || 0,
           soldNumbers: Number(payload.soldNumbers) || 0,
+          cancelledOrders: Number(payload.cancelledOrders) || 0,
           avgTicket: Number(payload.avgTicket) || 0,
           daily: safeDaily,
         })
@@ -155,30 +158,30 @@ export function useDashboardSummary() {
   )
 
   const distributionSeries = useMemo(() => {
-    const paidOrders = summary.paidOrders
-    const soldNumbers = summary.soldNumbers
-    const total = paidOrders + soldNumbers
+    const pago = Math.max(0, Number.isFinite(summary.paidOrders) ? summary.paidOrders : 0)
+    const cancelado = Math.max(0, Number.isFinite(summary.cancelledOrders) ? summary.cancelledOrders : 0)
+    const total = pago + cancelado
 
-    if (total <= 0) {
-      return [
-        { stage: 'Pedidos pagos', value: 0, fill: '#ff00cc' },
-        { stage: 'Numeros vendidos', value: 0, fill: '#22c55e' },
-      ]
-    }
+    const pagoPct = total > 0 ? `${((pago / total) * 100).toFixed(1)}%` : '0%'
+    const canceladoPct = total > 0 ? `${((cancelado / total) * 100).toFixed(1)}%` : '0%'
 
     return [
       {
-        stage: 'Pedidos pagos',
-        value: Number(((paidOrders / total) * 100).toFixed(1)),
-        fill: '#ff00cc',
-      },
-      {
-        stage: 'Numeros vendidos',
-        value: Number(((soldNumbers / total) * 100).toFixed(1)),
+        stage: 'Pagos',
+        description: 'Pedidos com PIX confirmado',
+        value: pago,
+        pct: pagoPct,
         fill: '#22c55e',
       },
+      {
+        stage: 'Cancelados',
+        description: 'PIX expirado sem pagamento',
+        value: cancelado,
+        pct: canceladoPct,
+        fill: '#ff00cc',
+      },
     ]
-  }, [summary.paidOrders, summary.soldNumbers])
+  }, [summary.paidOrders, summary.cancelledOrders])
 
   return {
     isLoading,
