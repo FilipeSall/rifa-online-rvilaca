@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import FeaturedVideoFloatingButton from './components/home/FeaturedVideoFloatingButton'
@@ -17,12 +17,35 @@ import PurchaseNumbersPage from './pages/PurchaseNumbersPage'
 import RegulationPage from './pages/RegulationPage'
 import ResultsPage from './pages/ResultsPage'
 import UserDashboardPage from './pages/UserDashboardPage'
+import { useAuthStore } from './stores/authStore'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [pathname])
+  return null
+}
+
+function AdminRedirect() {
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
+  const userRole = useAuthStore((state) => state.userRole)
+  const isRoleReady = useAuthStore((state) => state.isRoleReady)
+  const wasLoggedOut = useRef(true)
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      if (wasLoggedOut.current && isRoleReady && userRole === 'admin') {
+        wasLoggedOut.current = false
+        navigate('/dashboard', { replace: true })
+      }
+    } else {
+      wasLoggedOut.current = true
+    }
+  }, [isLoggedIn, isRoleReady, userRole, navigate])
+
   return null
 }
 
@@ -37,6 +60,7 @@ export default function App() {
   return (
     <>
       <ScrollToTop />
+      <AdminRedirect />
       <ToastContainer
         position="bottom-right"
         theme="dark"

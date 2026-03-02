@@ -245,7 +245,7 @@ function sanitizeCpf(value: unknown): string | null {
   }
 
   if (digits.length !== 11) {
-    throw new HttpsError('invalid-argument', 'cpf deve conter 11 digitos')
+    return null
   }
 
   return digits
@@ -898,10 +898,6 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
 
       if (!payerName) {
         throw new HttpsError('invalid-argument', 'payerName e obrigatorio')
-      }
-
-      if (!cpf) {
-        throw new HttpsError('invalid-argument', 'cpf e obrigatorio')
       }
 
       if (!reservationSnapshot.exists) {
