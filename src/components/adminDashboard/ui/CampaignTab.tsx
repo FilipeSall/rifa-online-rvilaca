@@ -155,7 +155,10 @@ export default function CampaignTab() {
   const [isRefreshingWeeklyRanking, setIsRefreshingWeeklyRanking] = useState(false)
   const [shouldHighlightScheduleInputs, setShouldHighlightScheduleInputs] = useState(false)
   const refreshWeeklyRankingCallable = useMemo(
-    () => httpsCallable<Record<string, never>, unknown>(functions, 'refreshWeeklyTopBuyersRankingCache'),
+    () => httpsCallable<{ allowFallbackToAnyDraw?: boolean, forceRebuild?: boolean }, unknown>(
+      functions,
+      'refreshWeeklyTopBuyersRankingCache',
+    ),
     [],
   )
 
@@ -860,7 +863,9 @@ export default function CampaignTab() {
     setIsRefreshingWeeklyRanking(true)
 
     try {
-      const response = await refreshWeeklyRankingCallable({})
+      const response = await refreshWeeklyRankingCallable({
+        forceRebuild: true,
+      })
       const payloadEnvelope = response.data as CallableEnvelope<RefreshWeeklyTopBuyersRankingCacheOutput>
       const payload = payloadEnvelope && typeof payloadEnvelope === 'object' && 'result' in payloadEnvelope
         ? ((payloadEnvelope as { result?: RefreshWeeklyTopBuyersRankingCacheOutput }).result || {})
@@ -904,7 +909,7 @@ export default function CampaignTab() {
                 {isRefreshingWeeklyRanking ? 'Atualizando ranking...' : 'Atualizar ranking semanal (manual)'}
               </button>
               <p className="mt-2 text-xs text-cyan-100/80">
-                Usa o snapshot de sexta salvo no banco e atualiza o cache publico do ranking semanal.
+                Forca o recalculo do Top 50 da semana atual (domingo a sexta) e atualiza o cache publico.
               </p>
             </div>
           </div>

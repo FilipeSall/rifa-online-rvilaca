@@ -15,6 +15,7 @@ interface GetWeeklyTopBuyersRankingInput {
 interface RefreshWeeklyTopBuyersRankingCacheInput {
   limit?: number
   allowFallbackToAnyDraw?: boolean
+  forceRebuild?: boolean
 }
 
 interface ChampionRankingItem {
@@ -52,6 +53,8 @@ const CHAMPIONS_PUBLIC_CACHE_DOC_ID = '_public-champions-ranking'
 const WEEKLY_PUBLIC_CACHE_DOC_ID = '_public-weekly-top-buyers-ranking'
 const TOP_BUYERS_DRAW_HISTORY_COLLECTION = 'topBuyersDrawResults'
 const BRAZIL_FRIDAY_DAY_OF_WEEK = 5
+const LIVE_FALLBACK_SOURCE_DRAW_ID = 'live-fallback'
+const MANUAL_REBUILD_SOURCE_DRAW_ID = 'manual-rebuild'
 
 
 type RankingCacheEntry = {
@@ -322,9 +325,11 @@ async function readLatestTopBuyersDrawRankingSnapshot(
   options?: {
     fridayOnly?: boolean
     maxDocs?: number
+    targetWeekId?: string
   },
 ): Promise<WeeklyTopBuyersDrawRankingSnapshot | null> {
   const fridayOnly = options?.fridayOnly === true
+  const targetWeekId = sanitizeString(options?.targetWeekId)
   const maxDocs = Number.isInteger(options?.maxDocs) && Number(options?.maxDocs) > 0
     ? Number(options?.maxDocs)
     : 80
@@ -352,6 +357,10 @@ async function readLatestTopBuyersDrawRankingSnapshot(
 
     const window = resolveRankingWindowFromDrawData(data, drawDate)
     if (!window) {
+      continue
+    }
+
+    if (targetWeekId && window.weekId !== targetWeekId) {
       continue
     }
 
@@ -425,15 +434,18 @@ async function refreshWeeklyFrozenRankingFromDraw(
     updatedBy: 'friday-auto' | 'manual' | 'bootstrap'
     fridayOnly: boolean
     allowFallbackToAnyDraw?: boolean
+    targetWeekId?: string
   },
 ): Promise<WeeklyFrozenRankingCacheDoc | null> {
   let source = await readLatestTopBuyersDrawRankingSnapshot(db, {
     fridayOnly: options.fridayOnly,
+    targetWeekId: options.targetWeekId,
   })
 
   if (!source && options.allowFallbackToAnyDraw) {
     source = await readLatestTopBuyersDrawRankingSnapshot(db, {
       fridayOnly: false,
+      targetWeekId: options.targetWeekId,
     })
   }
 
@@ -647,6 +659,42 @@ function toRefreshWeeklyTopBuyersOutput(
   }
 }
 
+function hasDrawSnapshotSource(sourceDrawId: string | null) {
+  const normalized = sanitizeString(sourceDrawId)
+  if (!normalized) {
+    return false
+  }
+
+  return normalized !== LIVE_FALLBACK_SOURCE_DRAW_ID && normalized !== MANUAL_REBUILD_SOURCE_DRAW_ID
+}
+
+async function buildAndPublishWeeklyLiveRankingCache(
+  db: Firestore,
+  rankingWindow: RankingWindow,
+  options: {
+    sourceDrawId: string
+    updatedBy: 'manual' | 'live-fallback'
+  },
+): Promise<WeeklyFrozenRankingCacheDoc> {
+  const items = await buildRanking(db, MAX_PUBLIC_RANKING_LIMIT, {
+    startMs: rankingWindow.startMs,
+    endMs: rankingWindow.endMs,
+  })
+
+  return publishWeeklyFrozenRankingCache(db, {
+    ranking: {
+      drawId: options.sourceDrawId,
+      drawDate: '',
+      weekId: rankingWindow.weekId,
+      weekStartAtMs: rankingWindow.startMs,
+      weekEndAtMs: rankingWindow.endMs,
+      items,
+    },
+    updatedAtMs: Date.now(),
+    updatedBy: options.updatedBy,
+  })
+}
+
 export function createGetChampionsRankingHandler(db: Firestore) {
   return async (request: { data: unknown }): Promise<GetChampionsRankingOutput> => {
     const payload = asRecord(request.data) as GetChampionsRankingInput
@@ -685,6 +733,7 @@ export function createGetWeeklyTopBuyersRankingHandler(db: Firestore) {
           updatedBy: 'friday-auto',
           fridayOnly: true,
           allowFallbackToAnyDraw: false,
+          targetWeekId: currentWindow.weekId,
         })
 
         if (refreshed) {
@@ -692,24 +741,26 @@ export function createGetWeeklyTopBuyersRankingHandler(db: Firestore) {
         }
       }
 
-      if (published && published.items.length > 0) {
+      const isPublishedCurrentWeek = Boolean(published && published.weekId === currentWindow.weekId)
+      if (published && published.items.length > 0 && isPublishedCurrentWeek && hasDrawSnapshotSource(published.sourceDrawId)) {
         return toWeeklyTopBuyersOutput(published, limit)
       }
 
-      const bootstrapped = await refreshWeeklyFrozenRankingFromDraw(db, {
+      const drawSnapshotCurrentWeek = await refreshWeeklyFrozenRankingFromDraw(db, {
         updatedBy: 'bootstrap',
-        fridayOnly: true,
-        allowFallbackToAnyDraw: true,
+        fridayOnly: false,
+        allowFallbackToAnyDraw: false,
+        targetWeekId: currentWindow.weekId,
       })
 
-      if (bootstrapped) {
-        return toWeeklyTopBuyersOutput(bootstrapped, limit)
+      if (drawSnapshotCurrentWeek) {
+        return toWeeklyTopBuyersOutput(drawSnapshotCurrentWeek, limit)
       }
 
       const liveFallback = await loadWeeklyLiveRankingCached(db, currentWindow)
       const liveCacheDoc = await publishWeeklyFrozenRankingCache(db, {
         ranking: {
-          drawId: 'live-fallback',
+          drawId: LIVE_FALLBACK_SOURCE_DRAW_ID,
           drawDate: '',
           weekId: currentWindow.weekId,
           weekStartAtMs: currentWindow.startMs,
@@ -741,19 +792,30 @@ export function createRefreshWeeklyTopBuyersRankingCacheHandler(db: Firestore) {
     const payload = asRecord(request.data) as RefreshWeeklyTopBuyersRankingCacheInput
     const limit = sanitizeLimit(payload.limit, MAX_PUBLIC_RANKING_LIMIT, MAX_PUBLIC_RANKING_LIMIT)
     const allowFallbackToAnyDraw = payload.allowFallbackToAnyDraw === true
+    const forceRebuild = payload.forceRebuild === true
+    const currentWindow = getWeeklyRankingWindow(Date.now())
 
     try {
-      const refreshed = await refreshWeeklyFrozenRankingFromDraw(db, {
+      if (forceRebuild) {
+        const rebuilt = await buildAndPublishWeeklyLiveRankingCache(db, currentWindow, {
+          sourceDrawId: MANUAL_REBUILD_SOURCE_DRAW_ID,
+          updatedBy: 'manual',
+        })
+        return toRefreshWeeklyTopBuyersOutput(rebuilt, limit)
+      }
+
+      let refreshed = await refreshWeeklyFrozenRankingFromDraw(db, {
         updatedBy: 'manual',
         fridayOnly: false,
         allowFallbackToAnyDraw,
+        targetWeekId: allowFallbackToAnyDraw ? undefined : currentWindow.weekId,
       })
 
       if (!refreshed) {
-        throw new HttpsError(
-          'failed-precondition',
-          'Nenhum snapshot de draw encontrado no banco para atualizar o ranking semanal.',
-        )
+        refreshed = await buildAndPublishWeeklyLiveRankingCache(db, currentWindow, {
+          sourceDrawId: MANUAL_REBUILD_SOURCE_DRAW_ID,
+          updatedBy: 'manual',
+        })
       }
 
       return toRefreshWeeklyTopBuyersOutput(refreshed, limit)
