@@ -30,9 +30,23 @@ function formatDateTime(timestampMs: number | null) {
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
     month: '2-digit',
+    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(timestampMs))
+}
+
+function formatWeekId(weekId: string | null) {
+  if (!weekId) {
+    return '-'
+  }
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(weekId.trim())
+  if (!match) {
+    return weekId
+  }
+
+  return `${match[3]}/${match[2]}/${match[1]}`
 }
 
 function formatWinningPosition(position: number, participantCount: number) {
@@ -126,7 +140,7 @@ function RankingSection() {
       return 'Janela semanal: domingo 00:00 ate sexta 23:59 (America/Sao_Paulo).'
     }
 
-    return `Semana ${weeklyRanking.weekId || ''} | ${formatDateTime(weeklyRanking.weekStartAtMs)} ate ${formatDateTime(weeklyRanking.weekEndAtMs)}.`
+    return `Semana ${formatWeekId(weeklyRanking.weekId)} | ${formatDateTime(weeklyRanking.weekStartAtMs)} ate ${formatDateTime(weeklyRanking.weekEndAtMs)}.`
   }, [weeklyRanking.weekEndAtMs, weeklyRanking.weekId, weeklyRanking.weekStartAtMs])
 
   return (
