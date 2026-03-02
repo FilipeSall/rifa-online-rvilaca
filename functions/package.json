@@ -7,7 +7,8 @@
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test \"lib/**/*.test.js\"",
     "migrate:number-chunks": "node scripts/migrate-number-states-to-chunks.mjs",
-    "validate:chunks-and-cleanup-legacy": "node scripts/validate-chunks-and-cleanup-number-states.mjs"
+    "validate:chunks-and-cleanup-legacy": "node scripts/validate-chunks-and-cleanup-number-states.mjs",
+    "reconcile:paid-orders-number-chunks": "npm run build && node scripts/reconcile-paid-orders-number-chunks.mjs"
   },
   "engines": {
     "node": "22"

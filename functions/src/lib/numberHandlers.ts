@@ -83,6 +83,21 @@ interface GetPublicNumberLookupOutput {
   } | null
 }
 
+interface GetManualNumberSelectionSnapshotInput {
+  campaignId?: string
+  number?: number | string
+  pageSize?: number
+}
+
+interface GetManualNumberSelectionSnapshotOutput extends GetNumberWindowOutput {
+  lookup: {
+    number: number
+    formattedNumber: string
+    status: NumberStateView['status']
+    reservationExpiresAtMs: number | null
+  }
+}
+
 const SEARCH_BLOCK_SIZE = 240
 const RANDOM_ROUNDS = 20
 
@@ -312,6 +327,60 @@ function clampPageStart(pageStart: number, rangeStart: number, rangeEnd: number)
   }
 
   return pageStart
+}
+
+async function buildNumberWindowOutput(params: {
+  db: Firestore
+  campaignId: string
+  pageSize: number
+  pageStart: number
+  campaignRange: {
+    start: number
+    end: number
+    total: number
+  }
+  nowMs: number
+}): Promise<GetNumberWindowOutput> {
+  const effectivePageStart = clampPageStart(
+    params.pageStart,
+    params.campaignRange.start,
+    params.campaignRange.end,
+  )
+  const pageEnd = Math.min(effectivePageStart + params.pageSize - 1, params.campaignRange.end)
+  const numbers = await readRangeState(params.db, {
+    campaignId: params.campaignId,
+    start: effectivePageStart,
+    end: pageEnd,
+    nowMs: params.nowMs,
+    rangeStart: params.campaignRange.start,
+    rangeEnd: params.campaignRange.end,
+  })
+  const availableInPage = numbers.filter((item) => item.status === 'disponivel').length
+  const previousPageStart =
+    effectivePageStart > params.campaignRange.start
+      ? Math.max(params.campaignRange.start, effectivePageStart - params.pageSize)
+      : null
+  const nextPageStart = pageEnd < params.campaignRange.end ? pageEnd + 1 : null
+
+  return {
+    campaignId: params.campaignId,
+    pageSize: params.pageSize,
+    pageStart: effectivePageStart,
+    pageEnd,
+    rangeStart: params.campaignRange.start,
+    rangeEnd: params.campaignRange.end,
+    totalNumbers: params.campaignRange.total,
+    availableInPage,
+    hasPreviousPage: previousPageStart !== null,
+    hasNextPage: nextPageStart !== null,
+    previousPageStart,
+    nextPageStart,
+    numbers: numbers.map((item) => ({
+      number: item.number,
+      status: item.status,
+      reservationExpiresAtMs: item.reservationExpiresAtMs,
+    })),
+  } satisfies GetNumberWindowOutput
 }
 
 function formatPublicName(name: string, uid: string): string {
@@ -616,39 +685,30 @@ export function createGetNumberWindowHandler(db: Firestore) {
 
       const nowMs = Date.now()
       const pageStart = requestedPageStart ?? campaignRange.start
-
-      const effectivePageStart = clampPageStart(pageStart, campaignRange.start, campaignRange.end)
-      const pageEnd = Math.min(effectivePageStart + pageSize - 1, campaignRange.end)
-      const numbers = await readRangeState(db, {
+      const output = await buildNumberWindowOutput({
+        db,
         campaignId,
-        start: effectivePageStart,
-        end: pageEnd,
+        pageSize,
+        pageStart,
+        campaignRange,
         nowMs,
-        rangeStart: campaignRange.start,
-        rangeEnd: campaignRange.end,
       })
-      const availableInPage = numbers.filter((item) => item.status === 'disponivel').length
       const chunksRead = listChunkStartsInWindow({
-        pageStart: effectivePageStart,
+        pageStart: output.pageStart,
         pageSize,
         rangeStart: campaignRange.start,
         rangeEnd: campaignRange.end,
       }).length
-      const previousPageStart =
-        effectivePageStart > campaignRange.start
-          ? Math.max(campaignRange.start, effectivePageStart - pageSize)
-          : null
-      const nextPageStart = pageEnd < campaignRange.end ? pageEnd + 1 : null
       const durationMs = Date.now() - startedAtMs
 
       logger.info('getNumberWindow succeeded', {
         campaignId,
         pageSize,
         requestedPageStart,
-        effectivePageStart,
-        pageEnd,
-        availableInPage,
-        numbersRequested: numbers.length,
+        effectivePageStart: output.pageStart,
+        pageEnd: output.pageEnd,
+        availableInPage: output.availableInPage,
+        numbersRequested: output.numbers.length,
         conflictsCount: 0,
         transactionAttempts: 0,
         chunksRead,
@@ -656,25 +716,7 @@ export function createGetNumberWindowHandler(db: Firestore) {
         durationMs,
       })
 
-      return {
-        campaignId,
-        pageSize,
-        pageStart: effectivePageStart,
-        pageEnd,
-        rangeStart: campaignRange.start,
-        rangeEnd: campaignRange.end,
-        totalNumbers: campaignRange.total,
-        availableInPage,
-        hasPreviousPage: previousPageStart !== null,
-        hasNextPage: nextPageStart !== null,
-        previousPageStart,
-        nextPageStart,
-        numbers: numbers.map((item) => ({
-          number: item.number,
-          status: item.status,
-          reservationExpiresAtMs: item.reservationExpiresAtMs,
-        })),
-      } satisfies GetNumberWindowOutput
+      return output
     } catch (error) {
       const durationMs = Date.now() - startedAtMs
       logger.error('getNumberWindow failed', {
@@ -922,6 +964,86 @@ export function createGetPublicNumberLookupHandler(db: Firestore) {
       }
 
       throw new HttpsError('internal', 'Falha ao consultar o numero agora.')
+    }
+  }
+}
+
+export function createGetManualNumberSelectionSnapshotHandler(db: Firestore) {
+  return async (request: { data: unknown }) => {
+    const startedAtMs = Date.now()
+
+    try {
+      const payload = asRecord(request.data) as Partial<GetManualNumberSelectionSnapshotInput>
+      const campaignId = sanitizeCampaignId(payload.campaignId)
+      const campaignRange = await resolveCampaignRange(db, campaignId)
+      const number = sanitizeLookupNumber(payload.number, campaignRange.start, campaignRange.end)
+      const pageSize = sanitizePageSize(payload.pageSize)
+      const nowMs = Date.now()
+      const pageStart = campaignRange.start + (Math.floor((number - campaignRange.start) / pageSize) * pageSize)
+      const output = await buildNumberWindowOutput({
+        db,
+        campaignId,
+        pageSize,
+        pageStart,
+        campaignRange,
+        nowMs,
+      })
+
+      const lookup = output.numbers.find((item) => item.number === number)
+      if (!lookup) {
+        throw new HttpsError('internal', 'Numero consultado nao encontrado na pagina retornada.')
+      }
+
+      const chunksRead = listChunkStartsInWindow({
+        pageStart: output.pageStart,
+        pageSize,
+        rangeStart: campaignRange.start,
+        rangeEnd: campaignRange.end,
+      }).length
+      const durationMs = Date.now() - startedAtMs
+
+      logger.info('getManualNumberSelectionSnapshot succeeded', {
+        campaignId,
+        number,
+        pageSize,
+        pageStart: output.pageStart,
+        pageEnd: output.pageEnd,
+        lookupStatus: lookup.status,
+        availableInPage: output.availableInPage,
+        numbersRequested: output.numbers.length,
+        conflictsCount: 0,
+        transactionAttempts: 0,
+        chunksRead,
+        chunksWritten: 0,
+        durationMs,
+      })
+
+      return {
+        ...output,
+        lookup: {
+          number,
+          formattedNumber: String(number).padStart(7, '0'),
+          status: lookup.status,
+          reservationExpiresAtMs: lookup.reservationExpiresAtMs,
+        },
+      } satisfies GetManualNumberSelectionSnapshotOutput
+    } catch (error) {
+      const durationMs = Date.now() - startedAtMs
+      logger.error('getManualNumberSelectionSnapshot failed', {
+        error: String(error),
+        numbersRequested: 0,
+        conflictsCount: 0,
+        transactionAttempts: 0,
+        chunksRead: 0,
+        chunksWritten: 0,
+        durationMs,
+      })
+
+      if (error instanceof HttpsError) {
+        throw error
+      }
+
+      throw new HttpsError('internal', 'Falha ao consultar e carregar a pagina do numero.')
     }
   }
 }

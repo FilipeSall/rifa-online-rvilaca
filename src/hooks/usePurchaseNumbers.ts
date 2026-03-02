@@ -43,6 +43,12 @@ type GetNumberChunkWindowInput = {
   pageSize?: number
 }
 
+type GetManualNumberSelectionSnapshotInput = {
+  campaignId?: string
+  number?: number | string
+  pageSize?: number
+}
+
 type GetNumberChunkWindowResponse = {
   campaignId: string
   pageSize: number
@@ -63,6 +69,15 @@ type GetNumberChunkWindowResponse = {
   }>
 }
 
+type GetManualNumberSelectionSnapshotResponse = GetNumberChunkWindowResponse & {
+  lookup: {
+    number: number
+    formattedNumber: string
+    status: NumberSlot['status']
+    reservationExpiresAtMs: number | null
+  }
+}
+
 type ConflictResolutionState = {
   conflictedNumbers: number[]
   filteredSelection: number[]
@@ -71,6 +86,8 @@ type ConflictResolutionState = {
 type CallableEnvelope<T> = T | { result?: T }
 
 const NUMBER_WINDOW_PAGE_SIZE = 50
+const NUMBER_WINDOW_CACHE_TTL_MS = 120_000
+const NUMBER_WINDOW_CACHE_MAX_PAGES = 12
 
 function unwrapCallableData<T>(value: CallableEnvelope<T>) {
   if (value && typeof value === 'object' && 'result' in value) {
@@ -81,6 +98,10 @@ function unwrapCallableData<T>(value: CallableEnvelope<T>) {
   }
 
   return value as T
+}
+
+function buildNumberWindowCacheStorageKey(campaignId: string) {
+  return `purchase-numbers-window-cache:${campaignId}`
 }
 
 function areNumberListsEqual(left: number[], right: number[]) {
@@ -178,20 +199,6 @@ function clampPageStart(value: number, rangeStart: number, rangeEnd: number) {
   const totalPages = Math.max(1, Math.ceil(total / NUMBER_WINDOW_PAGE_SIZE))
   const maxPageStart = rangeStart + ((totalPages - 1) * NUMBER_WINDOW_PAGE_SIZE)
   return Math.max(rangeStart, Math.min(value, maxPageStart))
-}
-
-function buildLocalNumberPool(pageStart: number, rangeStart: number, rangeEnd: number): NumberSlot[] {
-  const pageEnd = Math.min(pageStart + NUMBER_WINDOW_PAGE_SIZE - 1, rangeEnd)
-  const pool: NumberSlot[] = []
-
-  for (let number = pageStart; number <= pageEnd; number += 1) {
-    pool.push({
-      number,
-      status: 'disponivel',
-    })
-  }
-
-  return pool
 }
 
 function sanitizeWindowResponse(
@@ -328,17 +335,24 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   const [shouldHighlightSelectedNumbers, setShouldHighlightSelectedNumbers] = useState(false)
   const [shouldHighlightAutoButton, setShouldHighlightAutoButton] = useState(false)
   const [conflictResolution, setConflictResolution] = useState<ConflictResolutionState | null>(null)
+  const [isWindowCacheReady, setIsWindowCacheReady] = useState(() => typeof window === 'undefined')
 
   const selectedNumbersRef = useRef<number[]>(selectedNumbers)
   selectedNumbersRef.current = selectedNumbers
   const lastReserveAttemptRef = useRef<{ fingerprint: string; atMs: number } | null>(null)
   const hasPromptedAuthForQuickCheckoutRef = useRef(false)
   const numberWindowRequestRef = useRef(0)
+  const numberWindowCacheRef = useRef(new Map<number, { payload: GetNumberChunkWindowResponse; fetchedAt: number }>())
+  const numberWindowInFlightRef = useRef(new Map<number, Promise<GetNumberChunkWindowResponse | null>>())
 
   const callables = useMemo(
     () => ({
       reserveNumbers: httpsCallable<ReserveNumbersInput, unknown>(functions, 'reserveNumbers'),
       getNumberChunkWindow: httpsCallable<GetNumberChunkWindowInput, unknown>(functions, 'getNumberChunkWindow'),
+      getManualNumberSelectionSnapshot: httpsCallable<GetManualNumberSelectionSnapshotInput, unknown>(
+        functions,
+        'getManualNumberSelectionSnapshot',
+      ),
     }),
     [],
   )
@@ -346,6 +360,10 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   const rangeStart = numberWindow?.rangeStart ?? baseRangeStart
   const rangeEnd = numberWindow?.rangeEnd ?? baseRangeEnd
   const totalNumbers = numberWindow?.totalNumbers ?? baseTotalNumbers
+  const numberWindowCacheStorageKey = useMemo(
+    () => buildNumberWindowCacheStorageKey(campaign.id || 'default'),
+    [campaign.id],
+  )
 
   const pageStart = useMemo(
     () => clampPageStart(pageStartState, rangeStart, rangeEnd),
@@ -358,37 +376,171 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     }
   }, [pageStart, pageStartState])
 
+  const persistWindowCache = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const nowMs = Date.now()
+    const serializable = Array.from(numberWindowCacheRef.current.entries())
+      .filter(([, entry]) => (nowMs - entry.fetchedAt) <= NUMBER_WINDOW_CACHE_TTL_MS)
+      .sort((left, right) => right[1].fetchedAt - left[1].fetchedAt)
+      .slice(0, NUMBER_WINDOW_CACHE_MAX_PAGES)
+      .map(([pageStartEntry, entry]) => ({
+        pageStart: pageStartEntry,
+        fetchedAt: entry.fetchedAt,
+        payload: entry.payload,
+      }))
+
+    if (serializable.length === 0) {
+      window.sessionStorage.removeItem(numberWindowCacheStorageKey)
+      return
+    }
+
+    window.sessionStorage.setItem(numberWindowCacheStorageKey, JSON.stringify(serializable))
+  }, [numberWindowCacheStorageKey])
+
   useEffect(() => {
+    numberWindowCacheRef.current.clear()
+    numberWindowInFlightRef.current.clear()
+
+    if (typeof window === 'undefined') {
+      setIsWindowCacheReady(true)
+      return
+    }
+
+    const nowMs = Date.now()
+    const raw = window.sessionStorage.getItem(numberWindowCacheStorageKey)
+    if (!raw) {
+      setIsWindowCacheReady(true)
+      return
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as Array<{ pageStart?: unknown; fetchedAt?: unknown; payload?: unknown }>
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          const pageStartFromEntry = Number(item.pageStart)
+          const fetchedAt = Number(item.fetchedAt)
+          if (!Number.isInteger(pageStartFromEntry) || !Number.isFinite(fetchedAt)) {
+            continue
+          }
+          if ((nowMs - fetchedAt) > NUMBER_WINDOW_CACHE_TTL_MS) {
+            continue
+          }
+
+          const sanitized = sanitizeWindowResponse(item.payload as GetNumberChunkWindowResponse, {
+            rangeStart: baseRangeStart,
+            rangeEnd: baseRangeEnd,
+            totalNumbers: baseTotalNumbers,
+            pageStart: pageStartFromEntry,
+          })
+          if (!sanitized) {
+            continue
+          }
+
+          numberWindowCacheRef.current.set(sanitized.pageStart, {
+            payload: sanitized,
+            fetchedAt,
+          })
+        }
+      }
+    } catch {
+      window.sessionStorage.removeItem(numberWindowCacheStorageKey)
+    } finally {
+      setIsWindowCacheReady(true)
+    }
+  }, [baseRangeEnd, baseRangeStart, baseTotalNumbers, numberWindowCacheStorageKey])
+
+  const fetchWindowPage = useCallback(
+    async (
+      requestedPageStart: number,
+      options?: {
+        useCache?: boolean
+      },
+    ) => {
+      const useCache = options?.useCache !== false
+      const safePageStart = clampPageStart(requestedPageStart, baseRangeStart, baseRangeEnd)
+      const nowMs = Date.now()
+
+      if (useCache) {
+        const cached = numberWindowCacheRef.current.get(safePageStart)
+        if (cached && (nowMs - cached.fetchedAt) <= NUMBER_WINDOW_CACHE_TTL_MS) {
+          return cached.payload
+        }
+      }
+
+      const ongoing = numberWindowInFlightRef.current.get(safePageStart)
+      if (ongoing) {
+        return ongoing
+      }
+
+      const request = callables.getNumberChunkWindow({
+        pageStart: safePageStart,
+        pageSize: NUMBER_WINDOW_PAGE_SIZE,
+      })
+        .then((callableResult) => {
+          const payload = unwrapCallableData(
+            callableResult.data as CallableEnvelope<GetNumberChunkWindowResponse>,
+          )
+          const sanitized = sanitizeWindowResponse(payload, {
+            rangeStart: baseRangeStart,
+            rangeEnd: baseRangeEnd,
+            totalNumbers: baseTotalNumbers,
+            pageStart: safePageStart,
+          })
+
+          if (sanitized) {
+            numberWindowCacheRef.current.set(sanitized.pageStart, {
+              payload: sanitized,
+              fetchedAt: Date.now(),
+            })
+            persistWindowCache()
+          }
+
+          return sanitized
+        })
+        .finally(() => {
+          numberWindowInFlightRef.current.delete(safePageStart)
+        })
+
+      numberWindowInFlightRef.current.set(safePageStart, request)
+
+      return request
+    },
+    [
+      baseRangeEnd,
+      baseRangeStart,
+      baseTotalNumbers,
+      callables.getNumberChunkWindow,
+      persistWindowCache,
+    ],
+  )
+
+  useEffect(() => {
+    if (!isWindowCacheReady) {
+      return
+    }
+
     const requestId = numberWindowRequestRef.current + 1
     numberWindowRequestRef.current = requestId
     setIsPageLoading(true)
 
-    void callables.getNumberChunkWindow({
-      pageStart,
-      pageSize: NUMBER_WINDOW_PAGE_SIZE,
-    })
-      .then((callableResult) => {
+    void fetchWindowPage(pageStart)
+      .then((sanitized) => {
         if (requestId !== numberWindowRequestRef.current) {
           return
         }
 
-        const payload = unwrapCallableData(
-          callableResult.data as CallableEnvelope<GetNumberChunkWindowResponse>,
-        )
-        const sanitized = sanitizeWindowResponse(payload, {
-          rangeStart: baseRangeStart,
-          rangeEnd: baseRangeEnd,
-          totalNumbers: baseTotalNumbers,
-          pageStart,
-        })
-        setNumberWindow(sanitized)
+        if (sanitized) {
+          setNumberWindow(sanitized)
+        }
       })
       .catch((error) => {
         if (requestId !== numberWindowRequestRef.current) {
           return
         }
 
-        setNumberWindow(null)
         const message = getReserveErrorMessage(error)
         toast.error(`Nao foi possivel carregar a pagina de numeros. ${message}`, {
           position: 'bottom-right',
@@ -401,10 +553,8 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
         }
       })
   }, [
-    baseRangeEnd,
-    baseRangeStart,
-    baseTotalNumbers,
-    callables.getNumberChunkWindow,
+    fetchWindowPage,
+    isWindowCacheReady,
     pageStart,
   ])
 
@@ -427,9 +577,9 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
         }))
       }
 
-      return buildLocalNumberPool(pageStart, rangeStart, rangeEnd)
+      return []
     },
-    [numberWindow, pageStart, rangeEnd, rangeStart],
+    [numberWindow],
   )
 
   const pageEnd = useMemo(
@@ -851,21 +1001,42 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
 
       try {
         const targetPageStart = rangeStart + (Math.floor((number - rangeStart) / NUMBER_WINDOW_PAGE_SIZE) * NUMBER_WINDOW_PAGE_SIZE)
-        const callableResult = await callables.getNumberChunkWindow({
-          pageStart: targetPageStart,
+        const snapshotResult = await callables.getManualNumberSelectionSnapshot({
+          number,
           pageSize: NUMBER_WINDOW_PAGE_SIZE,
         })
-        const payload = unwrapCallableData(callableResult.data as CallableEnvelope<GetNumberChunkWindowResponse>)
-        const sanitized = sanitizeWindowResponse(payload, {
+        const snapshotPayload = unwrapCallableData(
+          snapshotResult.data as CallableEnvelope<GetManualNumberSelectionSnapshotResponse>,
+        )
+        const sanitized = sanitizeWindowResponse(snapshotPayload, {
           rangeStart: baseRangeStart,
           rangeEnd: baseRangeEnd,
           totalNumbers: baseTotalNumbers,
           pageStart: targetPageStart,
         })
-        setNumberWindow(sanitized)
-        setPageStartState(sanitized?.pageStart ?? targetPageStart)
 
-        const isAvailable = sanitized?.numbers.find((item) => item.number === number)?.status === 'disponivel'
+        if (sanitized) {
+          numberWindowCacheRef.current.set(sanitized.pageStart, {
+            payload: sanitized,
+            fetchedAt: Date.now(),
+          })
+          persistWindowCache()
+          setNumberWindow(sanitized)
+          setPageStartState(sanitized.pageStart)
+        } else {
+          setPageStartState(targetPageStart)
+        }
+
+        if (snapshotPayload.lookup?.status !== 'disponivel') {
+          toast.warning(
+            `O numero ${formatTicketNumber(number)} nao esta disponivel agora. Escolha outro numero.`,
+            { position: 'bottom-right' },
+          )
+          return
+        }
+
+        const statusInPage = sanitized?.numbers.find((item) => item.number === number)?.status
+        const isAvailable = !statusInPage || statusInPage === 'disponivel'
         if (!isAvailable) {
           toast.warning(
             `O numero ${formatTicketNumber(number)} nao esta disponivel agora. Escolha outro numero.`,
@@ -882,6 +1053,11 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
           return [...currentSelection, number].sort((left, right) => left - right)
         })
         clearReservationState()
+      } catch (error) {
+        const message = getReserveErrorMessage(error)
+        toast.error(`Nao foi possivel verificar o numero agora. ${message}`, {
+          position: 'bottom-right',
+        })
       } finally {
         setIsManualAdding(false)
       }
@@ -890,8 +1066,9 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
       baseRangeEnd,
       baseRangeStart,
       baseTotalNumbers,
-      callables.getNumberChunkWindow,
+      callables.getManualNumberSelectionSnapshot,
       clearReservationState,
+      persistWindowCache,
       quantity,
       rangeEnd,
       rangeStart,

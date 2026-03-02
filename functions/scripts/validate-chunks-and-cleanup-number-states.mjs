@@ -10,18 +10,23 @@ const DEFAULT_RANGE_START = 1
 const DEFAULT_RANGE_END = 3_450_000
 const CHUNK_SIZE = 1000
 const DELETE_CONFIRM_PHRASE = 'DELETE_NUMBER_STATES_LEGACY'
+const DEFAULT_CHUNK_LIMIT = 10
+const DEFAULT_DELETE_LIMIT = 5000
 
 function parseArgs(argv) {
   const flags = {
     campaignId: DEFAULT_CAMPAIGN_ID,
     projectId: '',
     batchChunks: 20,
+    chunkLimit: DEFAULT_CHUNK_LIMIT,
     deleteBatchSize: 400,
+    deleteLimit: DEFAULT_DELETE_LIMIT,
     rangeStart: null,
     rangeEnd: null,
     nowMs: Date.now(),
     deleteLegacy: false,
     allowMismatchDelete: false,
+    allowFullScan: false,
     confirmDelete: '',
     sampleLimit: 5,
     dryRun: false,
@@ -51,10 +56,28 @@ function parseArgs(argv) {
       continue
     }
 
+    if (arg === '--chunkLimit' && argv[index + 1]) {
+      const parsed = Number(argv[index + 1])
+      if (Number.isInteger(parsed) && parsed >= 0) {
+        flags.chunkLimit = parsed
+      }
+      index += 1
+      continue
+    }
+
     if (arg === '--deleteBatchSize' && argv[index + 1]) {
       const parsed = Number(argv[index + 1])
       if (Number.isInteger(parsed) && parsed > 0) {
         flags.deleteBatchSize = parsed
+      }
+      index += 1
+      continue
+    }
+
+    if (arg === '--deleteLimit' && argv[index + 1]) {
+      const parsed = Number(argv[index + 1])
+      if (Number.isInteger(parsed) && parsed >= 0) {
+        flags.deleteLimit = parsed
       }
       index += 1
       continue
@@ -103,6 +126,11 @@ function parseArgs(argv) {
 
     if (arg === '--allow-mismatch-delete') {
       flags.allowMismatchDelete = true
+      continue
+    }
+
+    if (arg === '--allow-full-scan') {
+      flags.allowFullScan = true
       continue
     }
 
@@ -642,18 +670,27 @@ async function deleteLegacyNumberStates(params) {
     db,
     campaignId,
     batchSize,
+    deleteLimit,
     dryRun,
   } = params
 
   let scanned = 0
   let deleted = 0
   let lastDoc = null
+  let reachedDeleteLimit = false
 
   for (;;) {
+    if (deleteLimit > 0 && scanned >= deleteLimit) {
+      reachedDeleteLimit = true
+      break
+    }
+
+    const remaining = deleteLimit > 0 ? Math.max(deleteLimit - scanned, 0) : batchSize
+    const effectiveBatchSize = Math.max(1, Math.min(batchSize, remaining))
     let query = db.collection('numberStates')
       .where('campaignId', '==', campaignId)
       .orderBy(FieldPath.documentId())
-      .limit(batchSize)
+      .limit(effectiveBatchSize)
 
     if (lastDoc) {
       query = query.startAfter(lastDoc)
@@ -685,6 +722,7 @@ async function deleteLegacyNumberStates(params) {
   return {
     scanned,
     deleted: dryRun ? scanned : deleted,
+    reachedDeleteLimit,
   }
 }
 
@@ -723,10 +761,24 @@ async function main() {
   for (let chunkStart = range.start; chunkStart <= range.end; chunkStart += CHUNK_SIZE) {
     chunkStarts.push(chunkStart)
   }
+  const totalChunks = chunkStarts.length
+  const hasChunkLimit = args.chunkLimit > 0
+  const effectiveChunkLimit = hasChunkLimit ? args.chunkLimit : totalChunks
+
+  if (!hasChunkLimit && !args.allowFullScan) {
+    throw new Error(
+      'Execucao sem limite bloqueada. Use --chunkLimit <n> (recomendado) ou --allow-full-scan para liberar.',
+    )
+  }
+
+  const effectiveChunkStarts = hasChunkLimit
+    ? chunkStarts.slice(0, effectiveChunkLimit)
+    : chunkStarts
 
   const summary = {
     processedChunks: 0,
-    totalChunks: chunkStarts.length,
+    totalChunks,
+    effectiveChunks: effectiveChunkStarts.length,
     numberStatesRead: 0,
     mismatchedChunks: 0,
     missingChunks: 0,
@@ -741,14 +793,30 @@ async function main() {
     rangeStart: range.start,
     rangeEnd: range.end,
     totalNumbers: range.total,
-    totalChunks: chunkStarts.length,
+    totalChunks,
+    effectiveChunks: effectiveChunkStarts.length,
+    chunkLimit: hasChunkLimit ? effectiveChunkLimit : null,
+    fullScan: !hasChunkLimit,
     batchChunks: args.batchChunks,
+    deleteLimit: args.deleteLimit > 0 ? args.deleteLimit : null,
     deleteLegacy: args.deleteLegacy,
     dryRun: args.dryRun,
   }))
 
-  for (let offset = 0; offset < chunkStarts.length; offset += args.batchChunks) {
-    const batchChunkStarts = chunkStarts.slice(offset, offset + args.batchChunks)
+  if (effectiveChunkStarts.length < totalChunks) {
+    console.log(JSON.stringify({
+      level: 'warn',
+      message: 'validation.limit_applied',
+      campaignId: args.campaignId,
+      totalChunks,
+      effectiveChunks: effectiveChunkStarts.length,
+      skippedChunks: totalChunks - effectiveChunkStarts.length,
+      estimatedNumberStatesReadLimit: effectiveChunkStarts.length * CHUNK_SIZE,
+    }))
+  }
+
+  for (let offset = 0; offset < effectiveChunkStarts.length; offset += args.batchChunks) {
+    const batchChunkStarts = effectiveChunkStarts.slice(offset, offset + args.batchChunks)
 
     const results = await Promise.all(batchChunkStarts.map((chunkStart) => {
       const { chunkEnd } = resolveChunkBounds(range.start, range.end, chunkStart)
@@ -792,8 +860,8 @@ async function main() {
       message: 'validation.progress',
       campaignId: args.campaignId,
       processedChunks: summary.processedChunks,
-      totalChunks: summary.totalChunks,
-      percent: Number(((summary.processedChunks / summary.totalChunks) * 100).toFixed(2)),
+      totalChunks: summary.effectiveChunks,
+      percent: Number(((summary.processedChunks / Math.max(summary.effectiveChunks, 1)) * 100).toFixed(2)),
       numberStatesRead: summary.numberStatesRead,
       mismatchedChunks: summary.mismatchedChunks,
       missingChunks: summary.missingChunks,
@@ -810,6 +878,7 @@ async function main() {
     campaignId: args.campaignId,
     processedChunks: summary.processedChunks,
     totalChunks: summary.totalChunks,
+    effectiveChunks: summary.effectiveChunks,
     numberStatesRead: summary.numberStatesRead,
     mismatchedChunks: summary.mismatchedChunks,
     missingChunks: summary.missingChunks,
@@ -831,6 +900,7 @@ async function main() {
     db,
     campaignId: args.campaignId,
     batchSize: args.deleteBatchSize,
+    deleteLimit: args.deleteLimit,
     dryRun: args.dryRun,
   })
   const deleteDurationMs = Date.now() - deleteStartedAtMs
@@ -842,6 +912,7 @@ async function main() {
     dryRun: args.dryRun,
     scanned: deletionResult.scanned,
     deleted: deletionResult.deleted,
+    reachedDeleteLimit: deletionResult.reachedDeleteLimit,
     durationMs: deleteDurationMs,
     duration: formatDurationMs(deleteDurationMs),
   }))

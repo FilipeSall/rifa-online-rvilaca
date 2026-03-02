@@ -428,6 +428,76 @@ function calculatePricingSummary(campaignData: DocumentData | undefined, quantit
   }
 }
 
+function parseOrderNumberCandidate(value: unknown): number | null {
+  if (Number.isInteger(value)) {
+    return Number(value)
+  }
+
+  const normalized = sanitizeString(value)
+  if (!normalized) {
+    return null
+  }
+
+  const digits = normalized.replace(/\D/g, '')
+  if (!digits) {
+    return null
+  }
+
+  const parsed = Number(digits)
+  return Number.isInteger(parsed) ? parsed : null
+}
+
+function sanitizeOrderNumbersForRange(value: unknown, rangeStart: number, rangeEnd: number): number[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return Array.from(new Set(
+    value
+      .map((item) => parseOrderNumberCandidate(item))
+      .filter((item): item is number =>
+        item !== null && item >= rangeStart && item <= rangeEnd),
+  )).sort((a, b) => a - b)
+}
+
+export async function readLegacyOrderNumbersSubcollection(params: {
+  db: Firestore
+  externalId: string
+  rangeStart: number
+  rangeEnd: number
+}) {
+  const snapshot = await params.db.collection('orders').doc(params.externalId).collection('numbers')
+    .select('number', 'ticketNumber', 'numero', 'value')
+    .get()
+
+  const recovered = new Set<number>()
+
+  for (const document of snapshot.docs) {
+    const data = document.data()
+    const candidates = [
+      data.number,
+      data.ticketNumber,
+      data.numero,
+      data.value,
+      document.id,
+    ]
+
+    for (const candidate of candidates) {
+      const parsed = parseOrderNumberCandidate(candidate)
+      if (
+        parsed !== null
+        && parsed >= params.rangeStart
+        && parsed <= params.rangeEnd
+      ) {
+        recovered.add(parsed)
+        break
+      }
+    }
+  }
+
+  return Array.from(recovered).sort((a, b) => a - b)
+}
+
 async function processWebhookOrder(
   db: Firestore,
   params: {
@@ -556,7 +626,7 @@ async function processWebhookOrder(
   return result
 }
 
-async function runPaidDepositBusinessLogic(
+export async function runPaidDepositBusinessLogic(
   db: Firestore,
   order: {
     externalId: string
@@ -567,8 +637,31 @@ async function runPaidDepositBusinessLogic(
   },
 ) {
   const startedAtMs = Date.now()
+  const campaignData = await getCampaignDocCached(db, order.campaignId)
+  const campaignRange = readCampaignNumberRange(campaignData, order.campaignId)
+  const normalizedReservedNumbers = readStoredReservationNumbers(
+    order.reservedNumbers,
+    campaignRange.start,
+    campaignRange.end,
+  )
+
+  if (!order.userId) {
+    throw new HttpsError(
+      'failed-precondition',
+      `Pedido ${order.externalId} nao possui userId para baixa de numeros.`,
+    )
+  }
+
+  if (normalizedReservedNumbers.length <= 0) {
+    throw new HttpsError(
+      'failed-precondition',
+      `Pedido ${order.externalId} pago sem numeros reservados para baixa.`,
+    )
+  }
+  const userId = order.userId
+
   const transactionStats = {
-    numbersRequested: order.reservedNumbers.length,
+    numbersRequested: normalizedReservedNumbers.length,
     previousCount: 0,
     uniqueStateReads: 0,
     transactionAttempts: 0,
@@ -577,14 +670,11 @@ async function runPaidDepositBusinessLogic(
     chunksWritten: 0,
   }
 
-  const campaignData = await getCampaignDocCached(db, order.campaignId)
-  const campaignRange = readCampaignNumberRange(campaignData, order.campaignId)
-
   logger.info('runPaidDepositBusinessLogic started', {
     externalId: order.externalId,
     campaignId: order.campaignId,
-    userId: order.userId ? maskUid(order.userId) : null,
-    reservedNumbersCount: order.reservedNumbers.length,
+    userId: maskUid(userId),
+    reservedNumbersCount: normalizedReservedNumbers.length,
     amount: sanitizeOptionalAmount(order.amount),
     numbersRequested: transactionStats.numbersRequested,
     previousCount: transactionStats.previousCount,
@@ -599,7 +689,7 @@ async function runPaidDepositBusinessLogic(
   const metricsSummaryRef = db.collection('metrics').doc('sales_summary')
   const dateKey = getBrazilDateKey()
   const dailyMetricsRef = db.collection('salesMetricsDaily').doc(dateKey)
-  const reservationRef = order.userId ? db.collection('numberReservations').doc(order.userId) : null
+  const reservationRef = db.collection('numberReservations').doc(userId)
   const normalizedAmount = sanitizeOptionalAmount(order.amount)
   const nowMs = Date.now()
 
@@ -610,79 +700,77 @@ async function runPaidDepositBusinessLogic(
     const headerSnapshots = await transaction.getAll(...headerRefs)
     const reservationSnapshot = reservationRef ? headerSnapshots[0] : null
     const salesLedgerSnapshot = reservationRef ? headerSnapshots[1] : headerSnapshots[0]
-    transactionStats.uniqueStateReads = order.reservedNumbers.length
+    transactionStats.uniqueStateReads = normalizedReservedNumbers.length
 
     const chunkStatesByStart = new Map<number, NumberChunkRuntimeState>()
     const chunkRefs = new Map<number, ReturnType<typeof getNumberChunkRef>>()
 
-    if (order.userId && order.reservedNumbers.length > 0) {
-      const grouped = mapNumbersByChunkStart({
-        numbers: order.reservedNumbers,
+    const grouped = mapNumbersByChunkStart({
+      numbers: normalizedReservedNumbers,
+      rangeStart: campaignRange.start,
+      rangeEnd: campaignRange.end,
+    })
+    const chunkStarts = Array.from(grouped.keys()).sort((a, b) => a - b)
+    for (const chunkStart of chunkStarts) {
+      chunkRefs.set(chunkStart, getNumberChunkRef(db, order.campaignId, chunkStart))
+    }
+    transactionStats.chunksRead = chunkStarts.length
+
+    const orderedChunkRefs = chunkStarts
+      .map((chunkStart) => chunkRefs.get(chunkStart))
+      .filter((ref): ref is ReturnType<typeof getNumberChunkRef> => Boolean(ref))
+    const chunkSnapshots = orderedChunkRefs.length > 0
+      ? await transaction.getAll(...orderedChunkRefs)
+      : []
+
+    for (let index = 0; index < chunkStarts.length; index += 1) {
+      const chunkStart = chunkStarts[index]
+      const snapshot = chunkSnapshots[index]
+      const bounds = buildChunkBoundsForChunkStart({
+        campaignId: order.campaignId,
         rangeStart: campaignRange.start,
         rangeEnd: campaignRange.end,
+        chunkStart,
       })
-      const chunkStarts = Array.from(grouped.keys()).sort((a, b) => a - b)
-      for (const chunkStart of chunkStarts) {
-        chunkRefs.set(chunkStart, getNumberChunkRef(db, order.campaignId, chunkStart))
-      }
-      transactionStats.chunksRead = chunkStarts.length
+      const chunkState = readChunkStateFromDoc({
+        bounds,
+        docData: snapshot?.exists ? (snapshot.data() || null) : null,
+        nowMs,
+      })
+      chunkStatesByStart.set(chunkStart, chunkState)
+    }
 
-      const orderedChunkRefs = chunkStarts
-        .map((chunkStart) => chunkRefs.get(chunkStart))
-        .filter((ref): ref is ReturnType<typeof getNumberChunkRef> => Boolean(ref))
-      const chunkSnapshots = orderedChunkRefs.length > 0
-        ? await transaction.getAll(...orderedChunkRefs)
-        : []
-
-      for (let index = 0; index < chunkStarts.length; index += 1) {
-        const chunkStart = chunkStarts[index]
-        const snapshot = chunkSnapshots[index]
-        const bounds = buildChunkBoundsForChunkStart({
-          campaignId: order.campaignId,
-          rangeStart: campaignRange.start,
-          rangeEnd: campaignRange.end,
-          chunkStart,
-        })
-        const chunkState = readChunkStateFromDoc({
-          bounds,
-          docData: snapshot?.exists ? (snapshot.data() || null) : null,
-          nowMs,
-        })
-        chunkStatesByStart.set(chunkStart, chunkState)
+    for (const number of normalizedReservedNumbers) {
+      const chunkStart = campaignRange.start + Math.floor((number - campaignRange.start) / NUMBER_CHUNK_SIZE) * NUMBER_CHUNK_SIZE
+      const chunkState = chunkStatesByStart.get(chunkStart)
+      if (!chunkState) {
+        continue
       }
 
-      for (const number of order.reservedNumbers) {
-        const chunkStart = campaignRange.start + Math.floor((number - campaignRange.start) / NUMBER_CHUNK_SIZE) * NUMBER_CHUNK_SIZE
-        const chunkState = chunkStatesByStart.get(chunkStart)
-        if (!chunkState) {
-          continue
-        }
-
-        const state = getChunkNumberView(chunkState, number)
-        if (state.status === 'pago') {
-          transactionStats.conflictsCount += 1
-          continue
-        }
-
-        if (state.status === 'reservado' && state.reservedBy && state.reservedBy !== order.userId) {
-          transactionStats.conflictsCount += 1
-          continue
-        }
-
-        clearNumberReservation({
-          state: chunkState,
-          number,
-          uid: order.userId,
-        })
-        markNumberAsPaid({
-          state: chunkState,
-          number,
-          userId: order.userId,
-          orderId: order.externalId,
-          paidAtMs: nowMs,
-        })
-        soldNumbersInAttempt += 1
+      const state = getChunkNumberView(chunkState, number)
+      if (state.status === 'pago') {
+        transactionStats.conflictsCount += 1
+        continue
       }
+
+      if (state.status === 'reservado' && state.reservedBy && state.reservedBy !== userId) {
+        transactionStats.conflictsCount += 1
+        continue
+      }
+
+      clearNumberReservation({
+        state: chunkState,
+        number,
+        uid: userId,
+      })
+      markNumberAsPaid({
+        state: chunkState,
+        number,
+        userId,
+        orderId: order.externalId,
+        paidAtMs: nowMs,
+      })
+      soldNumbersInAttempt += 1
     }
 
     const reservationNumbers = reservationSnapshot?.exists
@@ -692,14 +780,14 @@ async function runPaidDepositBusinessLogic(
     const shouldDeleteReservation = Boolean(
       reservationRef
       && reservationSnapshot?.exists
-      && sameNumberSet(reservationNumbers, order.reservedNumbers),
+      && sameNumberSet(reservationNumbers, normalizedReservedNumbers),
     )
 
     transaction.set(
       paymentRef,
       {
         externalId: order.externalId,
-        userId: order.userId,
+        userId,
         amount: normalizedAmount,
         status: 'paid',
         source: 'horsepay_webhook',
@@ -712,7 +800,7 @@ async function runPaidDepositBusinessLogic(
     if (!salesLedgerSnapshot.exists) {
       transaction.create(salesLedgerRef, {
         externalId: order.externalId,
-        userId: order.userId,
+        userId,
         amount: normalizedAmount,
         soldNumbers: soldNumbersInAttempt,
         dateKey,
@@ -767,7 +855,7 @@ async function runPaidDepositBusinessLogic(
 
   logger.info('runPaidDepositBusinessLogic succeeded', {
     externalId: order.externalId,
-    reservedNumbersCount: order.reservedNumbers.length,
+    reservedNumbersCount: normalizedReservedNumbers.length,
     soldNumbersCommitted,
     amount: normalizedAmount,
     numbersRequested: transactionStats.numbersRequested,
@@ -1311,16 +1399,64 @@ export function createPixWebhookHandler(db: Firestore, secrets: HorsePaySecretRe
           const orderRef = db.collection('orders').doc(externalId)
 
           try {
+            const campaignData = await getCampaignDocCached(db, processedOrder.campaignId)
+            const campaignRange = readCampaignNumberRange(campaignData, processedOrder.campaignId)
+            let normalizedReservedNumbers = sanitizeOrderNumbersForRange(
+              processedOrder.reservedNumbers,
+              campaignRange.start,
+              campaignRange.end,
+            )
+            let recoveredFromLegacy = false
+
+            if (normalizedReservedNumbers.length === 0) {
+              normalizedReservedNumbers = await readLegacyOrderNumbersSubcollection({
+                db,
+                externalId,
+                rangeStart: campaignRange.start,
+                rangeEnd: campaignRange.end,
+              })
+              recoveredFromLegacy = normalizedReservedNumbers.length > 0
+            }
+
+            if (!processedOrder.userId) {
+              throw new HttpsError(
+                'failed-precondition',
+                `Pedido ${externalId} pago sem userId associado.`,
+              )
+            }
+
+            if (normalizedReservedNumbers.length <= 0) {
+              throw new HttpsError(
+                'failed-precondition',
+                `Pedido ${externalId} pago sem numeros reservados validos para baixa.`,
+              )
+            }
+
+            if (recoveredFromLegacy) {
+              await orderRef.set(
+                {
+                  reservedNumbers: normalizedReservedNumbers,
+                  quantity: normalizedReservedNumbers.length,
+                  reservedNumbersRecoveredAt: FieldValue.serverTimestamp(),
+                  reservedNumbersRecoveredSource: 'orders_numbers_subcollection',
+                  updatedAt: FieldValue.serverTimestamp(),
+                },
+                { merge: true },
+              )
+            }
+
             await runPaidDepositBusinessLogic(db, {
               externalId,
               campaignId: processedOrder.campaignId,
               userId: processedOrder.userId,
               amount: processedOrder.amount,
-              reservedNumbers: processedOrder.reservedNumbers,
+              reservedNumbers: normalizedReservedNumbers,
             })
 
             await orderRef.set(
               {
+                reservedNumbers: normalizedReservedNumbers,
+                quantity: normalizedReservedNumbers.length,
                 paidBusinessAppliedAt: FieldValue.serverTimestamp(),
                 paidBusinessProcessingBy: FieldValue.delete(),
                 paidBusinessProcessingAt: FieldValue.delete(),
@@ -1333,7 +1469,8 @@ export function createPixWebhookHandler(db: Firestore, secrets: HorsePaySecretRe
             logger.info('pixWebhook business logic executed', {
               externalId,
               eventId: processedOrder.eventId,
-              reservedNumbersCount: processedOrder.reservedNumbers.length,
+              reservedNumbersCount: normalizedReservedNumbers.length,
+              recoveredFromLegacy,
             })
           } catch (processingError) {
             await orderRef.set(

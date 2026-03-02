@@ -38,13 +38,18 @@ export default function HeroSection({
   const mainPrize = campaign.mainPrize || DEFAULT_MAIN_PRIZE
   const secondPrize = campaign.secondPrize || DEFAULT_SECOND_PRIZE
   const bonusPrize = campaign.bonusPrize || DEFAULT_BONUS_PRIZE
+
   const campaignTitleParts = campaignTitle.trim().split(/\s+/).filter(Boolean)
+
   const campaignTitlePrefix =
     campaignTitleParts.length > 2 ? campaignTitleParts.slice(0, -2).join(' ') : campaignTitleParts.join(' ')
+
   const campaignTitleHighlight = campaignTitleParts.length > 2 ? campaignTitleParts.slice(-2).join(' ') : ''
+
   const heroScaledAlignedSectionStyle = heroSalesCardWidth
     ? { width: `${Math.round((heroSalesCardWidth / 2) * 1.75)}px` }
     : undefined
+
   const heroCarouselImages = useMemo(() => {
     return campaign.midias.heroCarousel
       .filter((item) => item.active && !!item.url)
@@ -54,6 +59,7 @@ export default function HeroSection({
         alt: item.alt || `Slide da campanha ${index + 1}`,
       }))
   }, [campaign.midias.heroCarousel])
+
   const activeFeaturedPromotion = useMemo(
     () => {
       const promotion = campaign.featuredPromotion
@@ -237,11 +243,10 @@ export default function HeroSection({
                       <div key={pack} className="group relative">
                         {shouldShowBadge ? (
                           <>
-                            <span className={`pointer-events-none absolute left-1/2 top-0 z-10 inline-flex w-[75%] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border px-2.5 py-0.5 text-center text-[8px] font-black uppercase tracking-[0.09em] text-black ${
-                              isMostPurchasedPack
+                            <span className={`pointer-events-none absolute left-1/2 top-0 z-10 inline-flex w-[75%] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border px-2.5 py-0.5 text-center text-[8px] font-black uppercase tracking-[0.09em] text-black ${isMostPurchasedPack
                                 ? 'border-amber-300 bg-[linear-gradient(120deg,rgb(252,211,77),rgb(245,158,11))] shadow-[0_8px_18px_rgba(245,158,11,0.35)]'
                                 : 'border-emerald-200 bg-[linear-gradient(120deg,rgb(110,231,183),rgb(16,185,129))] shadow-[0_8px_18px_rgba(16,185,129,0.22)]'
-                            }`}>
+                              }`}>
                               {isMostPurchasedPack ? (
                                 <span className="text-[8px] leading-none">Mais vendidos</span>
                               ) : (
@@ -249,37 +254,33 @@ export default function HeroSection({
                               )}
                             </span>
                             {isDiscountPack && discountTooltip ? (
-                              <div className={`pointer-events-none absolute left-1/2 top-0 z-50 w-48 -translate-x-1/2 -translate-y-[125%] scale-95 rounded-md border px-2.5 py-2 text-center text-[10px] font-semibold leading-tight opacity-0 shadow-[0_16px_40px_rgba(0,0,0,0.75)] ring-1 ring-black transition-all duration-200 ease-out group-hover:-translate-y-[135%] group-hover:scale-100 group-hover:opacity-100 ${
-                                isMostPurchasedPack
+                              <div className={`pointer-events-none absolute left-1/2 top-0 z-50 w-48 -translate-x-1/2 -translate-y-[125%] scale-95 rounded-md border px-2.5 py-2 text-center text-[10px] font-semibold leading-tight opacity-0 shadow-[0_16px_40px_rgba(0,0,0,0.75)] ring-1 ring-black transition-all duration-200 ease-out group-hover:-translate-y-[135%] group-hover:scale-100 group-hover:opacity-100 ${isMostPurchasedPack
                                   ? 'border-amber-200 bg-[#140d02] text-amber-100'
                                   : 'border-emerald-200 bg-[#090611] text-emerald-100'
-                              }`}>
+                                }`}>
                                 {discountTooltip}
-                                <span className={`absolute left-1/2 top-full h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r ${
-                                  isMostPurchasedPack
+                                <span className={`absolute left-1/2 top-full h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r ${isMostPurchasedPack
                                     ? 'border-amber-200 bg-[#140d02]'
                                     : 'border-emerald-200 bg-[#090611]'
-                                }`} />
+                                  }`} />
                               </div>
                             ) : null}
                           </>
                         ) : null}
                         <button
-                          className={`relative w-full overflow-hidden rounded-xl border px-4 py-3.5 text-left transition-all duration-300 ${
-                            quantity === pack
+                          className={`relative w-full overflow-hidden rounded-xl border px-4 py-3.5 text-left transition-all duration-300 ${quantity === pack
                               ? 'border-neon-pink/90 bg-[linear-gradient(140deg,rgba(255,0,204,0.16),rgba(6,14,28,0.98))] text-neon-pink shadow-[0_0_0_1px_rgba(255,0,204,0.35),0_14px_28px_rgba(255,0,204,0.2)]'
                               : 'border-white/15 bg-[linear-gradient(160deg,rgba(15,23,42,0.9),rgba(8,13,24,0.95))] text-white hover:-translate-y-0.5 hover:border-cyan-300/45 hover:shadow-[0_14px_30px_rgba(34,211,238,0.14)]'
-                          } disabled:cursor-not-allowed disabled:opacity-60`}
+                            } disabled:cursor-not-allowed disabled:opacity-60`}
                           type="button"
                           disabled={isQuickCheckoutLoading}
                           onClick={() => onSetQuantity(pack)}
                         >
                           {shouldShowBadge ? (
-                            <span className={`pointer-events-none absolute left-0 top-0 h-[2px] w-full ${
-                              isMostPurchasedPack
+                            <span className={`pointer-events-none absolute left-0 top-0 h-[2px] w-full ${isMostPurchasedPack
                                 ? 'bg-gradient-to-r from-amber-300 to-yellow-400'
                                 : 'bg-gradient-to-r from-emerald-400 to-emerald-300'
-                            }`} />
+                              }`} />
                           ) : null}
                           {quantity === pack ? (
                             <span className="pointer-events-none absolute right-2 top-2 h-2 w-2 rounded-full bg-neon-pink shadow-[0_0_14px_rgba(255,0,204,0.85)]" />

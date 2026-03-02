@@ -26,6 +26,7 @@ import {
   createPublishMainRaffleDrawHandler,
 } from './lib/mainRaffleDrawHandlers.js'
 import {
+  createGetManualNumberSelectionSnapshotHandler,
   createGetPublicNumberLookupHandler,
   createGetNumberChunkWindowHandler,
   createGetNumberWindowHandler,
@@ -93,6 +94,10 @@ export const releaseReservation = onCall(callableOptions, createReleaseReservati
 
 export const getNumberWindow = onCall(callableOptions, createGetNumberWindowHandler(db))
 export const getNumberChunkWindow = onCall(callableOptions, createGetNumberChunkWindowHandler(db))
+export const getManualNumberSelectionSnapshot = onCall(
+  callableOptions,
+  createGetManualNumberSelectionSnapshotHandler(db),
+)
 
 export const getPublicNumberLookup = onCall(callableOptions, createGetPublicNumberLookupHandler(db))
 

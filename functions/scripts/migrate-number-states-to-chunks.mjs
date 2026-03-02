@@ -9,12 +9,15 @@ const DEFAULT_CAMPAIGN_ID = 'campanha-bmw-r1200-gs-2026'
 const DEFAULT_RANGE_START = 1
 const DEFAULT_RANGE_END = 3_450_000
 const CHUNK_SIZE = 1000
+const DEFAULT_CHUNK_LIMIT = 10
 
 function parseArgs(argv) {
   const flags = {
     campaignId: DEFAULT_CAMPAIGN_ID,
     projectId: '',
     batchChunks: 20,
+    chunkLimit: DEFAULT_CHUNK_LIMIT,
+    allowFullScan: false,
     dryRun: false,
     rangeStart: null,
     rangeEnd: null,
@@ -40,6 +43,20 @@ function parseArgs(argv) {
         flags.batchChunks = parsed
       }
       index += 1
+      continue
+    }
+
+    if (arg === '--chunkLimit' && argv[index + 1]) {
+      const parsed = Number(argv[index + 1])
+      if (Number.isInteger(parsed) && parsed >= 0) {
+        flags.chunkLimit = parsed
+      }
+      index += 1
+      continue
+    }
+
+    if (arg === '--allow-full-scan') {
+      flags.allowFullScan = true
       continue
     }
 
@@ -374,6 +391,19 @@ async function main() {
   for (let chunkStart = campaignRange.start; chunkStart <= campaignRange.end; chunkStart += CHUNK_SIZE) {
     chunkStarts.push(chunkStart)
   }
+  const totalChunks = chunkStarts.length
+  const hasChunkLimit = args.chunkLimit > 0
+  const effectiveChunkLimit = hasChunkLimit ? args.chunkLimit : totalChunks
+
+  if (!hasChunkLimit && !args.allowFullScan) {
+    throw new Error(
+      'Execucao sem limite bloqueada. Use --chunkLimit <n> (recomendado) ou --allow-full-scan para liberar.',
+    )
+  }
+
+  const effectiveChunkStarts = hasChunkLimit
+    ? chunkStarts.slice(0, effectiveChunkLimit)
+    : chunkStarts
 
   let processedChunks = 0
   let totalNumberStatesRead = 0
@@ -387,14 +417,29 @@ async function main() {
     rangeStart: campaignRange.start,
     rangeEnd: campaignRange.end,
     totalNumbers: campaignRange.total,
-    totalChunks: chunkStarts.length,
+    totalChunks,
+    effectiveChunks: effectiveChunkStarts.length,
+    chunkLimit: hasChunkLimit ? effectiveChunkLimit : null,
+    fullScan: !hasChunkLimit,
     batchChunks: args.batchChunks,
     dryRun: args.dryRun,
   }))
 
-  for (let offset = 0; offset < chunkStarts.length; offset += args.batchChunks) {
+  if (effectiveChunkStarts.length < totalChunks) {
+    console.log(JSON.stringify({
+      level: 'warn',
+      message: 'migration.limit_applied',
+      campaignId: args.campaignId,
+      totalChunks,
+      effectiveChunks: effectiveChunkStarts.length,
+      skippedChunks: totalChunks - effectiveChunkStarts.length,
+      estimatedNumberStatesReadLimit: effectiveChunkStarts.length * CHUNK_SIZE,
+    }))
+  }
+
+  for (let offset = 0; offset < effectiveChunkStarts.length; offset += args.batchChunks) {
     const nowMs = Date.now()
-    const batchChunkStarts = chunkStarts.slice(offset, offset + args.batchChunks)
+    const batchChunkStarts = effectiveChunkStarts.slice(offset, offset + args.batchChunks)
     const chunkResults = await Promise.all(
       batchChunkStarts.map((chunkStart) => {
         const chunkEnd = Math.min(chunkStart + CHUNK_SIZE - 1, campaignRange.end)
@@ -428,8 +473,8 @@ async function main() {
       message: 'migration.progress',
       campaignId: args.campaignId,
       processedChunks,
-      totalChunks: chunkStarts.length,
-      percent: Number(((processedChunks / chunkStarts.length) * 100).toFixed(2)),
+      totalChunks: effectiveChunkStarts.length,
+      percent: Number(((processedChunks / Math.max(effectiveChunkStarts.length, 1)) * 100).toFixed(2)),
       numberStatesRead: totalNumberStatesRead,
       chunksWritten: totalWrittenChunks,
       elapsedMs,
@@ -443,7 +488,8 @@ async function main() {
     message: 'migration.completed',
     campaignId: args.campaignId,
     processedChunks,
-    totalChunks: chunkStarts.length,
+    totalChunks,
+    effectiveChunks: effectiveChunkStarts.length,
     numberStatesRead: totalNumberStatesRead,
     chunksWritten: totalWrittenChunks,
     durationMs,

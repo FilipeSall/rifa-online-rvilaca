@@ -75,6 +75,10 @@ Na pasta `functions/`:
 
 - `npm run build` - compila Cloud Functions TS para `functions/lib`
 
+### 4.1) Regra obrigatoria para scripts de dados
+
+- **NUNCA executar scripts de Firestore sem limite de leitura. Todo script deve usar limite explicito (ex.: `--limit`, `--chunkLimit`, `--deleteLimit`) ou falhar por padrao. Execucao full scan so com flag de override explicita e consciente.**
+
 ## 5) Variaveis de ambiente e secrets
 
 ### Frontend (`.env`)
