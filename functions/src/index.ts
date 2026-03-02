@@ -11,6 +11,7 @@ import {
 } from './lib/campaignHandlers.js'
 import {
   createGetChampionsRankingHandler,
+  createRefreshWeeklyTopBuyersRankingCacheHandler,
   createGetWeeklyTopBuyersRankingHandler,
 } from './lib/rankingHandlers.js'
 import {
@@ -18,6 +19,7 @@ import {
   createGetMyTopBuyersWinningSummaryHandler,
   createGetTopBuyersDrawHistoryHandler,
   createGetLatestTopBuyersDrawHandler,
+  createGetLatestTopBuyersDrawExactCalculationHandler,
   createPublishTopBuyersDrawHandler,
 } from './lib/topBuyersDrawHandlers.js'
 import {
@@ -80,10 +82,19 @@ const securedCallableOptions = {
   secrets: [HORSEPAY_CLIENT_KEY, HORSEPAY_CLIENT_SECRET, HORSEPAY_WEBHOOK_TOKEN],
 }
 
+function readSecretValue(secretValue: string, envName: string): string {
+  if (secretValue) {
+    return secretValue
+  }
+
+  const envValue = process.env[envName]
+  return typeof envValue === 'string' ? envValue.trim() : ''
+}
+
 const horsePaySecrets = {
-  getClientKey: () => HORSEPAY_CLIENT_KEY.value(),
-  getClientSecret: () => HORSEPAY_CLIENT_SECRET.value(),
-  getWebhookToken: () => HORSEPAY_WEBHOOK_TOKEN.value(),
+  getClientKey: () => readSecretValue(HORSEPAY_CLIENT_KEY.value(), 'HORSEPAY_CLIENT_KEY'),
+  getClientSecret: () => readSecretValue(HORSEPAY_CLIENT_SECRET.value(), 'HORSEPAY_CLIENT_SECRET'),
+  getWebhookToken: () => readSecretValue(HORSEPAY_WEBHOOK_TOKEN.value(), 'HORSEPAY_WEBHOOK_TOKEN'),
 }
 
 export const upsertCampaignSettings = onCall(callableOptions, createUpsertCampaignSettingsHandler(db))
@@ -123,8 +134,16 @@ export const getPublicSalesSnapshot = onCall(callableOptions, createGetPublicSal
 
 export const getChampionsRanking = onCall(callableOptions, createGetChampionsRankingHandler(db))
 export const getWeeklyTopBuyersRanking = onCall(callableOptions, createGetWeeklyTopBuyersRankingHandler(db))
+export const refreshWeeklyTopBuyersRankingCache = onCall(
+  callableOptions,
+  createRefreshWeeklyTopBuyersRankingCacheHandler(db),
+)
 export const publishTopBuyersDraw = onCall(callableOptions, createPublishTopBuyersDrawHandler(db))
 export const getLatestTopBuyersDraw = onCall(callableOptions, createGetLatestTopBuyersDrawHandler(db))
+export const getLatestTopBuyersDrawExactCalculation = onCall(
+  callableOptions,
+  createGetLatestTopBuyersDrawExactCalculationHandler(db),
+)
 export const getTopBuyersDrawHistory = onCall(callableOptions, createGetTopBuyersDrawHistoryHandler(db))
 export const getPublicTopBuyersDrawHistory = onCall(callableOptions, createGetPublicTopBuyersDrawHistoryHandler(db))
 export const getMyTopBuyersWinningSummary = onCall(callableOptions, createGetMyTopBuyersWinningSummaryHandler(db))

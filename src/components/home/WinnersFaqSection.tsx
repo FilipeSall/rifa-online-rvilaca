@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react'
 import { FAQ_ITEMS, type RankingItem } from '../../const/home'
+
+function formatDrawDate(drawDate: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(drawDate)) return drawDate || '-'
+  const parsed = new Date(`${drawDate}T12:00:00`)
+  if (Number.isNaN(parsed.getTime())) return drawDate
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }).format(parsed)
+}
 import { useChampionsRanking } from '../../hooks/useChampionsRanking'
 import { useTopBuyersDraw } from '../../hooks/useTopBuyersDraw'
 import { useWeeklyTopBuyersRanking } from '../../hooks/useWeeklyTopBuyersRanking'
@@ -138,7 +145,7 @@ function RankingSection() {
           {latestDrawResult ? (
             <p className="mt-3 text-xs text-amber-200">
               Ultimo ganhador semanal publicado: <span className="font-bold">{latestDrawResult.winner.name}</span>{' '}
-              (data {latestDrawResult.drawDate}, posicao do jogador premiado{' '}
+              (data {formatDrawDate(latestDrawResult.drawDate)}, posicao do jogador premiado{' '}
               {formatWinningPosition(latestDrawResult.winningPosition, latestDrawResult.participantCount)}).
             </p>
           ) : null}

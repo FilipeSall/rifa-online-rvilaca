@@ -37,6 +37,19 @@ type ReserveNumbersResponse = {
   reservationSeconds: number
 }
 
+type PickRandomAvailableNumbersInput = {
+  campaignId?: string
+  quantity: number
+  excludeNumbers?: number[]
+}
+
+type PickRandomAvailableNumbersResponse = {
+  campaignId: string
+  quantityRequested: number
+  numbers: number[]
+  exhausted: boolean
+}
+
 type GetNumberChunkWindowInput = {
   campaignId?: string
   pageStart?: number
@@ -88,6 +101,14 @@ type CallableEnvelope<T> = T | { result?: T }
 const NUMBER_WINDOW_PAGE_SIZE = 50
 const NUMBER_WINDOW_CACHE_TTL_MS = 120_000
 const NUMBER_WINDOW_CACHE_MAX_PAGES = 12
+const PAID_NUMBERS_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const PAID_NUMBERS_CACHE_MAX_CHUNKS = 400
+const AUTO_RESERVE_CONFLICT_MAX_RETRIES = 3
+
+type PaidNumbersChunkCacheEntry = {
+  updatedAtMs: number
+  numbers: Set<number>
+}
 
 function unwrapCallableData<T>(value: CallableEnvelope<T>) {
   if (value && typeof value === 'object' && 'result' in value) {
@@ -102,6 +123,10 @@ function unwrapCallableData<T>(value: CallableEnvelope<T>) {
 
 function buildNumberWindowCacheStorageKey(campaignId: string) {
   return `purchase-numbers-window-cache:${campaignId}`
+}
+
+function buildPaidNumbersCacheStorageKey(campaignId: string) {
+  return `purchase-numbers-paid-cache:${campaignId}`
 }
 
 function areNumberListsEqual(left: number[], right: number[]) {
@@ -336,6 +361,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   const [shouldHighlightAutoButton, setShouldHighlightAutoButton] = useState(false)
   const [conflictResolution, setConflictResolution] = useState<ConflictResolutionState | null>(null)
   const [isWindowCacheReady, setIsWindowCacheReady] = useState(() => typeof window === 'undefined')
+  const [paidNumbersCacheVersion, setPaidNumbersCacheVersion] = useState(0)
 
   const selectedNumbersRef = useRef<number[]>(selectedNumbers)
   selectedNumbersRef.current = selectedNumbers
@@ -344,10 +370,15 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   const numberWindowRequestRef = useRef(0)
   const numberWindowCacheRef = useRef(new Map<number, { payload: GetNumberChunkWindowResponse; fetchedAt: number }>())
   const numberWindowInFlightRef = useRef(new Map<number, Promise<GetNumberChunkWindowResponse | null>>())
+  const paidNumbersChunkCacheRef = useRef(new Map<number, PaidNumbersChunkCacheEntry>())
 
   const callables = useMemo(
     () => ({
       reserveNumbers: httpsCallable<ReserveNumbersInput, unknown>(functions, 'reserveNumbers'),
+      pickRandomAvailableNumbers: httpsCallable<PickRandomAvailableNumbersInput, unknown>(
+        functions,
+        'pickRandomAvailableNumbers',
+      ),
       getNumberChunkWindow: httpsCallable<GetNumberChunkWindowInput, unknown>(functions, 'getNumberChunkWindow'),
       getManualNumberSelectionSnapshot: httpsCallable<GetManualNumberSelectionSnapshotInput, unknown>(
         functions,
@@ -362,6 +393,10 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   const totalNumbers = numberWindow?.totalNumbers ?? baseTotalNumbers
   const numberWindowCacheStorageKey = useMemo(
     () => buildNumberWindowCacheStorageKey(campaign.id || 'default'),
+    [campaign.id],
+  )
+  const paidNumbersCacheStorageKey = useMemo(
+    () => buildPaidNumbersCacheStorageKey(campaign.id || 'default'),
     [campaign.id],
   )
 
@@ -400,18 +435,187 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     window.sessionStorage.setItem(numberWindowCacheStorageKey, JSON.stringify(serializable))
   }, [numberWindowCacheStorageKey])
 
+  const persistPaidNumbersCache = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const nowMs = Date.now()
+    const serializable = Array.from(paidNumbersChunkCacheRef.current.entries())
+      .filter(([, entry]) => Number.isFinite(entry.updatedAtMs) && (nowMs - entry.updatedAtMs) <= PAID_NUMBERS_CACHE_TTL_MS)
+      .sort((left, right) => right[1].updatedAtMs - left[1].updatedAtMs)
+      .slice(0, PAID_NUMBERS_CACHE_MAX_CHUNKS)
+      .map(([pageStartEntry, entry]) => ({
+        pageStart: pageStartEntry,
+        updatedAtMs: entry.updatedAtMs,
+        numbers: Array.from(entry.numbers)
+          .filter((number) => Number.isInteger(number) && number >= pageStartEntry && number <= (pageStartEntry + NUMBER_WINDOW_PAGE_SIZE - 1))
+          .sort((left, right) => left - right),
+      }))
+      .filter((entry) => entry.numbers.length > 0)
+
+    if (serializable.length === 0) {
+      window.localStorage.removeItem(paidNumbersCacheStorageKey)
+      return
+    }
+
+    window.localStorage.setItem(
+      paidNumbersCacheStorageKey,
+      JSON.stringify({
+        chunks: serializable,
+      }),
+    )
+  }, [paidNumbersCacheStorageKey])
+
+  const mergePaidNumbersIntoCache = useCallback(
+    (params: { pageStart: number; numbers: number[] }) => {
+      if (params.numbers.length === 0) {
+        return
+      }
+
+      const safePageStart = clampPageStart(params.pageStart, baseRangeStart, baseRangeEnd)
+      const pageEnd = Math.min(safePageStart + NUMBER_WINDOW_PAGE_SIZE - 1, baseRangeEnd)
+      const currentEntry = paidNumbersChunkCacheRef.current.get(safePageStart)
+      const nextNumbers = new Set(currentEntry?.numbers || [])
+      let hasChanges = false
+
+      for (const number of params.numbers) {
+        if (!Number.isInteger(number) || number < safePageStart || number > pageEnd) {
+          continue
+        }
+
+        if (!nextNumbers.has(number)) {
+          nextNumbers.add(number)
+          hasChanges = true
+        }
+      }
+
+      if (!hasChanges || nextNumbers.size === 0) {
+        return
+      }
+
+      paidNumbersChunkCacheRef.current.set(safePageStart, {
+        updatedAtMs: Date.now(),
+        numbers: nextNumbers,
+      })
+      persistPaidNumbersCache()
+      setPaidNumbersCacheVersion((current) => current + 1)
+    },
+    [baseRangeEnd, baseRangeStart, persistPaidNumbersCache],
+  )
+
   useEffect(() => {
     numberWindowCacheRef.current.clear()
     numberWindowInFlightRef.current.clear()
+    paidNumbersChunkCacheRef.current.clear()
 
     if (typeof window === 'undefined') {
+      setPaidNumbersCacheVersion((current) => current + 1)
       setIsWindowCacheReady(true)
       return
     }
 
     const nowMs = Date.now()
+    const nextPaidNumbersByChunk = new Map<number, PaidNumbersChunkCacheEntry>()
+
+    const mergeChunkPaidNumbers = (params: { pageStart: number; numbers: number[]; updatedAtMs: number }) => {
+      const safePageStart = clampPageStart(params.pageStart, baseRangeStart, baseRangeEnd)
+      const pageEnd = Math.min(safePageStart + NUMBER_WINDOW_PAGE_SIZE - 1, baseRangeEnd)
+      const previousEntry = nextPaidNumbersByChunk.get(safePageStart)
+      const mergedNumbers = new Set(previousEntry?.numbers || [])
+
+      for (const candidate of params.numbers) {
+        const number = Number(candidate)
+        if (!Number.isInteger(number) || number < safePageStart || number > pageEnd) {
+          continue
+        }
+
+        mergedNumbers.add(number)
+      }
+
+      if (mergedNumbers.size === 0) {
+        return
+      }
+
+      nextPaidNumbersByChunk.set(safePageStart, {
+        updatedAtMs: Math.max(previousEntry?.updatedAtMs || 0, params.updatedAtMs),
+        numbers: mergedNumbers,
+      })
+    }
+
+    const rawPaidNumbers = window.localStorage.getItem(paidNumbersCacheStorageKey)
+    if (rawPaidNumbers) {
+      try {
+        const parsed = JSON.parse(rawPaidNumbers) as {
+          chunks?: unknown
+          updatedAtMs?: unknown
+          numbers?: unknown
+        }
+
+        const chunksRaw = Array.isArray(parsed.chunks) ? parsed.chunks : []
+        for (const item of chunksRaw) {
+          if (!item || typeof item !== 'object') {
+            continue
+          }
+
+          const chunk = item as {
+            pageStart?: unknown
+            updatedAtMs?: unknown
+            numbers?: unknown
+          }
+          const pageStartEntry = Number(chunk.pageStart)
+          const updatedAtMs = Number(chunk.updatedAtMs)
+
+          if (!Number.isInteger(pageStartEntry) || !Number.isFinite(updatedAtMs)) {
+            continue
+          }
+          if ((nowMs - updatedAtMs) > PAID_NUMBERS_CACHE_TTL_MS) {
+            continue
+          }
+
+          mergeChunkPaidNumbers({
+            pageStart: pageStartEntry,
+            updatedAtMs,
+            numbers: Array.isArray(chunk.numbers) ? chunk.numbers as number[] : [],
+          })
+        }
+
+        // Backward compatibility: old global shape { updatedAtMs, numbers }.
+        const legacyUpdatedAtMs = Number(parsed.updatedAtMs)
+        const legacyIsFresh = Number.isFinite(legacyUpdatedAtMs) && (nowMs - legacyUpdatedAtMs) <= PAID_NUMBERS_CACHE_TTL_MS
+        if (nextPaidNumbersByChunk.size === 0 && legacyIsFresh && Array.isArray(parsed.numbers)) {
+          const byChunk = new Map<number, number[]>()
+          for (const candidate of parsed.numbers) {
+            const number = Number(candidate)
+            if (!Number.isInteger(number) || number < baseRangeStart || number > baseRangeEnd) {
+              continue
+            }
+
+            const pageStartEntry = baseRangeStart
+              + (Math.floor((number - baseRangeStart) / NUMBER_WINDOW_PAGE_SIZE) * NUMBER_WINDOW_PAGE_SIZE)
+            const list = byChunk.get(pageStartEntry) || []
+            list.push(number)
+            byChunk.set(pageStartEntry, list)
+          }
+
+          for (const [pageStartEntry, numbers] of byChunk.entries()) {
+            mergeChunkPaidNumbers({
+              pageStart: pageStartEntry,
+              updatedAtMs: legacyUpdatedAtMs,
+              numbers,
+            })
+          }
+        }
+      } catch {
+        window.localStorage.removeItem(paidNumbersCacheStorageKey)
+      }
+    }
+
     const raw = window.sessionStorage.getItem(numberWindowCacheStorageKey)
     if (!raw) {
+      paidNumbersChunkCacheRef.current = nextPaidNumbersByChunk
+      persistPaidNumbersCache()
+      setPaidNumbersCacheVersion((current) => current + 1)
       setIsWindowCacheReady(true)
       return
     }
@@ -443,14 +647,32 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
             payload: sanitized,
             fetchedAt,
           })
+
+          mergeChunkPaidNumbers({
+            pageStart: sanitized.pageStart,
+            updatedAtMs: fetchedAt,
+            numbers: sanitized.numbers
+              .filter((slot) => slot.status === 'pago')
+              .map((slot) => slot.number),
+          })
         }
       }
     } catch {
       window.sessionStorage.removeItem(numberWindowCacheStorageKey)
     } finally {
+      paidNumbersChunkCacheRef.current = nextPaidNumbersByChunk
+      persistPaidNumbersCache()
+      setPaidNumbersCacheVersion((current) => current + 1)
       setIsWindowCacheReady(true)
     }
-  }, [baseRangeEnd, baseRangeStart, baseTotalNumbers, numberWindowCacheStorageKey])
+  }, [
+    baseRangeEnd,
+    baseRangeStart,
+    baseTotalNumbers,
+    numberWindowCacheStorageKey,
+    paidNumbersCacheStorageKey,
+    persistPaidNumbersCache,
+  ])
 
   const fetchWindowPage = useCallback(
     async (
@@ -466,6 +688,12 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
       if (useCache) {
         const cached = numberWindowCacheRef.current.get(safePageStart)
         if (cached && (nowMs - cached.fetchedAt) <= NUMBER_WINDOW_CACHE_TTL_MS) {
+          mergePaidNumbersIntoCache({
+            pageStart: cached.payload.pageStart,
+            numbers: cached.payload.numbers
+              .filter((item) => item.status === 'pago')
+              .map((item) => item.number),
+          })
           return cached.payload
         }
       }
@@ -496,6 +724,12 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
               fetchedAt: Date.now(),
             })
             persistWindowCache()
+            mergePaidNumbersIntoCache({
+              pageStart: sanitized.pageStart,
+              numbers: sanitized.numbers
+                .filter((item) => item.status === 'pago')
+                .map((item) => item.number),
+            })
           }
 
           return sanitized
@@ -513,6 +747,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
       baseRangeStart,
       baseTotalNumbers,
       callables.getNumberChunkWindow,
+      mergePaidNumbersIntoCache,
       persistWindowCache,
     ],
   )
@@ -571,15 +806,16 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   const numberPool = useMemo(
     () => {
       if (numberWindow && numberWindow.numbers.length > 0) {
+        const paidNumbersInChunk = paidNumbersChunkCacheRef.current.get(numberWindow.pageStart)?.numbers || new Set<number>()
         return numberWindow.numbers.map((item) => ({
           number: item.number,
-          status: item.status,
+          status: paidNumbersInChunk.has(item.number) ? 'pago' : item.status,
         }))
       }
 
       return []
     },
-    [numberWindow],
+    [numberWindow, paidNumbersCacheVersion],
   )
 
   const pageEnd = useMemo(
@@ -624,9 +860,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     return nextStart <= rangeEnd ? nextStart : null
   }, [numberWindow, pageStart, rangeEnd])
 
-  const availableNumbersCount = numberWindow
-    ? numberWindow.availableInPage
-    : numberPool.filter((item) => item.status === 'disponivel').length
+  const availableNumbersCount = numberPool.filter((item) => item.status === 'disponivel').length
 
   const reservationCap = Math.max(
     1,
@@ -724,12 +958,49 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     })
   }, [quantity, selectionMode])
 
+  const requestAvailableNumbers = useCallback(
+    async (params: { quantity: number; excludeNumbers: number[] }) => {
+      const targetQuantity = Math.max(0, Math.floor(params.quantity))
+      if (targetQuantity <= 0) {
+        return [] as number[]
+      }
+
+      const normalizedExcluded = Array.from(new Set(
+        params.excludeNumbers
+          .map((number) => Number(number))
+          .filter((number) => Number.isInteger(number) && number >= rangeStart && number <= rangeEnd),
+      ))
+
+      const callableResult = await callables.pickRandomAvailableNumbers({
+        quantity: targetQuantity,
+        excludeNumbers: normalizedExcluded,
+      })
+      const payload = unwrapCallableData(
+        callableResult.data as CallableEnvelope<PickRandomAvailableNumbersResponse>,
+      )
+
+      return Array.from(new Set(
+        (payload?.numbers || [])
+          .map((number) => Number(number))
+          .filter((number) =>
+            Number.isInteger(number)
+            && number >= rangeStart
+            && number <= rangeEnd
+            && !normalizedExcluded.includes(number)),
+      ))
+        .sort((left, right) => left - right)
+        .slice(0, targetQuantity)
+    },
+    [callables.pickRandomAvailableNumbers, rangeEnd, rangeStart],
+  )
+
   useEffect(() => {
     if (selectionMode !== 'automatico' || reservationSeconds !== null) {
       setIsAutoSelecting(false)
       return
     }
 
+    let isCancelled = false
     setIsAutoSelecting(true)
 
     const preservedSelection = Array.from(new Set(selectedNumbersRef.current))
@@ -748,23 +1019,69 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
       return
     }
 
-    const generated = pickRandomUniqueNumbersFromRange(
-      rangeStart,
-      rangeEnd,
-      missingQuantity,
-      preservedSelection,
-    )
-    const mergedSelection = Array.from(new Set([...preservedSelection, ...generated]))
-      .sort((left, right) => left - right)
-      .slice(0, quantity)
+    void requestAvailableNumbers({
+      quantity: missingQuantity,
+      excludeNumbers: preservedSelection,
+    })
+      .then((generatedFromBackend) => {
+        if (isCancelled) {
+          return
+        }
 
-    setSelectedNumbers((currentSelection) => (
-      areNumberListsEqual(currentSelection, mergedSelection)
-        ? currentSelection
-        : mergedSelection
-    ))
-    setIsAutoSelecting(false)
-  }, [quantity, rangeEnd, rangeStart, reservationSeconds, selectionMode])
+        const missingAfterBackend = Math.max(missingQuantity - generatedFromBackend.length, 0)
+        const fallbackGenerated = missingAfterBackend > 0
+          ? pickRandomUniqueNumbersFromRange(
+            rangeStart,
+            rangeEnd,
+            missingAfterBackend,
+            [...preservedSelection, ...generatedFromBackend],
+          )
+          : []
+        const mergedSelection = Array.from(new Set([
+          ...preservedSelection,
+          ...generatedFromBackend,
+          ...fallbackGenerated,
+        ]))
+          .sort((left, right) => left - right)
+          .slice(0, quantity)
+
+        setSelectedNumbers((currentSelection) => (
+          areNumberListsEqual(currentSelection, mergedSelection)
+            ? currentSelection
+            : mergedSelection
+        ))
+      })
+      .catch(() => {
+        if (isCancelled) {
+          return
+        }
+
+        const fallbackGenerated = pickRandomUniqueNumbersFromRange(
+          rangeStart,
+          rangeEnd,
+          missingQuantity,
+          preservedSelection,
+        )
+        const mergedSelection = Array.from(new Set([...preservedSelection, ...fallbackGenerated]))
+          .sort((left, right) => left - right)
+          .slice(0, quantity)
+
+        setSelectedNumbers((currentSelection) => (
+          areNumberListsEqual(currentSelection, mergedSelection)
+            ? currentSelection
+            : mergedSelection
+        ))
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsAutoSelecting(false)
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [quantity, rangeEnd, rangeStart, requestAvailableNumbers, reservationSeconds, selectionMode])
 
   useEffect(() => {
     if (reservationSeconds === null) {
@@ -855,7 +1172,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     clearReservationState()
   }, [clearReservationState, selectionMode])
 
-  const handleFillRemainingAutomatically = useCallback(() => {
+  const handleFillRemainingAutomatically = useCallback(async () => {
     const preservedSelection = Array.from(new Set(selectedNumbersRef.current))
       .filter((number) => number >= rangeStart && number <= rangeEnd)
       .slice(0, quantity)
@@ -866,12 +1183,26 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
       return
     }
 
-    const generated = pickRandomUniqueNumbersFromRange(
-      rangeStart,
-      rangeEnd,
-      missingQuantity,
-      preservedSelection,
-    )
+    let generated: number[] = []
+
+    try {
+      generated = await requestAvailableNumbers({
+        quantity: missingQuantity,
+        excludeNumbers: preservedSelection,
+      })
+    } catch {
+      generated = []
+    }
+
+    if (generated.length < missingQuantity) {
+      const fallbackGenerated = pickRandomUniqueNumbersFromRange(
+        rangeStart,
+        rangeEnd,
+        missingQuantity - generated.length,
+        [...preservedSelection, ...generated],
+      )
+      generated = [...generated, ...fallbackGenerated]
+    }
 
     if (generated.length === 0) {
       toast.warning('Nao foi possivel completar a selecao automaticamente no momento.', {
@@ -891,7 +1222,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     ))
     setSelectionMode('manual')
     clearReservationState()
-  }, [clearReservationState, quantity, rangeEnd, rangeStart])
+  }, [clearReservationState, quantity, rangeEnd, rangeStart, requestAvailableNumbers])
 
   const handleToggleNumber = useCallback(
     (slot: NumberSlot) => {
@@ -1021,6 +1352,12 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
             fetchedAt: Date.now(),
           })
           persistWindowCache()
+          mergePaidNumbersIntoCache({
+            pageStart: sanitized.pageStart,
+            numbers: sanitized.numbers
+              .filter((item) => item.status === 'pago')
+              .map((item) => item.number),
+          })
           setNumberWindow(sanitized)
           setPageStartState(sanitized.pageStart)
         } else {
@@ -1068,6 +1405,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
       baseTotalNumbers,
       callables.getManualNumberSelectionSnapshot,
       clearReservationState,
+      mergePaidNumbersIntoCache,
       persistWindowCache,
       quantity,
       rangeEnd,
@@ -1136,56 +1474,139 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     setIsReserving(true)
 
     try {
-      const callableResult = await callables.reserveNumbers({ numbers: selectedNumbers })
-      const payload = unwrapCallableData(callableResult.data as CallableEnvelope<ReserveNumbersResponse>)
-      const secondsFromNow = Math.max(Math.floor((payload.expiresAtMs - Date.now()) / 1000), 0)
+      let selectionForReservation = Array.from(new Set(selectedNumbersRef.current))
+        .filter((number) => Number.isInteger(number) && number >= rangeStart && number <= rangeEnd)
+        .sort((left, right) => left - right)
 
-      if (secondsFromNow <= 0) {
-        setReservationSeconds(null)
-        setHasExpiredReservation(true)
-        toast.warning('Sua reserva expirou durante o processamento. Tente novamente.', {
-          position: 'bottom-right',
-          toastId: 'reservation-expired',
-        })
-        return
+      for (let attempt = 0; attempt <= AUTO_RESERVE_CONFLICT_MAX_RETRIES; attempt += 1) {
+        try {
+          const callableResult = await callables.reserveNumbers({ numbers: selectionForReservation })
+          const payload = unwrapCallableData(callableResult.data as CallableEnvelope<ReserveNumbersResponse>)
+          const secondsFromNow = Math.max(Math.floor((payload.expiresAtMs - Date.now()) / 1000), 0)
+
+          if (secondsFromNow <= 0) {
+            setReservationSeconds(null)
+            setHasExpiredReservation(true)
+            toast.warning('Sua reserva expirou durante o processamento. Tente novamente.', {
+              position: 'bottom-right',
+              toastId: 'reservation-expired',
+            })
+            return
+          }
+
+          setSelectedNumbers((currentSelection) => (
+            areNumberListsEqual(currentSelection, selectionForReservation)
+              ? currentSelection
+              : selectionForReservation
+          ))
+          setReservationSeconds(secondsFromNow)
+          setHasExpiredReservation(false)
+
+          navigate('/checkout', {
+            state: {
+              amount: totalAmount,
+              quantity: payload.numbers.length,
+              selectedNumbers: payload.numbers,
+              couponCode: appliedCoupon || undefined,
+              isAutomaticSelection: selectionMode === 'automatico',
+            },
+          })
+          return
+        } catch (error) {
+          const errorMessage = getReserveErrorMessage(error)
+          const conflictedNumbers = extractConflictedNumbers(error, errorMessage)
+            .filter((number) => number >= rangeStart && number <= rangeEnd)
+          const normalizedMessage = errorMessage.toLowerCase()
+          const errorCode = (
+            error
+            && typeof error === 'object'
+            && 'code' in error
+            && typeof (error as { code?: unknown }).code === 'string'
+          )
+            ? String((error as { code?: string }).code).toLowerCase()
+            : ''
+          const isAvailabilityConflict = conflictedNumbers.length > 0 && (
+            normalizedMessage.includes('nao esta mais disponivel')
+            || normalizedMessage.includes('nao estao mais disponiveis')
+            || normalizedMessage.includes('ja foi pago')
+            || errorCode.includes('failed-precondition')
+          )
+
+          if (!isAvailabilityConflict) {
+            throw error
+          }
+
+          if (numberWindow && conflictedNumbers.length > 0) {
+            const chunkEnd = Math.min(numberWindow.pageStart + NUMBER_WINDOW_PAGE_SIZE - 1, rangeEnd)
+            mergePaidNumbersIntoCache({
+              pageStart: numberWindow.pageStart,
+              numbers: conflictedNumbers.filter(
+                (number) => number >= numberWindow.pageStart && number <= chunkEnd,
+              ),
+            })
+          }
+
+          const filteredSelection = selectionForReservation
+            .filter((number) => !conflictedNumbers.includes(number))
+            .sort((left, right) => left - right)
+
+          if (selectionMode !== 'automatico') {
+            setSelectedNumbers(filteredSelection)
+            setConflictResolution({
+              conflictedNumbers,
+              filteredSelection,
+            })
+            return
+          }
+
+          const missingQuantity = Math.max(quantity - filteredSelection.length, 0)
+          if (missingQuantity <= 0) {
+            selectionForReservation = filteredSelection
+            continue
+          }
+
+          let replacements: number[] = []
+          try {
+            replacements = await requestAvailableNumbers({
+              quantity: missingQuantity,
+              excludeNumbers: [...filteredSelection, ...conflictedNumbers],
+            })
+          } catch {
+            replacements = []
+          }
+
+          if (replacements.length === 0) {
+            setSelectedNumbers(filteredSelection)
+            toast.warning(
+              'Alguns numeros ficaram indisponiveis e nao foi possivel encontrar substitutos automaticos agora.',
+              { position: 'bottom-right' },
+            )
+            return
+          }
+
+          selectionForReservation = Array.from(new Set([...filteredSelection, ...replacements]))
+            .filter((number) => Number.isInteger(number) && number >= rangeStart && number <= rangeEnd)
+            .sort((left, right) => left - right)
+            .slice(0, quantity)
+          setSelectedNumbers(selectionForReservation)
+
+          if (attempt < AUTO_RESERVE_CONFLICT_MAX_RETRIES) {
+            toast.info('Numero indisponivel detectado. Atualizamos a selecao e vamos tentar novamente.', {
+              position: 'bottom-right',
+              toastId: 'auto-retry-reserve-conflict',
+            })
+          }
+        }
       }
 
-      setReservationSeconds(secondsFromNow)
-      setHasExpiredReservation(false)
-
-      navigate('/checkout', {
-        state: {
-          amount: totalAmount,
-          quantity: payload.numbers.length,
-          selectedNumbers: payload.numbers,
-          couponCode: appliedCoupon || undefined,
-          isAutomaticSelection: selectionMode === 'automatico',
-        },
+      toast.warning('Nao foi possivel confirmar a reserva apos varias tentativas. Tente novamente.', {
+        position: 'bottom-right',
       })
     } catch (error) {
       const errorMessage = getReserveErrorMessage(error)
-      const conflictedNumbers = extractConflictedNumbers(error, errorMessage)
-        .filter((number) => number >= rangeStart && number <= rangeEnd)
-      const normalized = errorMessage.toLowerCase()
-
-      if (
-        conflictedNumbers.length > 0
-        && (normalized.includes('nao esta mais disponivel') || normalized.includes('ja foi pago'))
-      ) {
-        const filteredSelection = selectedNumbersRef.current
-          .filter((number) => !conflictedNumbers.includes(number))
-          .sort((left, right) => left - right)
-
-        setSelectedNumbers(filteredSelection)
-        setConflictResolution({
-          conflictedNumbers,
-          filteredSelection,
-        })
-      } else {
-        toast.error(errorMessage, {
-          position: 'bottom-right',
-        })
-      }
+      toast.error(errorMessage, {
+        position: 'bottom-right',
+      })
     } finally {
       setIsReserving(false)
     }
@@ -1194,10 +1615,13 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     callables.reserveNumbers,
     canProceed,
     isLoggedIn,
+    mergePaidNumbersIntoCache,
     navigate,
+    numberWindow,
     quantity,
     rangeEnd,
     rangeStart,
+    requestAvailableNumbers,
     selectionMode,
     selectedNumbers,
     totalAmount,

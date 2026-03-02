@@ -48,7 +48,12 @@ function formatPhone(value: string | null) {
   return value
 }
 
-export function exportOrderReceiptPdf(order: UserOrder) {
+function buildOrderReceiptPdfFilename(order: UserOrder) {
+  const safeId = order.id.replace(/[^a-zA-Z0-9_-]/g, '') || 'pedido'
+  return `comprovante-${safeId}.pdf`
+}
+
+function createOrderReceiptPdfDocument(order: UserOrder) {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -109,7 +114,18 @@ export function exportOrderReceiptPdf(order: UserOrder) {
   doc.setFontSize(9)
   doc.setTextColor(90, 90, 90)
   doc.text('Comprovante gerado automaticamente no portal do cliente.', 14, cursorY)
+  return doc
+}
 
-  const safeId = order.id.replace(/[^a-zA-Z0-9_-]/g, '') || 'pedido'
-  doc.save(`comprovante-${safeId}.pdf`)
+export function buildOrderReceiptPdfShareFile(order: UserOrder): File {
+  const doc = createOrderReceiptPdfDocument(order)
+  const blob = doc.output('blob')
+  return new File([blob], buildOrderReceiptPdfFilename(order), {
+    type: 'application/pdf',
+  })
+}
+
+export function exportOrderReceiptPdf(order: UserOrder) {
+  const doc = createOrderReceiptPdfDocument(order)
+  doc.save(buildOrderReceiptPdfFilename(order))
 }

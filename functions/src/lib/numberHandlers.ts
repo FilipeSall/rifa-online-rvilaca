@@ -25,6 +25,7 @@ import {
 } from './numberStateStore.js'
 import { asRecord, sanitizeString } from './shared.js'
 import { getCampaignDocCached } from './campaignDocCache.js'
+import { pickTopBuyersWinningTicketNumber, type TopBuyersWinnerAttemptLike } from './topBuyersWinner.js'
 
 interface GetNumberWindowInput {
   campaignId?: string
@@ -474,29 +475,52 @@ function normalizeTicketDigits(raw: unknown): string | null {
   return digits || null
 }
 
-function parseComparableWinnerTicket(raw: Record<string, unknown>): number | null {
-  const winningCode = sanitizeString(raw.winningCode)
+function readTopBuyersAttempts(raw: Record<string, unknown>): TopBuyersWinnerAttemptLike[] {
+  if (!Array.isArray(raw.attempts)) {
+    return []
+  }
+
+  return raw.attempts
+    .map((item) => asRecord(item))
+    .map((item) => ({
+      matchedPosition: Number.isInteger(Number(item.matchedPosition))
+        ? Number(item.matchedPosition)
+        : null,
+      rawCandidateCode: sanitizeString(item.rawCandidateCode),
+      candidateCode: sanitizeString(item.candidateCode),
+    }))
+}
+
+function toComparableTicketNumber(ticket: string | null) {
+  if (!ticket) {
+    return null
+  }
+
+  const comparableNumber = Number(ticket)
+  if (!Number.isInteger(comparableNumber) || comparableNumber <= 0) {
+    return null
+  }
+
+  return comparableNumber
+}
+
+export function parseComparableWinnerTicket(raw: Record<string, unknown>): number | null {
   const winnerTicketNumbers = Array.isArray(raw.winnerTicketNumbers)
     ? raw.winnerTicketNumbers
       .map((item) => normalizeTicketDigits(item))
       .filter((item): item is string => Boolean(item))
     : []
 
-  if (winnerTicketNumbers.length === 0) {
-    return null
-  }
+  const comparableTicket = pickTopBuyersWinningTicketNumber({
+    winningTicketNumber: sanitizeString(raw.winningTicketNumber) || null,
+    winnerTicketNumbers,
+    attempts: readTopBuyersAttempts(raw),
+    winningPosition: Number(raw.winningPosition),
+    comparisonDigits: Number(raw.comparisonDigits),
+    winningCode: sanitizeString(raw.winningCode),
+  })
 
-  const matched = winningCode
-    ? winnerTicketNumbers.find((ticket) => ticket.endsWith(winningCode))
-    : null
-  const comparableTicket = matched || winnerTicketNumbers[0]
-  const comparableNumber = Number(comparableTicket)
-
-  if (!Number.isInteger(comparableNumber) || comparableNumber <= 0) {
-    return null
-  }
-
-  return comparableNumber
+  return toComparableTicketNumber(comparableTicket)
 }
 
 function readTimestampMillis(value: unknown): number {
@@ -590,24 +614,6 @@ async function readWinnerTicketNumbersFromOrders(
     .slice(0, 300)
 }
 
-function pickComparableTicketByWinningCode(tickets: string[], winningCode: string): number | null {
-  if (tickets.length === 0) {
-    return null
-  }
-
-  const matched = winningCode
-    ? tickets.find((ticket) => ticket.endsWith(winningCode))
-    : null
-  const comparableTicket = matched || tickets[0]
-  const comparableNumber = Number(comparableTicket)
-
-  if (!Number.isInteger(comparableNumber) || comparableNumber <= 0) {
-    return null
-  }
-
-  return comparableNumber
-}
-
 async function resolveComparableWinnerTicket(
   db: Firestore,
   campaignId: string,
@@ -622,7 +628,6 @@ async function resolveComparableWinnerTicket(
   const winnerUserId = sanitizeString(winner.userId)
   const weekStartAtMs = Number(raw.weekStartAtMs)
   const weekEndAtMs = Number(raw.weekEndAtMs)
-  const winningCode = sanitizeString(raw.winningCode)
   const tickets = await readWinnerTicketNumbersFromOrders(
     db,
     campaignId,
@@ -630,7 +635,15 @@ async function resolveComparableWinnerTicket(
     weekStartAtMs,
     weekEndAtMs,
   )
-  return pickComparableTicketByWinningCode(tickets, winningCode)
+  const comparableTicket = pickTopBuyersWinningTicketNumber({
+    winningTicketNumber: sanitizeString(raw.winningTicketNumber) || null,
+    winnerTicketNumbers: tickets,
+    attempts: readTopBuyersAttempts(raw),
+    winningPosition: Number(raw.winningPosition),
+    comparisonDigits: Number(raw.comparisonDigits),
+    winningCode: sanitizeString(raw.winningCode),
+  })
+  return toComparableTicketNumber(comparableTicket)
 }
 
 async function resolveAwardedPrizeFromTopBuyersFallback(

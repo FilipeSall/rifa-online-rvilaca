@@ -1,16 +1,17 @@
-import { FieldValue, type DocumentData, type Firestore } from 'firebase-admin/firestore'
+import { FieldPath, FieldValue, Timestamp, type DocumentData, type Firestore } from 'firebase-admin/firestore'
 import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
-import { CAMPAIGN_DOC_ID, DEFAULT_MAIN_PRIZE } from './constants.js'
+import { CAMPAIGN_DOC_ID, DEFAULT_BONUS_PRIZE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from './constants.js'
 import { getCampaignDocCached, invalidateCampaignDocCache } from './campaignDocCache.js'
 import { asRecord, readString, readTimestampMillis, requireActiveUid, sanitizeString } from './shared.js'
+import { pickTopBuyersWinningTicketNumber } from './topBuyersWinner.js'
 
 const TOP_BUYERS_DRAW_HISTORY_COLLECTION = 'topBuyersDrawResults'
 const DEFAULT_RANKING_LIMIT = 50
-const DEFAULT_PUBLIC_HISTORY_LIMIT = 20
-const DEFAULT_ADMIN_HISTORY_LIMIT = 60
-const MAX_PUBLIC_HISTORY_LIMIT = 40
-const MAX_ADMIN_HISTORY_LIMIT = 120
+const DEFAULT_PUBLIC_HISTORY_LIMIT = 30
+const DEFAULT_ADMIN_HISTORY_LIMIT = 50
+const MAX_PUBLIC_HISTORY_LIMIT = 50
+const MAX_ADMIN_HISTORY_LIMIT = 100
 const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
 const EXTRACTION_COUNT = 5
 const EXTRACTION_DIGITS = 6
@@ -68,7 +69,9 @@ interface TopBuyersDrawResult {
   resolvedBy: 'federal_extraction' | 'redundancy'
   winner: TopBuyersDrawWinner
   winnerTicketNumbers: string[]
+  winningTicketNumber: string | null
   rankingSnapshot: TopBuyersRankingItem[]
+  exactCalculation?: ExactCalculationSnapshot
   publishedAtMs: number
 }
 
@@ -79,14 +82,53 @@ interface GetLatestTopBuyersDrawOutput {
 
 interface GetTopBuyersDrawHistoryOutput {
   results: TopBuyersDrawResult[]
+  nextCursor: string | null
+  hasMore: boolean
 }
 
 interface GetPublicTopBuyersDrawHistoryOutput {
   results: TopBuyersDrawResult[]
 }
 
+interface ExactCalculationComparisonItem {
+  pos: number
+  userId: string
+  name: string
+  ticketNumber: string | null
+  ticketFinal: string | null
+  isWinner: boolean
+}
+
+interface ExactCalculationAttemptOutput {
+  extractionIndex: number
+  extractionNumber: string
+  rawCode: string
+  resolvedCode: string
+  nearestDirection: 'none' | 'below' | 'above'
+  matchedPosition: number | null
+  comparisons: ExactCalculationComparisonItem[]
+}
+
+type ExactCalculationSnapshot = {
+  drawId: string
+  comparisonDigits: number
+  winningPosition: number
+  attempts: ExactCalculationAttemptOutput[]
+}
+
+interface GetLatestTopBuyersDrawExactCalculationOutput {
+  hasResult: boolean
+  drawId: string | null
+  result: ExactCalculationSnapshot | null
+}
+
+interface GetLatestTopBuyersDrawExactCalculationInput {
+  drawId?: string
+}
+
 interface GetTopBuyersDrawHistoryInput {
   limit?: number
+  cursor?: string
 }
 
 interface GetPublicTopBuyersDrawHistoryInput {
@@ -132,6 +174,42 @@ function sanitizeHistoryLimit(value: unknown, max: number, fallback: number): nu
   }
 
   return Math.min(Math.max(1, parsed), max)
+}
+
+function encodeHistoryCursor(publishedAtMs: number, docId: string): string | null {
+  if (!Number.isFinite(publishedAtMs) || !docId) {
+    return null
+  }
+
+  try {
+    return Buffer.from(JSON.stringify({ p: Math.floor(publishedAtMs), d: docId }), 'utf8').toString('base64')
+  } catch {
+    return null
+  }
+}
+
+function decodeHistoryCursor(value: unknown): { publishedAtMs: number, docId: string } | null {
+  const normalized = sanitizeString(value)
+  if (!normalized) {
+    return null
+  }
+
+  try {
+    const decoded = Buffer.from(normalized, 'base64').toString('utf8')
+    const payload = asRecord(JSON.parse(decoded))
+    const publishedAtMs = Number(payload.p)
+    const docId = sanitizeString(payload.d)
+    if (!Number.isFinite(publishedAtMs) || !docId) {
+      return null
+    }
+
+    return {
+      publishedAtMs: Math.floor(publishedAtMs),
+      docId,
+    }
+  } catch {
+    return null
+  }
 }
 
 function sanitizeExtractionNumber(value: unknown, index: number): string {
@@ -204,6 +282,245 @@ function readOrderNumbers(data: DocumentData): number[] {
       .map((value) => Number(value))
       .filter((value) => Number.isInteger(value) && value > 0),
   )).sort((left, right) => left - right)
+}
+
+function normalizeExactCalculationComparisons(value: unknown): ExactCalculationComparisonItem[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((item) => asRecord(item))
+    .map((item, index) => {
+      const pos = Number(item.pos)
+      const userId = sanitizeString(item.userId)
+      return {
+        pos: Number.isInteger(pos) && pos > 0 ? pos : index + 1,
+        userId: userId || `pos-${index + 1}`,
+        name: sanitizeString(item.name) || 'Participante',
+        ticketNumber: sanitizeString(item.ticketNumber) || null,
+        ticketFinal: sanitizeString(item.ticketFinal) || null,
+        isWinner: item.isWinner === true,
+      }
+    })
+    .filter((item) => item.pos > 0)
+}
+
+function normalizeExactCalculationAttempts(value: unknown): ExactCalculationAttemptOutput[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((item, index) => {
+      const raw = asRecord(item)
+      const extractionIndex = Number(raw.extractionIndex)
+      const extractionNumber = sanitizeString(raw.extractionNumber)
+
+      return {
+        extractionIndex: Number.isInteger(extractionIndex) && extractionIndex > 0
+          ? extractionIndex
+          : index + 1,
+        extractionNumber: extractionNumber || '-',
+        rawCode: sanitizeString(raw.rawCode) || sanitizeString(raw.rawCandidateCode),
+        resolvedCode: sanitizeString(raw.resolvedCode) || sanitizeString(raw.candidateCode),
+        nearestDirection: raw.nearestDirection === 'below'
+          ? 'below'
+          : raw.nearestDirection === 'above'
+            ? 'above'
+            : 'none',
+        matchedPosition: Number.isInteger(Number(raw.matchedPosition))
+          ? Number(raw.matchedPosition)
+          : null,
+        comparisons: normalizeExactCalculationComparisons(raw.comparisons),
+      } satisfies ExactCalculationAttemptOutput
+    })
+    .filter((item) => item.extractionIndex > 0 && item.extractionNumber)
+}
+
+function parseExactCalculationSnapshot(rawResult: Record<string, unknown>, fallbackDrawId = ''): ExactCalculationSnapshot | null {
+  const exactCalculationRaw = asRecord(rawResult.exactCalculation)
+  if (Object.keys(exactCalculationRaw).length === 0) {
+    return null
+  }
+
+  const drawId = sanitizeString(exactCalculationRaw.drawId) || sanitizeString(rawResult.drawId) || sanitizeString(fallbackDrawId)
+  const comparisonDigits = Number(exactCalculationRaw.comparisonDigits)
+  const winningPosition = Number(exactCalculationRaw.winningPosition)
+  const attempts = normalizeExactCalculationAttempts(exactCalculationRaw.attempts)
+
+  if (
+    !drawId
+    || !Number.isInteger(comparisonDigits)
+    || comparisonDigits <= 0
+    || !Number.isInteger(winningPosition)
+    || winningPosition <= 0
+    || attempts.length === 0
+  ) {
+    return null
+  }
+
+  const persistedWinningTicket = sanitizeString(rawResult.winningTicketNumber) || null
+  const persistedWinningTicketFinal = persistedWinningTicket
+    ? persistedWinningTicket.slice(-comparisonDigits).padStart(comparisonDigits, '0')
+    : null
+
+  return {
+    drawId,
+    comparisonDigits,
+    winningPosition,
+    attempts: attempts.map((attempt) => {
+      const rawCode = (attempt.rawCode || attempt.extractionNumber.slice(-comparisonDigits))
+        .padStart(comparisonDigits, '0')
+      const resolvedCode = (attempt.resolvedCode || rawCode).padStart(comparisonDigits, '0')
+      const comparisons = attempt.comparisons.map((comparison) => {
+        if (!comparison.isWinner || !persistedWinningTicket || !persistedWinningTicketFinal) {
+          return comparison
+        }
+
+        return {
+          ...comparison,
+          ticketNumber: persistedWinningTicket,
+          ticketFinal: persistedWinningTicketFinal,
+        }
+      })
+
+      return {
+        ...attempt,
+        rawCode,
+        resolvedCode,
+        comparisons,
+      }
+    }),
+  }
+}
+
+function pickComparableTicketForAttempt(
+  tickets: string[],
+  rawCode: string,
+  resolvedCode: string,
+  comparisonDigits: number,
+  isWinner: boolean,
+  winningTicketNumber: string | null,
+): string | null {
+  if (tickets.length === 0) {
+    return null
+  }
+
+  if (isWinner && winningTicketNumber) {
+    return winningTicketNumber
+  }
+
+  if (isWinner) {
+    const byResolved = tickets.find((ticket) => ticket.endsWith(resolvedCode))
+    if (byResolved) {
+      return byResolved
+    }
+  }
+
+  const byRaw = tickets.find((ticket) => ticket.endsWith(rawCode))
+  if (byRaw) {
+    return byRaw
+  }
+
+  const target = Number(rawCode)
+  const safeTarget = Number.isFinite(target) ? target : 0
+  let selected = tickets[0]
+  let selectedDistance = Number.POSITIVE_INFINITY
+  let selectedFinal = Number.POSITIVE_INFINITY
+  let selectedTicket = Number(selected)
+
+  for (const ticket of tickets) {
+    const suffix = ticket.slice(-comparisonDigits).padStart(comparisonDigits, '0')
+    const suffixNumber = Number(suffix)
+    const distance = Math.abs(suffixNumber - safeTarget)
+    const ticketNumber = Number(ticket)
+
+    if (distance < selectedDistance) {
+      selected = ticket
+      selectedDistance = distance
+      selectedFinal = suffixNumber
+      selectedTicket = ticketNumber
+      continue
+    }
+
+    if (distance === selectedDistance && suffixNumber < selectedFinal) {
+      selected = ticket
+      selectedFinal = suffixNumber
+      selectedTicket = ticketNumber
+      continue
+    }
+
+    if (
+      distance === selectedDistance
+      && suffixNumber === selectedFinal
+      && Number.isFinite(ticketNumber)
+      && Number.isFinite(selectedTicket)
+      && ticketNumber < selectedTicket
+    ) {
+      selected = ticket
+      selectedTicket = ticketNumber
+    }
+  }
+
+  return selected
+}
+
+function buildExactCalculationSnapshot(params: {
+  drawId: string
+  comparisonDigits: number
+  winningPosition: number
+  attempts: ExtractionAttempt[]
+  rankingSnapshot: TopBuyersRankingItem[]
+  ticketNumbersByUser: Map<string, string[]>
+  winningTicketNumber: string | null
+}): ExactCalculationSnapshot {
+  const { drawId, comparisonDigits, winningPosition, attempts, rankingSnapshot, ticketNumbersByUser, winningTicketNumber } = params
+
+  return {
+    drawId,
+    comparisonDigits,
+    winningPosition,
+    attempts: attempts.map((attempt) => {
+      const rawCode = (attempt.rawCandidateCode || attempt.extractionNumber.slice(-comparisonDigits))
+        .padStart(comparisonDigits, '0')
+      const resolvedCode = attempt.candidateCode.padStart(comparisonDigits, '0')
+
+      const comparisons: ExactCalculationComparisonItem[] = rankingSnapshot.map((entry) => {
+        const userTickets = ticketNumbersByUser.get(entry.userId) || []
+        const isWinner = attempt.matchedPosition === entry.pos
+        const selectedTicket = pickComparableTicketForAttempt(
+          userTickets,
+          rawCode,
+          resolvedCode,
+          comparisonDigits,
+          isWinner,
+          winningTicketNumber,
+        )
+
+        return {
+          pos: entry.pos,
+          userId: entry.userId,
+          name: entry.name,
+          ticketNumber: selectedTicket,
+          ticketFinal: selectedTicket
+            ? selectedTicket.slice(-comparisonDigits).padStart(comparisonDigits, '0')
+            : null,
+          isWinner,
+        }
+      })
+
+      return {
+        extractionIndex: attempt.extractionIndex,
+        extractionNumber: attempt.extractionNumber,
+        rawCode,
+        resolvedCode,
+        nearestDirection: attempt.nearestDirection,
+        matchedPosition: attempt.matchedPosition,
+        comparisons,
+      }
+    }),
+  }
 }
 
 async function readWinnerTicketNumbersFromOrders(
@@ -307,11 +624,12 @@ function getComparisonDigits(participantCount: number) {
 }
 
 function buildAvailableDrawPrizes(campaignData: DocumentData | undefined): string[] {
-  const mainPrize = sanitizeString(campaignData?.mainPrize) || DEFAULT_MAIN_PRIZE
-  const secondPrize = sanitizeString(campaignData?.secondPrize)
-  const bonusPrize = sanitizeString(campaignData?.bonusPrize)
+  // Mantem consistencia com o front/campaignHandlers: se faltarem campos na campanha,
+  // usamos os defaults para evitar divergencia de validacao no sorteio Top Buyers.
+  const secondPrize = sanitizeString(campaignData?.secondPrize) || DEFAULT_SECOND_PRIZE
+  const bonusPrize = sanitizeString(campaignData?.bonusPrize) || DEFAULT_BONUS_PRIZE
 
-  const directPrizes = [mainPrize, secondPrize].filter(Boolean)
+  const directPrizes = [secondPrize].filter(Boolean)
   const expandedPixPrizes: string[] = []
 
   const pixMatch = bonusPrize.match(/^\s*(\d+)\s*pix\b/i)
@@ -331,17 +649,62 @@ function buildAvailableDrawPrizes(campaignData: DocumentData | undefined): strin
   return Array.from(new Set([...directPrizes, ...expandedPixPrizes]))
 }
 
-function sanitizeDrawPrize(value: unknown, allowedPrizes: string[]): string {
+function sanitizeDrawPrize(value: unknown, allowedPrizes: string[], blockedPrizes: string[] = []): string {
   const normalized = sanitizeString(value)
   if (!normalized) {
     throw new HttpsError('invalid-argument', 'Selecione o premio vigente do sorteio.')
   }
 
-  if (!allowedPrizes.includes(normalized)) {
+  const normalizedKey = normalizeDrawPrizeKey(normalized)
+  if (!normalizedKey) {
+    throw new HttpsError('invalid-argument', 'Selecione o premio vigente do sorteio.')
+  }
+
+  const blockedPrizeKeys = new Set(
+    blockedPrizes
+      .map((item) => normalizeDrawPrizeKey(item))
+      .filter(Boolean),
+  )
+  if (blockedPrizeKeys.has(normalizedKey)) {
+    throw new HttpsError('invalid-argument', 'O premio principal nao pode ser utilizado no Sorteio Top.')
+  }
+
+  const allowedPrizeByKey = new Map<string, string>()
+  for (const prize of allowedPrizes) {
+    const key = normalizeDrawPrizeKey(prize)
+    if (key && !allowedPrizeByKey.has(key)) {
+      allowedPrizeByKey.set(key, prize)
+    }
+  }
+
+  const canonicalPrize = allowedPrizeByKey.get(normalizedKey)
+  if (!canonicalPrize) {
     throw new HttpsError('invalid-argument', 'Premio selecionado nao pertence aos premios vigentes da campanha.')
   }
 
-  return normalized
+  return canonicalPrize
+}
+
+function normalizeDrawPrizeKey(value: string): string {
+  return value
+    .normalize('NFKC')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function dedupeResultsByPrize(results: TopBuyersDrawResult[]): TopBuyersDrawResult[] {
+  const byPrizeKey = new Map<string, TopBuyersDrawResult>()
+  for (const item of results) {
+    const key = normalizeDrawPrizeKey(item.drawPrize) || item.drawId
+    if (!byPrizeKey.has(key)) {
+      byPrizeKey.set(key, item)
+    }
+  }
+
+  return Array.from(byPrizeKey.values())
 }
 
 async function assertAdminRole(db: Firestore, uid: string) {
@@ -362,7 +725,9 @@ async function buildRankingSnapshot(
     .where('status', '==', 'paid')
     .where('type', '==', 'deposit')
     .where('campaignId', '==', CAMPAIGN_DOC_ID)
-    .select('userId', 'reservedNumbers', 'quantity', 'createdAt', 'updatedAt')
+    .where('createdAt', '>=', Timestamp.fromMillis(rankingWindow.startMs))
+    .where('createdAt', '<=', Timestamp.fromMillis(rankingWindow.endMs))
+    .select('userId', 'reservedNumbers', 'quantity', 'createdAt')
     .get()
 
   const totalsByUser = new Map<string, { cotas: number, firstPurchaseAtMs: number, ticketNumbers: Set<number> }>()
@@ -377,9 +742,7 @@ async function buildRankingSnapshot(
       continue
     }
 
-    const createdAtMs = readTimestampMillis(data.createdAt)
-    const updatedAtMs = readTimestampMillis(data.updatedAt)
-    const purchaseAtMs = createdAtMs || updatedAtMs
+    const purchaseAtMs = readTimestampMillis(data.createdAt)
 
     if (!purchaseAtMs) {
       continue
@@ -466,7 +829,7 @@ async function buildRankingSnapshot(
   }
 }
 
-function resolveWinnerByFederalRule(
+export function resolveWinnerByFederalRule(
   extractionNumbers: string[],
   rankingSnapshot: TopBuyersRankingItem[],
 ): {
@@ -479,17 +842,17 @@ function resolveWinnerByFederalRule(
   const participantCount = rankingSnapshot.length
   const comparisonDigits = getComparisonDigits(participantCount)
   const positionByCode = new Map<string, number>()
-  const firstPurchaseAtByCode = new Map<string, number>()
   const availableCodes = new Set<number>()
+  const rankingCodesInOrder: string[] = []
 
   for (const item of rankingSnapshot) {
     const code = String(item.pos).padStart(comparisonDigits, '0')
     positionByCode.set(code, item.pos)
-    firstPurchaseAtByCode.set(code, item.firstPurchaseAtMs)
     availableCodes.add(Number(code))
+    rankingCodesInOrder.push(code)
   }
 
-  function findNearestAvailableCode(targetCode: string): {
+  function findMatchByHouseComparison(targetCode: string): {
     resolvedCode: string
     nearestDirection: 'none' | 'below' | 'above'
     nearestDistance: number
@@ -509,43 +872,30 @@ function resolveWinnerByFederalRule(
       const below = targetNumber - distance
       const above = targetNumber + distance
 
-      const hasBelow = below >= 0 && availableCodes.has(below)
-      const hasAbove = above <= maxCode && availableCodes.has(above)
+      const belowCode = below >= 0 ? String(below).padStart(comparisonDigits, '0') : null
+      const aboveCode = above <= maxCode ? String(above).padStart(comparisonDigits, '0') : null
+      const hasBelow = Boolean(belowCode && availableCodes.has(below))
+      const hasAbove = Boolean(aboveCode && availableCodes.has(above))
 
-      if (hasBelow && hasAbove) {
-        const belowCode = String(below).padStart(comparisonDigits, '0')
-        const aboveCode = String(above).padStart(comparisonDigits, '0')
-        const belowFirstPurchaseAt = Number(firstPurchaseAtByCode.get(belowCode) || 0)
-        const aboveFirstPurchaseAt = Number(firstPurchaseAtByCode.get(aboveCode) || 0)
-
-        // Empate por distancia: prioriza quem comprou primeiro (menor timestamp).
-        if (belowFirstPurchaseAt > 0 && aboveFirstPurchaseAt > 0 && belowFirstPurchaseAt !== aboveFirstPurchaseAt) {
-          return belowFirstPurchaseAt < aboveFirstPurchaseAt
-            ? { resolvedCode: belowCode, nearestDirection: 'below', nearestDistance: distance }
-            : { resolvedCode: aboveCode, nearestDirection: 'above', nearestDistance: distance }
-        }
-
-        // Fallback deterministico para empate absoluto.
-        return {
-          resolvedCode: belowCode,
-          nearestDirection: 'below',
-          nearestDistance: distance,
-        }
+      if (!hasBelow && !hasAbove) {
+        continue
       }
 
-      if (hasBelow) {
-        return {
-          resolvedCode: String(below).padStart(comparisonDigits, '0'),
-          nearestDirection: 'below',
-          nearestDistance: distance,
+      // Regra de casas: para cada distancia, percorre jogadores em ordem de ranking.
+      for (const rankingCode of rankingCodesInOrder) {
+        if (hasBelow && belowCode && rankingCode === belowCode) {
+          return {
+            resolvedCode: belowCode,
+            nearestDirection: 'below',
+            nearestDistance: distance,
+          }
         }
-      }
-
-      if (hasAbove) {
-        return {
-          resolvedCode: String(above).padStart(comparisonDigits, '0'),
-          nearestDirection: 'above',
-          nearestDistance: distance,
+        if (hasAbove && aboveCode && rankingCode === aboveCode) {
+          return {
+            resolvedCode: aboveCode,
+            nearestDirection: 'above',
+            nearestDistance: distance,
+          }
         }
       }
     }
@@ -555,25 +905,55 @@ function resolveWinnerByFederalRule(
 
   const attempts: ExtractionAttempt[] = []
 
+  // Fase 1: match exato apenas — sem aproximacao.
   for (let index = 0; index < extractionNumbers.length; index += 1) {
     const extractionNumber = extractionNumbers[index]
     const rawCandidateCode = extractionNumber.slice(-comparisonDigits).padStart(comparisonDigits, '0')
-    const nearestResolution = findNearestAvailableCode(rawCandidateCode)
-    const resolvedCandidateCode = nearestResolution?.resolvedCode || rawCandidateCode
-    const matchedPosition = positionByCode.get(resolvedCandidateCode) || null
+    const isExactMatch = availableCodes.has(Number(rawCandidateCode))
+    const matchedPosition = isExactMatch ? (positionByCode.get(rawCandidateCode) ?? null) : null
 
     attempts.push({
       extractionIndex: index + 1,
       extractionNumber,
       comparisonDigits,
       rawCandidateCode,
+      candidateCode: rawCandidateCode,
+      nearestDirection: 'none',
+      nearestDistance: null,
+      matchedPosition,
+    })
+
+    if (matchedPosition !== null) {
+      return {
+        comparisonDigits,
+        attempts,
+        winningPosition: matchedPosition,
+        winningCode: rawCandidateCode,
+        resolvedBy: 'federal_extraction',
+      }
+    }
+  }
+
+  // Fase 2: match por proximidade — volta para extracao 1 e compara casa por casa.
+  for (let index = 0; index < extractionNumbers.length; index += 1) {
+    const extractionNumber = extractionNumbers[index]
+    const rawCandidateCode = extractionNumber.slice(-comparisonDigits).padStart(comparisonDigits, '0')
+    const nearestResolution = findMatchByHouseComparison(rawCandidateCode)
+    const resolvedCandidateCode = nearestResolution?.resolvedCode ?? rawCandidateCode
+    const matchedPosition = positionByCode.get(resolvedCandidateCode) ?? null
+
+    attempts.push({
+      extractionIndex: extractionNumbers.length + index + 1,
+      extractionNumber,
+      comparisonDigits,
+      rawCandidateCode,
       candidateCode: resolvedCandidateCode,
-      nearestDirection: (nearestResolution?.nearestDirection || 'none') as ExtractionAttempt['nearestDirection'],
+      nearestDirection: (nearestResolution?.nearestDirection ?? 'none') as ExtractionAttempt['nearestDirection'],
       nearestDistance: nearestResolution?.nearestDistance ?? null,
       matchedPosition,
     })
 
-    if (matchedPosition) {
+    if (matchedPosition !== null) {
       return {
         comparisonDigits,
         attempts,
@@ -589,7 +969,7 @@ function resolveWinnerByFederalRule(
   const fallbackCode = String(fallbackPosition).padStart(comparisonDigits, '0')
 
   attempts.push({
-    extractionIndex: extractionNumbers.length + 1,
+    extractionIndex: extractionNumbers.length * 2 + 1,
     extractionNumber: extractionNumbers.join('-'),
     comparisonDigits,
     rawCandidateCode: '',
@@ -618,14 +998,82 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
     const extractionNumbers = sanitizeExtractionNumbers(payload.extractionNumbers)
     const rankingLimit = sanitizeRankingLimit(payload.rankingLimit)
     const rankingWindow = getWeeklyRankingWindow()
-    const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
+    const requestedDrawPrize = sanitizeString(payload.drawPrize)
+    const requestedDrawPrizeKey = normalizeDrawPrizeKey(requestedDrawPrize)
+    logger.info('publishTopBuyersDraw:start', {
+      campaignId: CAMPAIGN_DOC_ID,
+      uid,
+      rankingLimit,
+      weekId: rankingWindow.weekId,
+      extractionNumbersCount: extractionNumbers.length,
+      requestedDrawPrize: requestedDrawPrize || null,
+      requestedDrawPrizeKey: requestedDrawPrizeKey || null,
+    })
+
+    const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID, { forceRefresh: true })
+    const mainPrize = sanitizeString(campaignData?.mainPrize) || DEFAULT_MAIN_PRIZE
+    const secondPrize = sanitizeString(campaignData?.secondPrize)
+    const bonusPrize = sanitizeString(campaignData?.bonusPrize)
     const availableDrawPrizes = buildAvailableDrawPrizes(campaignData)
-    const drawPrize = sanitizeDrawPrize(payload.drawPrize, availableDrawPrizes)
-    const existingPrizeSnapshot = await db.collection(TOP_BUYERS_DRAW_HISTORY_COLLECTION)
-      .where('drawPrize', '==', drawPrize)
-      .limit(1)
-      .get()
+    const blockedPrizes = [mainPrize]
+    const blockedPrizeKeys = blockedPrizes.map((item) => normalizeDrawPrizeKey(item)).filter(Boolean)
+    const availableDrawPrizeKeys = availableDrawPrizes.map((item) => normalizeDrawPrizeKey(item)).filter(Boolean)
+    logger.info('publishTopBuyersDraw:validate-prize', {
+      campaignId: CAMPAIGN_DOC_ID,
+      uid,
+      requestedDrawPrize: requestedDrawPrize || null,
+      requestedDrawPrizeKey: requestedDrawPrizeKey || null,
+      campaignMainPrize: mainPrize || null,
+      campaignSecondPrize: secondPrize || null,
+      campaignBonusPrize: bonusPrize || null,
+      availableDrawPrizes,
+      availableDrawPrizeKeys,
+      blockedPrizes,
+      blockedPrizeKeys,
+    })
+
+    let drawPrize: string
+    try {
+      drawPrize = sanitizeDrawPrize(payload.drawPrize, availableDrawPrizes, blockedPrizes)
+    } catch (error) {
+      if (error instanceof HttpsError) {
+        logger.error('publishTopBuyersDraw:validate-prize-failed', {
+          campaignId: CAMPAIGN_DOC_ID,
+          uid,
+          requestedDrawPrize: requestedDrawPrize || null,
+          requestedDrawPrizeKey: requestedDrawPrizeKey || null,
+          availableDrawPrizes,
+          availableDrawPrizeKeys,
+          blockedPrizes,
+          blockedPrizeKeys,
+          errorCode: error.code,
+          errorMessage: error.message,
+        })
+      }
+      throw error
+    }
+
+    const drawPrizeKey = normalizeDrawPrizeKey(drawPrize)
+    const existingPrizeByKeySnapshot = drawPrizeKey
+      ? await db.collection(TOP_BUYERS_DRAW_HISTORY_COLLECTION)
+        .where('drawPrizeKey', '==', drawPrizeKey)
+        .limit(1)
+        .get()
+      : null
+    const existingPrizeSnapshot = existingPrizeByKeySnapshot && !existingPrizeByKeySnapshot.empty
+      ? existingPrizeByKeySnapshot
+      : await db.collection(TOP_BUYERS_DRAW_HISTORY_COLLECTION)
+        .where('drawPrize', '==', drawPrize)
+        .limit(1)
+        .get()
     if (!existingPrizeSnapshot.empty) {
+      logger.warn('publishTopBuyersDraw:prize-already-used', {
+        campaignId: CAMPAIGN_DOC_ID,
+        uid,
+        drawPrize,
+        drawPrizeKey: drawPrizeKey || null,
+        existingDrawId: existingPrizeSnapshot.docs[0]?.id || null,
+      })
       throw new HttpsError(
         'failed-precondition',
         'Este premio ja foi sorteado em uma rodada anterior e nao pode ser reutilizado.',
@@ -649,6 +1097,23 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
 
       const drawRef = db.collection(TOP_BUYERS_DRAW_HISTORY_COLLECTION).doc()
       const publishedAtMs = Date.now()
+      const winnerTicketNumbers = rankingBuild.winnerTicketNumbersByUser.get(winner.userId) || []
+      const winningTicketNumber = pickTopBuyersWinningTicketNumber({
+        winnerTicketNumbers,
+        attempts: winnerResolution.attempts,
+        winningPosition: winnerResolution.winningPosition,
+        comparisonDigits: winnerResolution.comparisonDigits,
+        winningCode: winnerResolution.winningCode,
+      })
+      const exactCalculation = buildExactCalculationSnapshot({
+        drawId: drawRef.id,
+        comparisonDigits: winnerResolution.comparisonDigits,
+        winningPosition: winnerResolution.winningPosition,
+        attempts: winnerResolution.attempts,
+        rankingSnapshot,
+        ticketNumbersByUser: rankingBuild.winnerTicketNumbersByUser,
+        winningTicketNumber,
+      })
 
       const result: TopBuyersDrawResult = {
         campaignId: CAMPAIGN_DOC_ID,
@@ -673,8 +1138,10 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
           pos: winner.pos,
           photoURL: winner.photoURL,
         },
-        winnerTicketNumbers: rankingBuild.winnerTicketNumbersByUser.get(winner.userId) || [],
+        winnerTicketNumbers,
+        winningTicketNumber,
         rankingSnapshot,
+        exactCalculation,
         publishedAtMs,
       }
 
@@ -682,6 +1149,7 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
 
       batch.set(drawRef, {
         ...result,
+        drawPrizeKey,
         publishedByUid: uid,
         publishedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
@@ -692,6 +1160,7 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
         {
           latestTopBuyersDraw: {
             ...result,
+            drawPrizeKey,
             publishedByUid: uid,
             publishedAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
@@ -707,6 +1176,16 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
       return result
     } catch (error) {
       if (error instanceof HttpsError) {
+        logger.warn('publishTopBuyersDraw rejected', {
+          campaignId: CAMPAIGN_DOC_ID,
+          uid,
+          drawPrize,
+          drawPrizeKey: drawPrizeKey || null,
+          rankingLimit,
+          weekId: rankingWindow.weekId,
+          errorCode: error.code,
+          errorMessage: error.message,
+        })
         throw error
       }
 
@@ -764,6 +1243,7 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
       const resolvedBy = rawResult.resolvedBy === 'federal_extraction' ? 'federal_extraction' : 'redundancy'
       const publishedAtMs = Number(rawResult.publishedAtMs)
       const winnerRecord = asRecord(rawResult.winner)
+      let winningTicketNumber = sanitizeString(rawResult.winningTicketNumber) || null
       let winnerTicketNumbers = Array.isArray(rawResult.winnerTicketNumbers)
         ? rawResult.winnerTicketNumbers
           .map((item) => sanitizeString(item))
@@ -811,6 +1291,15 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
           weekEndAtMs,
         )
       }
+      if (!winningTicketNumber) {
+        winningTicketNumber = pickTopBuyersWinningTicketNumber({
+          winnerTicketNumbers,
+          attempts,
+          winningPosition,
+          comparisonDigits,
+          winningCode,
+        })
+      }
 
       const rankingSnapshot = Array.isArray(rawResult.rankingSnapshot)
         ? rawResult.rankingSnapshot
@@ -846,6 +1335,7 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
           resolvedBy,
           winner,
           winnerTicketNumbers,
+          winningTicketNumber,
           rankingSnapshot,
           publishedAtMs,
         },
@@ -857,6 +1347,239 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
 
       throw new HttpsError('internal', 'Nao foi possivel carregar o resultado publicado.')
     }
+  }
+}
+
+export function createGetLatestTopBuyersDrawExactCalculationHandler(db: Firestore) {
+  return async (request: { data?: unknown }): Promise<GetLatestTopBuyersDrawExactCalculationOutput> => {
+    try {
+      const payload = asRecord(request.data) as GetLatestTopBuyersDrawExactCalculationInput
+      const requestedDrawId = sanitizeString(payload.drawId)
+      logger.info('getLatestTopBuyersDrawExactCalculation:start', {
+        requestedDrawId: requestedDrawId || null,
+      })
+
+      const loadRawResultByDrawId = async (drawIdToLoad: string) => {
+        const snapshot = await db.collection(TOP_BUYERS_DRAW_HISTORY_COLLECTION).doc(drawIdToLoad).get()
+        if (!snapshot.exists) {
+          logger.warn('getLatestTopBuyersDrawExactCalculation:draw-not-found', {
+            drawId: drawIdToLoad,
+          })
+          return null
+        }
+
+        const raw = asRecord(snapshot.data())
+        logger.info('getLatestTopBuyersDrawExactCalculation:draw-loaded', {
+          drawId: sanitizeString(raw.drawId) || drawIdToLoad,
+          source: TOP_BUYERS_DRAW_HISTORY_COLLECTION,
+          hasAttempts: Array.isArray(raw.attempts),
+          hasRankingSnapshot: Array.isArray(raw.rankingSnapshot),
+        })
+        return {
+          ...raw,
+          drawId: sanitizeString(raw.drawId) || drawIdToLoad,
+        }
+      }
+
+      let rawResult: Record<string, unknown> = {}
+      if (requestedDrawId) {
+        rawResult = await loadRawResultByDrawId(requestedDrawId) || {}
+      } else {
+        const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
+        rawResult = asRecord(campaignData?.latestTopBuyersDraw)
+        const latestDrawId = sanitizeString(rawResult.drawId)
+        logger.info('getLatestTopBuyersDrawExactCalculation:campaign-latest', {
+          latestDrawId: latestDrawId || null,
+          hasExactCalculation: Object.keys(asRecord(rawResult.exactCalculation)).length > 0,
+        })
+
+        if (latestDrawId && Object.keys(asRecord(rawResult.exactCalculation)).length === 0) {
+          rawResult = await loadRawResultByDrawId(latestDrawId) || rawResult
+        }
+      }
+
+      const drawId = sanitizeString(rawResult.drawId) || sanitizeString(requestedDrawId) || null
+      const parsedSnapshot = parseExactCalculationSnapshot(rawResult, requestedDrawId)
+      if (!parsedSnapshot) {
+        logger.warn('getLatestTopBuyersDrawExactCalculation:missing-snapshot', {
+          requestedDrawId: requestedDrawId || null,
+          resolvedDrawId: drawId,
+        })
+        return {
+          hasResult: false,
+          drawId,
+          result: null,
+        }
+      }
+
+      return {
+        hasResult: true,
+        drawId: parsedSnapshot.drawId,
+        result: parsedSnapshot,
+      }
+    } catch (error) {
+      logger.error('getLatestTopBuyersDrawExactCalculation failed', {
+        error: String(error),
+      })
+      throw new HttpsError('internal', 'Nao foi possivel carregar o calculo exato agora.')
+    }
+  }
+}
+
+function parseAttempts(value: unknown): ExtractionAttempt[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((item) => asRecord(item))
+    .map((item) => ({
+      extractionIndex: Number(item.extractionIndex),
+      extractionNumber: sanitizeString(item.extractionNumber),
+      comparisonDigits: Number(item.comparisonDigits),
+      rawCandidateCode: sanitizeString(item.rawCandidateCode),
+      candidateCode: sanitizeString(item.candidateCode),
+      nearestDirection: (item.nearestDirection === 'below'
+        ? 'below'
+        : item.nearestDirection === 'above'
+          ? 'above'
+          : 'none') as ExtractionAttempt['nearestDirection'],
+      nearestDistance: Number.isFinite(Number(item.nearestDistance))
+        ? Number(item.nearestDistance)
+        : null,
+      matchedPosition: Number.isInteger(Number(item.matchedPosition))
+        ? Number(item.matchedPosition)
+        : null,
+    }))
+    .filter((item) => Number.isInteger(item.extractionIndex) && item.extractionIndex > 0 && item.extractionNumber)
+}
+
+function resolveWinningExtractionNumber(
+  attempts: ExtractionAttempt[],
+  extractionNumbers: string[],
+  winningPosition: number,
+): string | null {
+  const winnerAttempt = attempts.find((attempt) => attempt.matchedPosition === winningPosition)
+  if (winnerAttempt?.extractionNumber) {
+    return winnerAttempt.extractionNumber
+  }
+
+  if (extractionNumbers.length > 0) {
+    return extractionNumbers[0] || null
+  }
+
+  return null
+}
+
+function parseHistoryResultSummary(
+  raw: Record<string, unknown>,
+  documentId: string,
+  fallbackMainPrize: string,
+  options?: { maskWinnerName?: boolean },
+): TopBuyersDrawResult | null {
+  const drawId = sanitizeString(raw.drawId) || documentId
+  const drawDate = sanitizeString(raw.drawDate)
+  const drawPrize = sanitizeString(raw.drawPrize) || fallbackMainPrize
+  const weekId = sanitizeString(raw.weekId)
+  const weekStartAtMs = Number(raw.weekStartAtMs)
+  const weekEndAtMs = Number(raw.weekEndAtMs)
+  const requestedRankingLimit = Number(raw.requestedRankingLimit)
+  const participantCount = Number(raw.participantCount)
+  const comparisonDigits = Number(raw.comparisonDigits)
+  const extractionNumbers = Array.isArray(raw.extractionNumbers)
+    ? raw.extractionNumbers.map((item) => sanitizeString(item)).filter(Boolean)
+    : []
+  const attempts = parseAttempts(raw.attempts)
+  const winningPosition = Number(raw.winningPosition)
+  const winningCode = sanitizeString(raw.winningCode)
+  const resolvedBy = raw.resolvedBy === 'federal_extraction' ? 'federal_extraction' : 'redundancy'
+  const publishedAtMs = Number(raw.publishedAtMs)
+  const winnerRecord = asRecord(raw.winner)
+  let winningTicketNumber = sanitizeString(raw.winningTicketNumber) || null
+  const storedWinnerTicketNumbers = Array.isArray(raw.winnerTicketNumbers)
+    ? raw.winnerTicketNumbers
+      .map((item) => sanitizeString(item))
+      .filter(Boolean)
+      .slice(0, 300)
+    : []
+  const winnerUid = sanitizeString(winnerRecord.userId)
+  const winnerName = sanitizeString(winnerRecord.name) || 'Participante'
+  const winner: TopBuyersDrawWinner = {
+    userId: winnerUid,
+    name: options?.maskWinnerName ? formatPublicName(winnerName, winnerUid) : winnerName,
+    cotas: Number(winnerRecord.cotas) || 0,
+    pos: Number(winnerRecord.pos) || winningPosition,
+    photoURL: sanitizeString(winnerRecord.photoURL),
+  }
+
+  if (!winningTicketNumber && storedWinnerTicketNumbers.length > 0) {
+    winningTicketNumber = pickTopBuyersWinningTicketNumber({
+      winnerTicketNumbers: storedWinnerTicketNumbers,
+      attempts,
+      winningPosition,
+      comparisonDigits,
+      winningCode,
+    })
+  }
+
+  const resolvedExtractionNumber = sanitizeString(raw.resolvedExtractionNumber)
+    || resolveWinningExtractionNumber(attempts, extractionNumbers, winningPosition)
+
+  const normalizedAttempts = resolvedExtractionNumber && attempts.length === 0
+    ? [{
+      extractionIndex: 1,
+      extractionNumber: resolvedExtractionNumber,
+      comparisonDigits,
+      rawCandidateCode: winningCode,
+      candidateCode: winningCode,
+      nearestDirection: 'none' as const,
+      nearestDistance: null,
+      matchedPosition: winningPosition || null,
+    }]
+    : attempts
+
+  if (
+    !drawId ||
+    !drawDate ||
+    !drawPrize ||
+    !weekId ||
+    !Number.isInteger(requestedRankingLimit) ||
+    requestedRankingLimit <= 0 ||
+    !Number.isInteger(participantCount) ||
+    participantCount <= 0 ||
+    !Number.isInteger(comparisonDigits) ||
+    comparisonDigits <= 0 ||
+    extractionNumbers.length === 0 ||
+    !Number.isInteger(winningPosition) ||
+    winningPosition <= 0 ||
+    !winningCode ||
+    !Number.isFinite(publishedAtMs) ||
+    !winner.userId
+  ) {
+    return null
+  }
+
+  return {
+    campaignId: CAMPAIGN_DOC_ID,
+    drawId,
+    drawDate,
+    drawPrize,
+    weekId,
+    weekStartAtMs,
+    weekEndAtMs,
+    requestedRankingLimit,
+    participantCount,
+    comparisonDigits,
+    extractionNumbers,
+    attempts: normalizedAttempts,
+    winningPosition,
+    winningCode,
+    resolvedBy,
+    winner,
+    winnerTicketNumbers: [],
+    winningTicketNumber,
+    rankingSnapshot: [],
+    publishedAtMs,
   }
 }
 
@@ -872,143 +1595,48 @@ export function createGetTopBuyersDrawHistoryHandler(db: Firestore) {
       MAX_ADMIN_HISTORY_LIMIT,
       DEFAULT_ADMIN_HISTORY_LIMIT,
     )
+    const cursor = decodeHistoryCursor(payload.cursor)
 
     await assertAdminRole(db, uid)
 
     try {
       const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
       const fallbackMainPrize = sanitizeString(campaignData?.mainPrize) || DEFAULT_MAIN_PRIZE
-      const historySnapshot = await db.collection(TOP_BUYERS_DRAW_HISTORY_COLLECTION)
+      let historyQuery = db.collection(TOP_BUYERS_DRAW_HISTORY_COLLECTION)
         .orderBy('publishedAtMs', 'desc')
-        .limit(historyLimit)
+        .orderBy(FieldPath.documentId(), 'desc')
+
+      if (cursor) {
+        historyQuery = historyQuery.startAfter(cursor.publishedAtMs, cursor.docId)
+      }
+
+      const historySnapshot = await historyQuery
+        .limit(historyLimit + 1)
         .get()
+      const hasMore = historySnapshot.docs.length > historyLimit
+      const pageDocs = hasMore ? historySnapshot.docs.slice(0, historyLimit) : historySnapshot.docs
 
-      const rawResults = await Promise.all(historySnapshot.docs
-        .map(async (documentSnapshot) => {
-          const raw = asRecord(documentSnapshot.data())
-          const drawId = sanitizeString(raw.drawId) || documentSnapshot.id
-          const drawDate = sanitizeString(raw.drawDate)
-          const drawPrize = sanitizeString(raw.drawPrize) || fallbackMainPrize
-          const weekId = sanitizeString(raw.weekId)
-          const weekStartAtMs = Number(raw.weekStartAtMs)
-          const weekEndAtMs = Number(raw.weekEndAtMs)
-          const requestedRankingLimit = Number(raw.requestedRankingLimit)
-          const participantCount = Number(raw.participantCount)
-          const comparisonDigits = Number(raw.comparisonDigits)
-          const extractionNumbers = Array.isArray(raw.extractionNumbers)
-            ? raw.extractionNumbers.map((item) => sanitizeString(item)).filter(Boolean)
-            : []
-          const attempts = Array.isArray(raw.attempts)
-            ? raw.attempts
-              .map((item) => asRecord(item))
-              .map((item) => ({
-                extractionIndex: Number(item.extractionIndex),
-                extractionNumber: sanitizeString(item.extractionNumber),
-                comparisonDigits: Number(item.comparisonDigits),
-                rawCandidateCode: sanitizeString(item.rawCandidateCode),
-                candidateCode: sanitizeString(item.candidateCode),
-                nearestDirection: (item.nearestDirection === 'below'
-                  ? 'below'
-                  : item.nearestDirection === 'above'
-                    ? 'above'
-                    : 'none') as ExtractionAttempt['nearestDirection'],
-                nearestDistance: Number.isFinite(Number(item.nearestDistance))
-                  ? Number(item.nearestDistance)
-                  : null,
-                matchedPosition: Number.isInteger(Number(item.matchedPosition))
-                  ? Number(item.matchedPosition)
-                  : null,
-              }))
-              .filter((item) => Number.isInteger(item.extractionIndex) && item.extractionIndex > 0 && item.extractionNumber)
-            : []
-          const winningPosition = Number(raw.winningPosition)
-          const winningCode = sanitizeString(raw.winningCode)
-          const resolvedBy = raw.resolvedBy === 'federal_extraction' ? 'federal_extraction' : 'redundancy'
-          const publishedAtMs = Number(raw.publishedAtMs)
-          const winnerRecord = asRecord(raw.winner)
-          let winnerTicketNumbers = Array.isArray(raw.winnerTicketNumbers)
-            ? raw.winnerTicketNumbers
-              .map((item) => sanitizeString(item))
-              .filter(Boolean)
-              .slice(0, 300)
-            : []
-          const winner: TopBuyersDrawWinner = {
-            userId: sanitizeString(winnerRecord.userId),
-            name: sanitizeString(winnerRecord.name) || 'Participante',
-            cotas: Number(winnerRecord.cotas) || 0,
-            pos: Number(winnerRecord.pos) || winningPosition,
-            photoURL: sanitizeString(winnerRecord.photoURL),
-          }
+      const rawResults = pageDocs
+        .map((documentSnapshot) => parseHistoryResultSummary(
+          asRecord(documentSnapshot.data()),
+          documentSnapshot.id,
+          fallbackMainPrize,
+        ))
 
-          if (winnerTicketNumbers.length === 0 && winner.userId) {
-            winnerTicketNumbers = await readWinnerTicketNumbersFromOrders(
-              db,
-              winner.userId,
-              weekStartAtMs,
-              weekEndAtMs,
-            )
-          }
-          const rankingSnapshot = Array.isArray(raw.rankingSnapshot)
-            ? raw.rankingSnapshot
-              .map((item) => asRecord(item))
-              .map((item) => ({
-                pos: Number(item.pos),
-                userId: sanitizeString(item.userId),
-                name: sanitizeString(item.name),
-                cotas: Number(item.cotas),
-                firstPurchaseAtMs: Number(item.firstPurchaseAtMs),
-                photoURL: sanitizeString(item.photoURL),
-              }))
-              .filter((item) => Number.isInteger(item.pos) && item.pos > 0 && item.userId && Number.isInteger(item.cotas) && item.cotas > 0)
-            : []
+      const results = dedupeResultsByPrize(
+        rawResults.filter((item): item is TopBuyersDrawResult => Boolean(item)),
+      )
 
-          if (
-            !drawId ||
-            !drawDate ||
-            !weekId ||
-            !Number.isFinite(weekStartAtMs) ||
-            !Number.isFinite(weekEndAtMs) ||
-            !Number.isInteger(requestedRankingLimit) ||
-            requestedRankingLimit <= 0 ||
-            !Number.isInteger(participantCount) ||
-            participantCount <= 0 ||
-            !Number.isInteger(comparisonDigits) ||
-            comparisonDigits <= 0 ||
-            extractionNumbers.length === 0 ||
-            !Number.isInteger(winningPosition) ||
-            winningPosition <= 0 ||
-            !winningCode ||
-            !Number.isFinite(publishedAtMs)
-          ) {
-            return null
-          }
+      const lastDoc = pageDocs[pageDocs.length - 1]
+      const lastPublishedAtMs = Number(lastDoc?.get('publishedAtMs'))
 
-          return {
-            campaignId: CAMPAIGN_DOC_ID,
-            drawId,
-            drawDate,
-            drawPrize,
-            weekId,
-            weekStartAtMs,
-            weekEndAtMs,
-            requestedRankingLimit,
-            participantCount,
-            comparisonDigits,
-            extractionNumbers,
-            attempts,
-            winningPosition,
-            winningCode,
-            resolvedBy,
-            winner,
-            winnerTicketNumbers,
-            rankingSnapshot,
-            publishedAtMs,
-          }
-        }))
-
-      const results: TopBuyersDrawResult[] = rawResults.filter((item): item is TopBuyersDrawResult => Boolean(item))
-
-      return { results }
+      return {
+        results,
+        hasMore,
+        nextCursor: hasMore && lastDoc
+          ? encodeHistoryCursor(lastPublishedAtMs, lastDoc.id)
+          : null,
+      }
     } catch (error) {
       logger.error('getTopBuyersDrawHistory failed', {
         error: String(error),
@@ -1035,130 +1663,17 @@ export function createGetPublicTopBuyersDrawHistoryHandler(db: Firestore) {
         .limit(historyLimit)
         .get()
 
-      const rawResults = await Promise.all(historySnapshot.docs
-        .map(async (documentSnapshot) => {
-          const raw = asRecord(documentSnapshot.data())
-          const drawId = sanitizeString(raw.drawId) || documentSnapshot.id
-          const drawDate = sanitizeString(raw.drawDate)
-          const drawPrize = sanitizeString(raw.drawPrize) || fallbackMainPrize
-          const weekId = sanitizeString(raw.weekId)
-          const weekStartAtMs = Number(raw.weekStartAtMs)
-          const weekEndAtMs = Number(raw.weekEndAtMs)
-          const requestedRankingLimit = Number(raw.requestedRankingLimit)
-          const participantCount = Number(raw.participantCount)
-          const comparisonDigits = Number(raw.comparisonDigits)
-          const extractionNumbers = Array.isArray(raw.extractionNumbers)
-            ? raw.extractionNumbers.map((item) => sanitizeString(item)).filter(Boolean)
-            : []
-          const attempts = Array.isArray(raw.attempts)
-            ? raw.attempts
-              .map((item) => asRecord(item))
-              .map((item) => ({
-                extractionIndex: Number(item.extractionIndex),
-                extractionNumber: sanitizeString(item.extractionNumber),
-                comparisonDigits: Number(item.comparisonDigits),
-                rawCandidateCode: sanitizeString(item.rawCandidateCode),
-                candidateCode: sanitizeString(item.candidateCode),
-                nearestDirection: (item.nearestDirection === 'below'
-                  ? 'below'
-                  : item.nearestDirection === 'above'
-                    ? 'above'
-                    : 'none') as ExtractionAttempt['nearestDirection'],
-                nearestDistance: Number.isFinite(Number(item.nearestDistance))
-                  ? Number(item.nearestDistance)
-                  : null,
-                matchedPosition: Number.isInteger(Number(item.matchedPosition))
-                  ? Number(item.matchedPosition)
-                  : null,
-              }))
-              .filter((item) => Number.isInteger(item.extractionIndex) && item.extractionIndex > 0 && item.extractionNumber)
-            : []
-          const winningPosition = Number(raw.winningPosition)
-          const winningCode = sanitizeString(raw.winningCode)
-          const resolvedBy = raw.resolvedBy === 'federal_extraction' ? 'federal_extraction' : 'redundancy'
-          const publishedAtMs = Number(raw.publishedAtMs)
-          const winnerRecord = asRecord(raw.winner)
-          let winnerTicketNumbers = Array.isArray(raw.winnerTicketNumbers)
-            ? raw.winnerTicketNumbers
-              .map((item) => sanitizeString(item))
-              .filter(Boolean)
-              .slice(0, 300)
-            : []
-          const winner: TopBuyersDrawWinner = {
-            userId: sanitizeString(winnerRecord.userId),
-            name: sanitizeString(winnerRecord.name) || 'Participante',
-            cotas: Number(winnerRecord.cotas) || 0,
-            pos: Number(winnerRecord.pos) || winningPosition,
-            photoURL: sanitizeString(winnerRecord.photoURL),
-          }
+      const rawResults = historySnapshot.docs
+        .map((documentSnapshot) => parseHistoryResultSummary(
+          asRecord(documentSnapshot.data()),
+          documentSnapshot.id,
+          fallbackMainPrize,
+          { maskWinnerName: true },
+        ))
 
-          if (winnerTicketNumbers.length === 0 && winner.userId) {
-            winnerTicketNumbers = await readWinnerTicketNumbersFromOrders(
-              db,
-              winner.userId,
-              weekStartAtMs,
-              weekEndAtMs,
-            )
-          }
-          const rankingSnapshot = Array.isArray(raw.rankingSnapshot)
-            ? raw.rankingSnapshot
-              .map((item) => asRecord(item))
-              .map((item) => ({
-                pos: Number(item.pos),
-                userId: sanitizeString(item.userId),
-                name: sanitizeString(item.name),
-                cotas: Number(item.cotas),
-                firstPurchaseAtMs: Number(item.firstPurchaseAtMs),
-                photoURL: sanitizeString(item.photoURL),
-              }))
-              .filter((item) => Number.isInteger(item.pos) && item.pos > 0 && item.userId && Number.isInteger(item.cotas) && item.cotas > 0)
-            : []
-
-          if (
-            !drawId ||
-            !drawDate ||
-            !weekId ||
-            !Number.isFinite(weekStartAtMs) ||
-            !Number.isFinite(weekEndAtMs) ||
-            !Number.isInteger(requestedRankingLimit) ||
-            requestedRankingLimit <= 0 ||
-            !Number.isInteger(participantCount) ||
-            participantCount <= 0 ||
-            !Number.isInteger(comparisonDigits) ||
-            comparisonDigits <= 0 ||
-            extractionNumbers.length === 0 ||
-            !Number.isInteger(winningPosition) ||
-            winningPosition <= 0 ||
-            !winningCode ||
-            !Number.isFinite(publishedAtMs)
-          ) {
-            return null
-          }
-
-          return {
-            campaignId: CAMPAIGN_DOC_ID,
-            drawId,
-            drawDate,
-            drawPrize,
-            weekId,
-            weekStartAtMs,
-            weekEndAtMs,
-            requestedRankingLimit,
-            participantCount,
-            comparisonDigits,
-            extractionNumbers,
-            attempts,
-            winningPosition,
-            winningCode,
-            resolvedBy,
-            winner,
-            winnerTicketNumbers,
-            rankingSnapshot,
-            publishedAtMs,
-          }
-        }))
-
-      const results: TopBuyersDrawResult[] = rawResults.filter((item): item is TopBuyersDrawResult => Boolean(item))
+      const results = dedupeResultsByPrize(
+        rawResults.filter((item): item is TopBuyersDrawResult => Boolean(item)),
+      )
 
       return { results }
     } catch (error) {
@@ -1209,8 +1724,17 @@ export function createGetMyTopBuyersWinningSummaryHandler(db: Firestore) {
           }
         })
         .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      const winsByPrize = new Map<string, (typeof wins)[number]>()
+      for (const item of wins) {
+        const key = normalizeDrawPrizeKey(item.drawPrize) || item.drawId
+        const existing = winsByPrize.get(key)
+        if (!existing || item.publishedAtMs > existing.publishedAtMs) {
+          winsByPrize.set(key, item)
+        }
+      }
+      const normalizedWins = Array.from(winsByPrize.values())
 
-      if (wins.length === 0) {
+      if (normalizedWins.length === 0) {
         return {
           hasWins: false,
           winsCount: 0,
@@ -1218,11 +1742,11 @@ export function createGetMyTopBuyersWinningSummaryHandler(db: Firestore) {
         }
       }
 
-      const latestWin = [...wins].sort((left, right) => right.publishedAtMs - left.publishedAtMs)[0]
+      const latestWin = [...normalizedWins].sort((left, right) => right.publishedAtMs - left.publishedAtMs)[0]
 
       return {
         hasWins: true,
-        winsCount: wins.length,
+        winsCount: normalizedWins.length,
         latestWin,
       }
     } catch (error) {

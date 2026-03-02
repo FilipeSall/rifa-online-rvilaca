@@ -25,7 +25,7 @@ Fluxo principal:
   - React Router 7
   - React Toastify
 - Backend:
-  - Firebase Cloud Functions v2 (Node 20, TypeScript)
+  - Firebase Cloud Functions v2 (Node 22, TypeScript)
   - Firebase Admin SDK
   - Integracao HTTP com HorsePay (axios)
 - Banco:
@@ -63,25 +63,50 @@ Fluxo principal:
 
 Na raiz do projeto:
 
-- `bun run dev` - inicia frontend local (Vite)
+- `bun run dev` - inicia frontend local (modo normal)
+- `bun run dev:emulator` - inicia frontend apontando para emuladores
 - `bun run build` - build de producao frontend
 - `bun run lint` - lint
 - `bun run typecheck` - validacao TypeScript sem emitir build
+- `bun run emulators:start` - sobe Auth/Firestore/Functions/Storage Emulator (projeto demo)
+- `bun run emulators:exec:backend-e2e` - sobe emuladores temporarios e executa E2E backend
+- `bun run seed:emulator:backend` - seed minimo de campanha para testes no emulator
+- `bun run seed:emulator:users` - seed local de contas Auth + perfis Firestore para login manual
 - `bun run deploy:rules` - deploy de regras Firestore
 - `bun run seed:firestore` - seed de dados no Firestore (usa credenciais admin)
 - `bun run backfill:cpf-registry` - utilitario de backfill
 
 Na pasta `functions/`:
 
-- `npm run build` - compila Cloud Functions TS para `functions/lib`
+- `bun run build` - compila Cloud Functions TS para `functions/lib`
+- `bun run test` - build + testes compilados de `functions/lib/**/*.test.js`
 
-### 4.1) Regra obrigatoria para scripts de dados
+### 4.1) Terminais necessarios por fluxo
+
+- Teste manual local (app + backend): 2 terminais
+  - terminal 1: `bun run emulators:start`
+  - terminal 2: `bun run dev:emulator`
+- Teste E2E backend: 1 terminal
+  - `bun run emulators:exec:backend-e2e`
+
+### 4.2) Troca de ambiente (emulator -> producao)
+
+Checklist obrigatorio:
+
+1. Parar emuladores.
+2. Rodar frontend com `bun run dev` (nao usar `dev:emulator`).
+3. Garantir `VITE_USE_FIREBASE_EMULATORS=false` (ou ausente) no ambiente de producao.
+4. Nao usar `functions/.env.local` e `functions/.secret.local` em producao.
+5. Garantir `USE_MOCK_HORSEPAY` ausente/desligado em producao.
+6. Confirmar secrets reais no Firebase Secret Manager antes de deploy.
+
+### 4.3) Regra obrigatoria para scripts de dados
 
 - **NUNCA executar scripts de Firestore sem limite de leitura. Todo script deve usar limite explicito (ex.: `--limit`, `--chunkLimit`, `--deleteLimit`) ou falhar por padrao. Execucao full scan so com flag de override explicita e consciente.**
 
 ## 5) Variaveis de ambiente e secrets
 
-### Frontend (`.env`)
+### Frontend (`.env*`)
 
 Obrigatorias:
 - `VITE_FIREBASE_API_KEY`
@@ -95,9 +120,16 @@ Obrigatorias:
 - `VITE_FIREBASE_APPCHECK_SITE_KEY` (reCAPTCHA v3 site key para Firebase App Check)
 - `VITE_FIREBASE_APPCHECK_ENABLED` (`true` para ativar App Check no ambiente; default no codigo: desativado)
 - `VITE_FIREBASE_APPCHECK_PROVIDER` (`v3` ou `enterprise`)
-- `VITE_FIREBASE_APPCHECK_LOGS` (`true` para logs de diagnostico do App Check no frontend)
+- `VITE_USE_FIREBASE_EMULATORS` (`true` para conectar SDK Web aos emuladores)
+- `VITE_FIREBASE_EMULATOR_HOST` (default: `127.0.0.1`)
 
 Observacao: `src/lib/firebase.ts` lanca erro em runtime se faltar variavel obrigatoria; quando App Check estiver ativo, `VITE_FIREBASE_APPCHECK_SITE_KEY` e obrigatoria.
+
+Arquivos recomendados:
+
+- `.env` - base comum local
+- `.env.emulator` - modo local com emuladores
+- `.env.production` - modo producao
 
 ### Scripts de seed (`.env` / shell)
 
@@ -113,6 +145,19 @@ Observacao: `src/lib/firebase.ts` lanca erro em runtime se faltar variavel obrig
 - `HORSEPAY_CLIENT_KEY`
 - `HORSEPAY_CLIENT_SECRET`
 - `HORSEPAY_WEBHOOK_TOKEN`
+
+### Cloud Functions local (apenas emulator)
+
+- `functions/.env.local`:
+  - `USE_MOCK_HORSEPAY=true` (habilita gateway mock local)
+  - `HORSEPAY_WEBHOOK_CALLBACK_URL` (opcional; override de callback_url)
+  - `HORSEPAY_BASE_URL` (opcional; override de endpoint HorsePay)
+- `functions/.secret.local`:
+  - `HORSEPAY_CLIENT_KEY`
+  - `HORSEPAY_CLIENT_SECRET`
+  - `HORSEPAY_WEBHOOK_TOKEN`
+
+Em producao, as Functions devem usar os valores de Secret Manager (`defineSecret`), nao os arquivos locais.
 
 ## 6) Rotas do frontend (status atual)
 
@@ -179,7 +224,7 @@ Em `functions/src/index.ts`:
   - `metrics/sales_summary` incrementado
   - `salesMetricsDaily/{YYYY-MM-DD}` incrementado
   - `auditLogs/payment_paid_{externalId}` atualizado/criado
-  - `numberStates/{campaignId_number}` -> `pago`, com `ownerUid` e `orderId`
+  - atualiza `numberChunks/{campaignId__chunkStart}` para refletir numeros `pago`
   - `numberReservations/{uid}` removido quando corresponde ao conjunto pago
 
 ## 9) Colecoes Firestore relevantes
@@ -189,7 +234,7 @@ Colecoes usadas no runtime atual:
 - `campaigns`
 - `draws`
 - `winners`
-- `numberStates`
+- `numberChunks`
 - `numberReservations`
 - `orders`
 - `orders/{orderId}/events`
@@ -205,7 +250,7 @@ Colecoes usadas no runtime atual:
 
 Resumo de `firestore.rules`:
 - `campaigns`, `draws`, `winners`: leitura publica, escrita negada ao cliente.
-- `numberStates`: colecao server-only (cliente nao le direto; acesso via Cloud Functions).
+- `numberChunks`: colecao server-only (cliente nao le direto; acesso via Cloud Functions).
 - `numberReservations/{uid}`: leitura somente do dono, escrita negada ao cliente.
 - `users/{uid}`:
   - leitura/escrita somente do proprio usuario.
@@ -362,7 +407,7 @@ Pontos importantes para agentes:
 2. Recursos de automacao WhatsApp/email, anti-bot, marketing avancado e sorteio completo ainda nao estao totalmente implementados no frontend/backend principal.
 
 Faixa atual de runtime:
-- modelo principal com `numberStates` e range padrao de 3.450.000 numeros.
+- modelo principal com `numberChunks` e range padrao de 3.450.000 numeros.
 
 ## 13) Convencoes e cuidados para alteracoes
 
@@ -387,7 +432,7 @@ Faixa atual de runtime:
 4. Se envolver checkout/pagamento, validar ponta a ponta:
    - reserva -> createPixDeposit -> webhook -> atualizacao de order/metrics/numeros.
 5. Se envolver campanha/admin, validar papel `admin` e impacto em `campaigns`.
-6. Se envolver escala de numeros, manter modelo unico em `numberStates`.
+6. Se envolver escala de numeros, manter modelo unico em `numberChunks`.
 
 ## 15) Arquivos-chave (atalho mental rapido)
 
@@ -405,12 +450,14 @@ Faixa atual de runtime:
 ## 16) Estado do projeto Firebase
 
 - Projeto default em `.firebaserc`: `rifa-online-395d9`
+- Projeto de emulacao padrao nos scripts: `demo-rifa-online`
 - Hosting configurado para servir `dist` e reescrever qualquer rota para `index.html`
 - Predeploy de functions compila TypeScript automaticamente
+- `firebase.json` possui bloco `emulators` com portas fixas locais (Auth 9099, Functions 5001, Firestore 8080, Storage 9199)
 
 ## 17) Observacao final para IAs
 
 Quando houver conflito entre escopo do PDF e implementacao real no codigo, priorizar:
 1. nao quebrar o fluxo transacional e a seguranca atuais;
 2. explicitar o gap no PR/entrega;
-3. manter o modelo unico em `numberStates` e evitar reintroduzir legado sem necessidade.
+3. manter o modelo unico em `numberChunks` e evitar reintroduzir legado sem necessidade.

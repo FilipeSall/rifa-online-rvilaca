@@ -6,16 +6,17 @@ import {
   ReCaptchaV3Provider,
   type AppCheck,
 } from 'firebase/app-check'
-import { getAuth } from 'firebase/auth'
+import { connectAuthEmulator, getAuth } from 'firebase/auth'
 import {
+  connectFirestoreEmulator,
   getFirestore,
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
   type Firestore,
 } from 'firebase/firestore'
-import { getFunctions } from 'firebase/functions'
-import { getStorage } from 'firebase/storage'
+import { connectFunctionsEmulator, getFunctions } from 'firebase/functions'
+import { connectStorageEmulator, getStorage } from 'firebase/storage'
 
 const requiredFirebaseEnv = {
   VITE_FIREBASE_API_KEY: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -46,6 +47,8 @@ const firebaseConfig: FirebaseOptions = {
 }
 
 const app = initializeApp(firebaseConfig)
+const useFirebaseEmulators = `${import.meta.env.VITE_USE_FIREBASE_EMULATORS ?? ''}`.trim().toLowerCase() === 'true'
+const firebaseEmulatorHost = import.meta.env.VITE_FIREBASE_EMULATOR_HOST?.trim() || '127.0.0.1'
 const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY?.trim()
 const appCheckProvider = `${import.meta.env.VITE_FIREBASE_APPCHECK_PROVIDER ?? 'v3'}`.trim().toLowerCase() === 'enterprise'
   ? 'enterprise'
@@ -86,8 +89,17 @@ try {
 const storage = getStorage(app)
 const functions = getFunctions(app, import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'southamerica-east1')
 
-const analyticsPromise = isSupported()
-  .then((supported) => (supported ? getAnalytics(app) : null))
-  .catch(() => null)
+if (useFirebaseEmulators) {
+  connectAuthEmulator(auth, `http://${firebaseEmulatorHost}:9099`, { disableWarnings: true })
+  connectFirestoreEmulator(db, firebaseEmulatorHost, 8080)
+  connectFunctionsEmulator(functions, firebaseEmulatorHost, 5001)
+  connectStorageEmulator(storage, firebaseEmulatorHost, 9199)
+}
+
+const analyticsPromise = useFirebaseEmulators
+  ? Promise.resolve(null)
+  : isSupported()
+    .then((supported) => (supported ? getAnalytics(app) : null))
+    .catch(() => null)
 
 export { app, auth, db, storage, functions, analyticsPromise, firebaseConfig, appCheck }

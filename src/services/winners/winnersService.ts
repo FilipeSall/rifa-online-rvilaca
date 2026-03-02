@@ -1,5 +1,6 @@
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../../lib/firebase'
+import { pickComparableWinnerTicketNumber } from '../../utils/topBuyersWinner'
 
 type CallableEnvelope<T> = T | { result?: T }
 
@@ -11,6 +12,8 @@ type RawWinner = {
 
 type RawTopAttempt = {
   extractionNumber?: unknown
+  rawCandidateCode?: unknown
+  candidateCode?: unknown
   matchedPosition?: unknown
 }
 
@@ -22,7 +25,9 @@ type RawTopBuyersDrawResult = {
   winnerTicketNumbers?: unknown
   attempts?: unknown
   winningPosition?: unknown
+  comparisonDigits?: unknown
   winningCode?: unknown
+  winningTicketNumber?: unknown
   publishedAtMs?: unknown
 }
 
@@ -122,16 +127,25 @@ function pickTopBuyerWinningNumber(raw: RawTopBuyersDrawResult) {
     ? raw.winnerTicketNumbers.map((item) => sanitizeString(item)).filter(Boolean)
     : []
 
-  if (!tickets.length) {
-    return '-'
-  }
-
-  const winningCode = sanitizeString(raw.winningCode)
-  if (!winningCode) {
-    return tickets[0]
-  }
-
-  return tickets.find((ticket) => ticket.endsWith(winningCode)) || tickets[0]
+  return pickComparableWinnerTicketNumber({
+    winningTicketNumber: sanitizeString(raw.winningTicketNumber) || null,
+    winningCode: sanitizeString(raw.winningCode),
+    winningPosition: sanitizeInteger(raw.winningPosition),
+    comparisonDigits: sanitizeInteger(raw.comparisonDigits),
+    attempts: Array.isArray(raw.attempts)
+      ? raw.attempts
+        .map((item) => (item && typeof item === 'object' ? (item as RawTopAttempt) : null))
+        .filter((item): item is RawTopAttempt => Boolean(item))
+        .map((attempt) => ({
+          matchedPosition: Number.isInteger(Number(attempt.matchedPosition))
+            ? Number(attempt.matchedPosition)
+            : null,
+          rawCandidateCode: sanitizeString(attempt.rawCandidateCode),
+          candidateCode: sanitizeString(attempt.candidateCode),
+        }))
+      : [],
+    winnerTicketNumbers: tickets,
+  }) || '-'
 }
 
 function pickTopBuyerLotteryNumber(raw: RawTopBuyersDrawResult) {

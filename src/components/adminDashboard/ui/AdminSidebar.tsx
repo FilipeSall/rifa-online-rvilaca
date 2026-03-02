@@ -8,9 +8,9 @@ type AdminSidebarProps = {
 
 export default function AdminSidebar({ activeTab, onTabChange, onSignOut }: AdminSidebarProps) {
   return (
-    <aside className="sticky top-20 hidden min-h-[calc(100vh-80px)] w-72 flex-col border-r border-white/10 bg-luxury-card/80 p-5 backdrop-blur-md lg:flex">
+    <aside className="sticky top-20 hidden h-[calc(100vh-80px)] w-72 flex-col border-r border-white/10 bg-luxury-card/80 p-5 backdrop-blur-md lg:flex">
       <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.24em] text-neon-pink">Painel administrativo</p>
-      <div className="space-y-1">
+      <div className="overflow-y-auto space-y-1">
         {ADMIN_TABS.map((tab) => (
           <button
             key={tab.id}

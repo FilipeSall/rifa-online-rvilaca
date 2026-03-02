@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../lib/firebase'
-import { markFetchedNow, readCachedJson, shouldFetchAfterDays, writeCachedJson } from '../utils/fetchCache'
+import { markFetchedNow, readCachedJson, writeCachedJson } from '../utils/fetchCache'
 
 type CallableEnvelope<T> = T | { result?: T }
 
@@ -40,12 +40,11 @@ type GetPublicMainRaffleDrawHistoryOutput = {
   results?: unknown
 }
 const AUTO_REFRESH_INTERVAL_MS = 3 * 60 * 1000
-const FETCH_EVERY_DAYS = 5
-const HISTORY_LIMIT = 20
-const RESULT_CACHE_KEY = 'rifa-online:cache:main-raffle:result:v1'
-const HISTORY_CACHE_KEY = 'rifa-online:cache:main-raffle:history:v1'
-const RESULT_LAST_FETCH_KEY = 'rifa-online:last-fetch:main-raffle:result:v1'
-const HISTORY_LAST_FETCH_KEY = 'rifa-online:last-fetch:main-raffle:history:v1'
+const HISTORY_LIMIT = 50
+const RESULT_CACHE_KEY = 'rifa-online:cache:main-raffle:result:v2'
+const HISTORY_CACHE_KEY = 'rifa-online:cache:main-raffle:history:v2'
+const RESULT_LAST_FETCH_KEY = 'rifa-online:last-fetch:main-raffle:result:v2'
+const HISTORY_LAST_FETCH_KEY = 'rifa-online:last-fetch:main-raffle:history:v2'
 
 type PublishMainRaffleDrawInput = {
   extractionNumbers: string[]
@@ -87,6 +86,20 @@ type MainRaffleResultCache = {
 
 type MainRaffleHistoryCache = {
   results: MainRaffleDrawResult[]
+}
+
+function mergeHistoryEntries(...collections: MainRaffleDrawResult[][]): MainRaffleDrawResult[] {
+  const merged = new Map<string, MainRaffleDrawResult>()
+  for (const collection of collections) {
+    for (const item of collection) {
+      if (!item?.drawId) {
+        continue
+      }
+      merged.set(item.drawId, item)
+    }
+  }
+
+  return Array.from(merged.values()).sort((left, right) => (right.publishedAtMs || 0) - (left.publishedAtMs || 0))
 }
 
 function unwrapCallableData<T>(value: CallableEnvelope<T>) {
@@ -206,8 +219,10 @@ export function useMainRaffleDraw(autoRefresh = false) {
       writeCachedJson(RESULT_CACHE_KEY, { result: normalized } satisfies MainRaffleResultCache)
       markFetchedNow(RESULT_LAST_FETCH_KEY)
       setErrorMessage(null)
+      return normalized
     } catch {
       setErrorMessage('Nao foi possivel carregar o ultimo sorteio principal.')
+      return null
     } finally {
       setIsLoading(false)
     }
@@ -223,11 +238,19 @@ export function useMainRaffleDraw(autoRefresh = false) {
           .map((item) => normalizeResult(item as RawMainRaffleResult))
           .filter((item): item is MainRaffleDrawResult => Boolean(item))
         : []
-      setHistory(normalizedHistory)
-      writeCachedJson(HISTORY_CACHE_KEY, { results: normalizedHistory } satisfies MainRaffleHistoryCache)
+      setHistory((current) => {
+        const cachedHistory = readCachedJson<MainRaffleHistoryCache>(HISTORY_CACHE_KEY)
+        const merged = mergeHistoryEntries(
+          cachedHistory?.results || [],
+          current,
+          normalizedHistory,
+        )
+        writeCachedJson(HISTORY_CACHE_KEY, { results: merged } satisfies MainRaffleHistoryCache)
+        return merged
+      })
       markFetchedNow(HISTORY_LAST_FETCH_KEY)
     } catch {
-      setHistory([])
+      // Mantem cache e estado atual quando rede falhar.
     } finally {
       setIsHistoryLoading(false)
     }
@@ -247,9 +270,10 @@ export function useMainRaffleDraw(autoRefresh = false) {
       writeCachedJson(RESULT_CACHE_KEY, { result: normalized } satisfies MainRaffleResultCache)
       markFetchedNow(RESULT_LAST_FETCH_KEY)
       setHistory((current) => {
-        const merged = [normalized, ...current]
-        const unique = new Map(merged.map((item) => [item.drawId, item]))
-        return Array.from(unique.values()).sort((a, b) => (b.publishedAtMs || 0) - (a.publishedAtMs || 0))
+        const merged = mergeHistoryEntries(current, [normalized])
+        writeCachedJson(HISTORY_CACHE_KEY, { results: merged } satisfies MainRaffleHistoryCache)
+        markFetchedNow(HISTORY_LAST_FETCH_KEY)
+        return merged
       })
       setErrorMessage(null)
       return normalized
@@ -269,18 +293,31 @@ export function useMainRaffleDraw(autoRefresh = false) {
       setHistory(cachedHistory.results)
     }
 
-    const shouldFetchResult = shouldFetchAfterDays(RESULT_LAST_FETCH_KEY, FETCH_EVERY_DAYS)
-    if (shouldFetchResult || !cachedResult) {
-      void refreshResult()
-    } else {
-      setIsLoading(false)
+    let isCancelled = false
+
+    const syncFromNetwork = async () => {
+      const latest = await refreshResult()
+      if (isCancelled) {
+        return
+      }
+
+      const cached = readCachedJson<MainRaffleHistoryCache>(HISTORY_CACHE_KEY)
+      const hasCachedHistory = Boolean(cached?.results?.length)
+      const hasLatestInHistory = Boolean(
+        latest?.drawId
+        && cached?.results?.some((item) => item.drawId === latest.drawId),
+      )
+      if (!hasCachedHistory || (latest?.drawId && !hasLatestInHistory)) {
+        await refreshHistory()
+      } else {
+        setIsHistoryLoading(false)
+      }
     }
 
-    const shouldFetchHistory = shouldFetchAfterDays(HISTORY_LAST_FETCH_KEY, FETCH_EVERY_DAYS)
-    if (shouldFetchHistory || !cachedHistory) {
-      void refreshHistory()
-    } else {
-      setIsHistoryLoading(false)
+    void syncFromNetwork()
+
+    return () => {
+      isCancelled = true
     }
   }, [refreshHistory, refreshResult])
 
@@ -289,26 +326,29 @@ export function useMainRaffleDraw(autoRefresh = false) {
       return
     }
 
-    const runRefresh = () => {
+    const runRefresh = async () => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
         return
       }
 
-      if (shouldFetchAfterDays(RESULT_LAST_FETCH_KEY, FETCH_EVERY_DAYS)) {
-        void refreshResult()
-      }
-      if (shouldFetchAfterDays(HISTORY_LAST_FETCH_KEY, FETCH_EVERY_DAYS)) {
-        void refreshHistory()
+      const latest = await refreshResult()
+      const cached = readCachedJson<MainRaffleHistoryCache>(HISTORY_CACHE_KEY)
+      const hasLatestInHistory = Boolean(
+        latest?.drawId
+        && cached?.results?.some((item) => item.drawId === latest.drawId),
+      )
+      if (!cached?.results?.length || (latest?.drawId && !hasLatestInHistory)) {
+        await refreshHistory()
       }
     }
 
     const intervalId = window.setInterval(() => {
-      runRefresh()
+      void runRefresh()
     }, AUTO_REFRESH_INTERVAL_MS)
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        runRefresh()
+        void runRefresh()
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)

@@ -9,8 +9,8 @@ type DashboardSidebarProps = {
 
 export default function DashboardSidebar({ activeSection, onSectionChange, onSignOut }: DashboardSidebarProps) {
   return (
-    <aside className="sticky top-20 hidden min-h-[calc(100vh-80px)] w-64 flex-col border-r border-luxury-border bg-luxury-card lg:flex">
-      <div className="flex flex-col gap-1 p-5">
+    <aside className="sticky top-20 hidden h-[calc(100vh-80px)] w-64 flex-col border-r border-luxury-border bg-luxury-card lg:flex">
+      <div className="flex flex-col gap-1 overflow-y-auto p-5">
         <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-widest text-text-muted">Menu Principal</p>
         {NAV_ITEMS.map(({ icon, label, section }) => (
           <button

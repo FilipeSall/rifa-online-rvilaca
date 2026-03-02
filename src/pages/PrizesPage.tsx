@@ -6,6 +6,7 @@ import Header from '../components/home/Header'
 import PrizeWinnersShowcase from '../components/winners/PrizeWinnersShowcase'
 import { useMainRaffleDraw } from '../hooks/useMainRaffleDraw'
 import { useTopBuyersDraw } from '../hooks/useTopBuyersDraw'
+import { pickComparableWinnerTicketNumber } from '../utils/topBuyersWinner'
 
 function formatDrawDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -63,7 +64,7 @@ function buildWinnerCalculationLabel(item: {
 
     if (hasPath) {
       const directionLabel = winnerAttempt.nearestDirection === 'below' ? 'abaixo' : 'acima'
-      return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${item.comparisonDigits} dígitos = ${rawCode} -> aproximação: ${rawCode} -> ${resolvedCode} (${directionLabel}, dist ${winnerAttempt.nearestDistance ?? '?'}) -> match na posição ${item.winningPosition}.`
+      return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${item.comparisonDigits} dígitos = ${rawCode} -> aproximação: ${rawCode} -> ${resolvedCode} (${directionLabel}) -> match na posição ${item.winningPosition}.`
     }
 
     return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${item.comparisonDigits} dígitos = ${resolvedCode} -> match na posição ${item.winningPosition}.`
@@ -88,10 +89,7 @@ function formatNearestPath(attempt: {
     : attempt.nearestDirection === 'above'
       ? 'acima'
       : 'proximo'
-  const distanceLabel = Number.isFinite(Number(attempt.nearestDistance))
-    ? String(attempt.nearestDistance)
-    : '?'
-  return `${raw} (${directionLabel}, dist ${distanceLabel})`
+  return `${raw} -> ${attempt.candidateCode} (${directionLabel})`
 }
 
 function formatWinnerUserCode(item: {
@@ -103,15 +101,25 @@ function formatWinnerUserCode(item: {
 }
 
 function pickComparableWinnerTicket(item: {
+  winningTicketNumber: string | null
   winningCode: string
+  winningPosition: number
+  comparisonDigits: number
+  attempts: Array<{
+    matchedPosition: number | null
+    rawCandidateCode?: string
+    candidateCode: string
+  }>
   winnerTicketNumbers: string[]
 }) {
-  if (!item.winnerTicketNumbers.length) {
-    return null
-  }
-
-  const matchByEnding = item.winnerTicketNumbers.find((ticket) => ticket.endsWith(item.winningCode))
-  return matchByEnding || item.winnerTicketNumbers[0]
+  return pickComparableWinnerTicketNumber({
+    winningTicketNumber: item.winningTicketNumber,
+    winningCode: item.winningCode,
+    winningPosition: item.winningPosition,
+    comparisonDigits: item.comparisonDigits,
+    attempts: item.attempts,
+    winnerTicketNumbers: item.winnerTicketNumbers,
+  })
 }
 
 function formatLoteriaInputs(extractionNumbers: string[]) {
@@ -159,9 +167,8 @@ function buildMainRaffleFallbackPath(item: {
     return null
   }
 
-  const distance = Math.abs((item.winningNumber || 0) - (item.targetNumber || 0))
   const direction = formatMainFallbackDirectionLabel(item.fallbackDirection)
-  return `${item.targetNumberFormatted} -> ${item.winningNumberFormatted} (${direction}, dist ${distance})`
+  return `${item.targetNumberFormatted} -> ${item.winningNumberFormatted} (${direction})`
 }
 
 export default function PrizesPage() {
@@ -241,7 +248,7 @@ export default function PrizesPage() {
                   </article>
                   <article className="rounded-2xl border border-white/10 bg-black/30 px-4 py-4">
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-200">Modelo de apuração</p>
-                    <p className="mt-2 text-sm font-semibold text-gray-100">Loteria Federal + fallback rastreável</p>
+                    <p className="mt-2 text-sm font-semibold text-gray-100">Loteria Federal</p>
                   </article>
                 </div>
               </div>
@@ -323,6 +330,9 @@ export default function PrizesPage() {
                             </p>
                             <p className="mt-1 text-xs text-gray-300">
                               Códigos da Loteria informados: <span className="font-mono text-white">{formatLoteriaInputs(item.extractionNumbers)}</span>
+                            </p>
+                            <p className="mt-1 text-xs text-gray-300">
+                              Extração premiada: <span className="font-semibold text-white">1ª extração ({item.extractionNumbers[0] || '-'})</span>
                             </p>
                             <p className="mt-1 text-xs text-gray-300">
                               Rastro de aproximação:{' '}
@@ -431,7 +441,7 @@ export default function PrizesPage() {
                                 <span className="font-black text-white">
                                   {String(rawWinnerCode).padStart(item.comparisonDigits, '0')}{' -> '}{String(resolvedWinnerCode).padStart(item.comparisonDigits, '0')}
                                 </span>{' '}
-                                ({directionLabel}, dist {winnerAttempt?.nearestDistance ?? '?'}).
+                                ({directionLabel}).
                               </p>
                             ) : null}
                             <p className="mt-1 text-cyan-50">
@@ -447,7 +457,8 @@ export default function PrizesPage() {
 
                         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3 xl:grid-cols-6">
                           {item.attempts.map((attempt) => {
-                            const isFallback = attempt.extractionIndex > 5 || attempt.extractionNumber.includes('-')
+                            const isFinalFallback = attempt.extractionNumber.includes('-')
+                            const isNearestAttempt = !isFinalFallback && attempt.nearestDirection !== 'none'
 
                             return (
                               <div
@@ -458,7 +469,9 @@ export default function PrizesPage() {
                                   Tentativa {attempt.extractionIndex}
                                 </p>
                                 <p className="mt-1 font-mono text-gray-200">
-                                  {isFallback ? 'Fallback de segurança' : attempt.extractionNumber}
+                                  {isFinalFallback
+                                    ? 'Fallback de segurança'
+                                    : attempt.extractionNumber + (isNearestAttempt ? ' (aprox.)' : '')}
                                 </p>
                                 <p className="mt-1 text-gray-300">
                                   Código <span className="font-bold text-neon-pink">{attempt.candidateCode}</span>

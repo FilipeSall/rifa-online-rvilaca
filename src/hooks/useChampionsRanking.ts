@@ -10,6 +10,7 @@ type GetChampionsRankingOutput = {
 }
 const RANKING_LIMIT = 20
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const MIN_REFRESH_INTERVAL_MS = 8_000
 const PUBLIC_CACHE_DOC_PATH = ['draws', '_public-champions-ranking'] as const
 
 type CallableEnvelope<T> = T | { result?: T }
@@ -62,6 +63,7 @@ export function useChampionsRanking() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const hasCachedSnapshotRef = useRef(false)
   const isRefreshingRef = useRef(false)
+  const lastRefreshStartedAtRef = useRef(0)
   const getRankingCallable = useMemo(
     () => httpsCallable<{ limit: number }, unknown>(functions, 'getChampionsRanking'),
     [],
@@ -72,10 +74,17 @@ export function useChampionsRanking() {
   )
 
   const refreshRanking = useCallback(async () => {
+    const nowMs = Date.now()
     if (isRefreshingRef.current) {
       return
     }
 
+    // Evita tempestade de chamadas quando listener estiver desconectado.
+    if (nowMs - lastRefreshStartedAtRef.current < MIN_REFRESH_INTERVAL_MS) {
+      return
+    }
+
+    lastRefreshStartedAtRef.current = nowMs
     isRefreshingRef.current = true
     setIsLoading(true)
 

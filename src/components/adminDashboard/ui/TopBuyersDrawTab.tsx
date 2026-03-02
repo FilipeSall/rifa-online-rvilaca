@@ -3,6 +3,7 @@ import { toast } from 'react-toastify'
 import { CustomSelect } from '../../ui/CustomSelect'
 import { useCampaignSettings } from '../../../hooks/useCampaignSettings'
 import { useTopBuyersDraw } from '../../../hooks/useTopBuyersDraw'
+import { pickComparableWinnerTicketNumber } from '../../../utils/topBuyersWinner'
 
 function normalizeExtractionInput(value: string) {
   return value.replace(/\D/g, '').slice(0, 6)
@@ -64,7 +65,7 @@ function buildWinnerCalculationLabel(result: {
 
     if (hasPath) {
       const directionLabel = winnerAttempt.nearestDirection === 'below' ? 'abaixo' : 'acima'
-      return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${rawCode} -> aproximação: ${rawCode} -> ${resolvedCode} (${directionLabel}, dist ${winnerAttempt.nearestDistance ?? '?'}) -> match na posição ${result.winningPosition}.`
+      return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${rawCode} -> aproximação: ${rawCode} -> ${resolvedCode} (${directionLabel}) -> match na posição ${result.winningPosition}.`
     }
 
     return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${resolvedCode} -> match na posição ${result.winningPosition}.`
@@ -89,10 +90,7 @@ function formatNearestPath(attempt: {
     : attempt.nearestDirection === 'above'
       ? 'acima'
       : 'proximo'
-  const distanceLabel = Number.isFinite(Number(attempt.nearestDistance))
-    ? String(attempt.nearestDistance)
-    : '?'
-  return `${raw} -> ${attempt.candidateCode} (${directionLabel}, dist ${distanceLabel})`
+  return `${raw} -> ${attempt.candidateCode} (${directionLabel})`
 }
 
 function formatWinnerUserCode(result: {
@@ -104,15 +102,25 @@ function formatWinnerUserCode(result: {
 }
 
 function pickComparableWinnerTicket(result: {
+  winningTicketNumber: string | null
   winningCode: string
+  winningPosition: number
+  comparisonDigits: number
+  attempts: Array<{
+    matchedPosition: number | null
+    rawCandidateCode?: string
+    candidateCode: string
+  }>
   winnerTicketNumbers: string[]
 }) {
-  if (!result.winnerTicketNumbers.length) {
-    return null
-  }
-
-  const matchByEnding = result.winnerTicketNumbers.find((ticket) => ticket.endsWith(result.winningCode))
-  return matchByEnding || result.winnerTicketNumbers[0]
+  return pickComparableWinnerTicketNumber({
+    winningTicketNumber: result.winningTicketNumber,
+    winningCode: result.winningCode,
+    winningPosition: result.winningPosition,
+    comparisonDigits: result.comparisonDigits,
+    attempts: result.attempts,
+    winnerTicketNumbers: result.winnerTicketNumbers,
+  })
 }
 
 function formatLoteriaInputs(extractionNumbers: string[]) {
@@ -121,8 +129,8 @@ function formatLoteriaInputs(extractionNumbers: string[]) {
     .join(' | ')
 }
 
-function buildPrizeOptions(mainPrize: string, secondPrize: string, bonusPrize: string) {
-  const directPrizes = [mainPrize.trim(), secondPrize.trim()].filter(Boolean)
+function buildPrizeOptions(secondPrize: string, bonusPrize: string) {
+  const directPrizes = [secondPrize.trim()].filter(Boolean)
   const normalizedBonus = bonusPrize.trim()
   const pixOptions: string[] = []
   const pixMatch = normalizedBonus.match(/^\s*(\d+)\s*pix\b/i)
@@ -160,18 +168,20 @@ export default function TopBuyersDrawTab() {
     history,
     isLoading,
     isHistoryLoading,
+    hasMoreHistory,
     isPublishing,
     errorMessage,
     publishResult,
     refreshResult,
     refreshHistory,
+    loadMoreHistory,
   } = useTopBuyersDraw(false, 'admin')
   const { campaign } = useCampaignSettings()
   const [rankingLimitInput, setRankingLimitInput] = useState('50')
   const [extractionInputs, setExtractionInputs] = useState<string[]>(['', '', '', '', ''])
   const availablePrizeOptions = useMemo(
-    () => buildPrizeOptions(campaign.mainPrize, campaign.secondPrize, campaign.bonusPrize),
-    [campaign.bonusPrize, campaign.mainPrize, campaign.secondPrize],
+    () => buildPrizeOptions(campaign.secondPrize, campaign.bonusPrize),
+    [campaign.bonusPrize, campaign.secondPrize],
   )
   const usedDrawPrizes = useMemo(
     () => new Set(history.map((item) => item.drawPrize).filter(Boolean)),
@@ -179,11 +189,16 @@ export default function TopBuyersDrawTab() {
   )
   const prizeSelectOptions = useMemo(
     () =>
-      availablePrizeOptions.map((item) => ({
-        value: item,
-        label: usedDrawPrizes.has(item) ? `${item} (já sorteado)` : item,
-        disabled: usedDrawPrizes.has(item),
-      })),
+      availablePrizeOptions.map((item) => {
+        const isUsed = usedDrawPrizes.has(item)
+        return {
+          value: item,
+          label: isUsed
+            ? `${item} (já sorteado)`
+            : item,
+          disabled: isUsed,
+        }
+      }),
     [availablePrizeOptions, usedDrawPrizes],
   )
   const [drawPrizeInput, setDrawPrizeInput] = useState('')
@@ -222,10 +237,14 @@ export default function TopBuyersDrawTab() {
     () => extractionInputs.some((item) => item.length > 0),
     [extractionInputs],
   )
+  const hasEligibleDrawPrizeOptions = useMemo(
+    () => prizeSelectOptions.some((option) => !option.disabled),
+    [prizeSelectOptions],
+  )
 
   const canPublish = useMemo(
-    () => ensureDrawPrizeInput.length > 0 && hasAnyExtraction,
-    [ensureDrawPrizeInput, hasAnyExtraction],
+    () => hasEligibleDrawPrizeOptions && ensureDrawPrizeInput.length > 0 && hasAnyExtraction,
+    [ensureDrawPrizeInput, hasAnyExtraction, hasEligibleDrawPrizeOptions],
   )
 
   const previewCodes = useMemo(() => {
@@ -240,6 +259,13 @@ export default function TopBuyersDrawTab() {
   }
 
   const handlePublish = async () => {
+    if (!hasEligibleDrawPrizeOptions) {
+      toast.warning('Configure o segundo prêmio ou bônus PIX da campanha para liberar o Sorteio Top Buyers.', {
+        toastId: 'top-buyers-draw-no-eligible-prize',
+      })
+      return
+    }
+
     if (!canPublish) {
       toast.warning('Selecione o premio e preencha ao menos 1 extracao da Loteria Federal.', {
         toastId: 'top-buyers-draw-invalid-input',
@@ -345,6 +371,11 @@ export default function TopBuyersDrawTab() {
                 options={prizeSelectOptions}
                 placeholder="Nenhum premio disponivel para sorteio"
               />
+              {!hasEligibleDrawPrizeOptions ? (
+                <p className="mt-2 text-xs text-amber-200">
+                  Configuração pendente: defina `secondPrize` ou `bonusPrize` na campanha para publicar o sorteio.
+                </p>
+              ) : null}
             </div>
 
             <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
@@ -383,7 +414,7 @@ export default function TopBuyersDrawTab() {
           <div className="mt-5 flex flex-wrap gap-2">
             <button
               className="inline-flex h-11 items-center justify-center rounded-lg bg-amber-400 px-5 text-xs font-black uppercase tracking-[0.14em] text-black transition-colors hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isPublishing}
+              disabled={isPublishing || !canPublish}
               type="button"
               onClick={handlePublish}
             >
@@ -442,10 +473,13 @@ export default function TopBuyersDrawTab() {
                 <p className="mt-1 text-xs text-gray-300">
                   Códigos da Loteria informados: <span className="font-mono text-white">{formatLoteriaInputs(result.extractionNumbers)}</span>
                 </p>
+                <p className="mt-1 text-xs text-gray-300">
+                  Extração premiada: <span className="font-semibold text-white">1ª extração ({result.extractionNumbers[0] || '-'})</span>
+                </p>
                 <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
                   <div className="rounded-lg border border-white/10 bg-black/30 p-2">
                     <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Data</p>
-                    <p className="mt-1 font-black text-white">{result.drawDate}</p>
+                    <p className="mt-1 font-black text-white">{formatDrawDate(result.drawDate)}</p>
                   </div>
                   <div className="rounded-lg border border-white/10 bg-black/30 p-2">
                     <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Posicao</p>
@@ -469,9 +503,11 @@ export default function TopBuyersDrawTab() {
                   {result.attempts.map((attempt) => (
                     <div key={`${attempt.extractionIndex}-${attempt.candidateCode}`} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-xs">
                       <span className="text-gray-300">
-                        {attempt.extractionIndex > 5 || attempt.extractionNumber.includes('-')
+                        {attempt.extractionNumber.includes('-')
                           ? `Tentativa ${attempt.extractionIndex}: fallback de seguranca ➜ codigo ${attempt.candidateCode}`
-                          : `Tentativa ${attempt.extractionIndex}: ${attempt.extractionNumber} ➜ codigo ${attempt.candidateCode}${formatNearestPath(attempt) ? ` | caminho ${formatNearestPath(attempt)}` : ''}`}
+                          : attempt.nearestDirection !== 'none'
+                            ? `Tentativa ${attempt.extractionIndex}: ${attempt.extractionNumber} (aprox.) ➜ codigo ${attempt.candidateCode}${formatNearestPath(attempt) ? ` | caminho ${formatNearestPath(attempt)}` : ''}`
+                            : `Tentativa ${attempt.extractionIndex}: ${attempt.extractionNumber} ➜ codigo ${attempt.candidateCode}`}
                       </span>
                       <span className="font-bold text-neon-pink">
                         {attempt.matchedPosition ? `Pos ${attempt.matchedPosition}` : 'Sem match'}
@@ -532,6 +568,21 @@ export default function TopBuyersDrawTab() {
                         <span className="text-right text-gray-500">{formatPublishedAt(item.publishedAtMs)}</span>
                       </div>
                     ))}
+                  </div>
+                ) : null}
+
+                {hasMoreHistory ? (
+                  <div className="mt-3">
+                    <button
+                      className="inline-flex h-9 items-center justify-center rounded-lg border border-white/15 bg-black/30 px-4 text-[11px] font-bold uppercase tracking-[0.12em] text-gray-200 transition-colors hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={isHistoryLoading}
+                      type="button"
+                      onClick={() => {
+                        void loadMoreHistory()
+                      }}
+                    >
+                      {isHistoryLoading ? 'Carregando...' : 'Carregar mais'}
+                    </button>
                   </div>
                 ) : null}
               </div>

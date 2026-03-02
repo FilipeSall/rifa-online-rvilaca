@@ -19,12 +19,12 @@ bun run seed:firestore
 bun run backfill:cpf-registry
 
 # Cloud Functions (from functions/ directory)
-cd functions && npm install && npm run build
+cd functions && bun install && bun run build
 firebase deploy --only functions
 firebase functions:secrets:set <SECRET_NAME>
 ```
 
-> Note: Cloud Functions use npm (not bun) because they run on Node.js 20 in Firebase.
+> Note: Cloud Functions runtime is Node.js on Firebase, but local tooling in this repo is padronizado em Bun.
 
 ## Architecture
 

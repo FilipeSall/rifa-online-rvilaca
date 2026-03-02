@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../lib/firebase'
-import { markFetchedNow, readCachedJson, shouldFetchAfterDays, writeCachedJson } from '../utils/fetchCache'
+import { markFetchedNow, readCachedJson, writeCachedJson } from '../utils/fetchCache'
 
 type CallableEnvelope<T> = T | { result?: T }
 
@@ -46,6 +46,7 @@ type RawTopBuyersDrawResult = {
   attempts?: unknown
   winningPosition?: unknown
   winningCode?: unknown
+  winningTicketNumber?: unknown
   resolvedBy?: unknown
   winner?: RawTopBuyersDrawWinner
   winnerTicketNumbers?: unknown
@@ -60,15 +61,16 @@ type GetLatestTopBuyersDrawOutput = {
 
 type GetTopBuyersDrawHistoryOutput = {
   results?: unknown
+  nextCursor?: unknown
+  hasMore?: unknown
 }
 
 type HistoryScope = 'none' | 'admin' | 'public'
 const AUTO_REFRESH_INTERVAL_MS = 3 * 60 * 1000
-const FETCH_EVERY_DAYS = 5
-const PUBLIC_HISTORY_LIMIT = 20
-const ADMIN_HISTORY_LIMIT = 60
-const RESULT_CACHE_KEY = 'rifa-online:cache:top-buyers:result:v1'
-const RESULT_LAST_FETCH_KEY = 'rifa-online:last-fetch:top-buyers:result:v1'
+const PUBLIC_HISTORY_LIMIT = 50
+const ADMIN_HISTORY_LIMIT = 50
+const RESULT_CACHE_KEY = 'rifa-online:cache:top-buyers:result:v2'
+const RESULT_LAST_FETCH_KEY = 'rifa-online:last-fetch:top-buyers:result:v2'
 const HISTORY_CACHE_KEY_PREFIX = 'rifa-online:cache:top-buyers:history'
 const HISTORY_LAST_FETCH_KEY_PREFIX = 'rifa-online:last-fetch:top-buyers:history'
 
@@ -80,6 +82,7 @@ type PublishTopBuyersDrawInput = {
 
 type HistoryFetchInput = {
   limit?: number
+  cursor?: string
 }
 
 export type TopBuyersDrawWinner = {
@@ -123,6 +126,7 @@ export type TopBuyersDrawResult = {
   attempts: TopBuyersDrawAttempt[]
   winningPosition: number
   winningCode: string
+  winningTicketNumber: string | null
   resolvedBy: 'federal_extraction' | 'redundancy'
   winner: TopBuyersDrawWinner
   winnerTicketNumbers: string[]
@@ -136,6 +140,22 @@ type TopBuyersDrawCache = {
 
 type TopBuyersDrawHistoryCache = {
   results: TopBuyersDrawResult[]
+  nextCursor: string | null
+  hasMore: boolean
+}
+
+function mergeHistoryEntries(...collections: TopBuyersDrawResult[][]): TopBuyersDrawResult[] {
+  const merged = new Map<string, TopBuyersDrawResult>()
+  for (const collection of collections) {
+    for (const item of collection) {
+      if (!item?.drawId) {
+        continue
+      }
+      merged.set(item.drawId, item)
+    }
+  }
+
+  return Array.from(merged.values()).sort((left, right) => (right.publishedAtMs || 0) - (left.publishedAtMs || 0))
 }
 
 function unwrapCallableData<T>(value: CallableEnvelope<T>) {
@@ -258,6 +278,7 @@ function normalizeResult(raw: RawTopBuyersDrawResult | null | undefined): TopBuy
     attempts: normalizeAttempts(raw.attempts),
     winningPosition: sanitizeInteger(raw.winningPosition),
     winningCode: sanitizeString(raw.winningCode),
+    winningTicketNumber: sanitizeString(raw.winningTicketNumber) || null,
     resolvedBy,
     winner,
     winnerTicketNumbers: Array.isArray(raw.winnerTicketNumbers)
@@ -290,6 +311,8 @@ function normalizeResult(raw: RawTopBuyersDrawResult | null | undefined): TopBuy
 export function useTopBuyersDraw(autoRefresh = false, historyScope: HistoryScope = 'none') {
   const [result, setResult] = useState<TopBuyersDrawResult | null>(null)
   const [history, setHistory] = useState<TopBuyersDrawResult[]>([])
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null)
+  const [hasMoreHistory, setHasMoreHistory] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
@@ -312,30 +335,49 @@ export function useTopBuyersDraw(autoRefresh = false, historyScope: HistoryScope
     [],
   )
 
-  const historyCacheKey = `${HISTORY_CACHE_KEY_PREFIX}:${historyScope}:v1`
-  const historyLastFetchKey = `${HISTORY_LAST_FETCH_KEY_PREFIX}:${historyScope}:v1`
+  const historyCacheKey = `${HISTORY_CACHE_KEY_PREFIX}:${historyScope}:v2`
+  const historyLastFetchKey = `${HISTORY_LAST_FETCH_KEY_PREFIX}:${historyScope}:v2`
 
-  const refreshHistory = useCallback(async () => {
+  const refreshHistory = useCallback(async (options?: { append?: boolean }) => {
     if (historyScope === 'none') {
       setHistory([])
+      setHistoryCursor(null)
+      setHasMoreHistory(false)
       return
     }
 
     setIsHistoryLoading(true)
     try {
       const historyLimit = historyScope === 'admin' ? ADMIN_HISTORY_LIMIT : PUBLIC_HISTORY_LIMIT
+      const requestCursor = historyScope === 'admin' && options?.append ? historyCursor : null
       const response = historyScope === 'admin'
-        ? await getTopBuyersDrawHistory({ limit: historyLimit })
+        ? await getTopBuyersDrawHistory({ limit: historyLimit, cursor: requestCursor || undefined })
         : await getPublicTopBuyersDrawHistory({ limit: historyLimit })
       const payload = unwrapCallableData(response.data as CallableEnvelope<GetTopBuyersDrawHistoryOutput>)
       const normalizedHistory = Array.isArray(payload?.results)
         ? payload.results.map((item) => normalizeResult(item as RawTopBuyersDrawResult)).filter((item): item is TopBuyersDrawResult => Boolean(item))
         : []
-      setHistory(normalizedHistory)
-      writeCachedJson(historyCacheKey, { results: normalizedHistory } satisfies TopBuyersDrawHistoryCache)
+      const nextCursor = historyScope === 'admin'
+        ? sanitizeString(payload?.nextCursor) || null
+        : null
+      const nextHasMore = historyScope === 'admin'
+        ? payload?.hasMore === true
+        : false
+      setHistory((current) => {
+        const base = options?.append ? current : []
+        const merged = mergeHistoryEntries(base, normalizedHistory)
+        writeCachedJson(historyCacheKey, {
+          results: merged,
+          nextCursor,
+          hasMore: nextHasMore,
+        } satisfies TopBuyersDrawHistoryCache)
+        return merged
+      })
+      setHistoryCursor(nextCursor)
+      setHasMoreHistory(nextHasMore)
       markFetchedNow(historyLastFetchKey)
     } catch {
-      setHistory([])
+      // Mantem cache e estado atual quando rede falhar.
     } finally {
       setIsHistoryLoading(false)
     }
@@ -343,9 +385,18 @@ export function useTopBuyersDraw(autoRefresh = false, historyScope: HistoryScope
     getPublicTopBuyersDrawHistory,
     getTopBuyersDrawHistory,
     historyScope,
+    historyCursor,
     historyCacheKey,
     historyLastFetchKey,
   ])
+
+  const loadMoreHistory = useCallback(async () => {
+    if (historyScope !== 'admin' || !hasMoreHistory || isHistoryLoading) {
+      return
+    }
+
+    await refreshHistory({ append: true })
+  }, [hasMoreHistory, historyScope, isHistoryLoading, refreshHistory])
 
   const refreshResult = useCallback(async () => {
     try {
@@ -359,8 +410,10 @@ export function useTopBuyersDraw(autoRefresh = false, historyScope: HistoryScope
       writeCachedJson(RESULT_CACHE_KEY, { result: normalizedResult } satisfies TopBuyersDrawCache)
       markFetchedNow(RESULT_LAST_FETCH_KEY)
       setErrorMessage(null)
+      return normalizedResult
     } catch {
       setErrorMessage('Nao foi possivel carregar o ultimo resultado publicado.')
+      return null
     } finally {
       setIsLoading(false)
     }
@@ -382,15 +435,23 @@ export function useTopBuyersDraw(autoRefresh = false, historyScope: HistoryScope
       writeCachedJson(RESULT_CACHE_KEY, { result: normalized } satisfies TopBuyersDrawCache)
       markFetchedNow(RESULT_LAST_FETCH_KEY)
       setHistory((current) => {
-        const deduped = [normalized, ...current.filter((item) => item.drawId !== normalized.drawId)]
-        return deduped.sort((left, right) => (right.publishedAtMs || 0) - (left.publishedAtMs || 0))
+        const merged = mergeHistoryEntries(current, [normalized])
+        if (historyScope !== 'none') {
+          writeCachedJson(historyCacheKey, {
+            results: merged,
+            nextCursor: historyCursor,
+            hasMore: hasMoreHistory,
+          } satisfies TopBuyersDrawHistoryCache)
+          markFetchedNow(historyLastFetchKey)
+        }
+        return merged
       })
       setErrorMessage(null)
       return normalized
     } finally {
       setIsPublishing(false)
     }
-  }, [publishTopBuyersDraw])
+  }, [hasMoreHistory, historyCacheKey, historyCursor, historyLastFetchKey, historyScope, publishTopBuyersDraw])
 
   useEffect(() => {
     const cachedResult = readCachedJson<TopBuyersDrawCache>(RESULT_CACHE_KEY)
@@ -402,24 +463,36 @@ export function useTopBuyersDraw(autoRefresh = false, historyScope: HistoryScope
       const cachedHistory = readCachedJson<TopBuyersDrawHistoryCache>(historyCacheKey)
       if (cachedHistory && Array.isArray(cachedHistory.results)) {
         setHistory(cachedHistory.results)
+        setHistoryCursor(typeof cachedHistory.nextCursor === 'string' ? cachedHistory.nextCursor : null)
+        setHasMoreHistory(cachedHistory.hasMore === true)
       }
     }
 
-    const shouldFetchResult = shouldFetchAfterDays(RESULT_LAST_FETCH_KEY, FETCH_EVERY_DAYS)
-    if (shouldFetchResult || !cachedResult) {
-      void refreshResult()
-    } else {
-      setIsLoading(false)
-    }
+    let isCancelled = false
 
-    if (historyScope !== 'none') {
-      const shouldFetchHistory = shouldFetchAfterDays(historyLastFetchKey, FETCH_EVERY_DAYS)
-      const hasCachedHistory = Boolean(readCachedJson<TopBuyersDrawHistoryCache>(historyCacheKey))
-      if (shouldFetchHistory || !hasCachedHistory) {
-        void refreshHistory()
+    const syncFromNetwork = async () => {
+      const latest = await refreshResult()
+      if (isCancelled || historyScope === 'none') {
+        return
+      }
+
+      const cachedHistory = readCachedJson<TopBuyersDrawHistoryCache>(historyCacheKey)
+      const hasCachedHistory = Boolean(cachedHistory?.results?.length)
+      const hasLatestInHistory = Boolean(
+        latest?.drawId
+        && cachedHistory?.results?.some((item) => item.drawId === latest.drawId),
+      )
+      if (!hasCachedHistory || (latest?.drawId && !hasLatestInHistory)) {
+        await refreshHistory({ append: false })
       } else {
         setIsHistoryLoading(false)
       }
+    }
+
+    void syncFromNetwork()
+
+    return () => {
+      isCancelled = true
     }
   }, [historyCacheKey, historyLastFetchKey, historyScope, refreshHistory, refreshResult])
 
@@ -428,30 +501,31 @@ export function useTopBuyersDraw(autoRefresh = false, historyScope: HistoryScope
       return undefined
     }
 
-    const runRefresh = () => {
+    const runRefresh = async () => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
         return
       }
 
-      const shouldFetchResult = shouldFetchAfterDays(RESULT_LAST_FETCH_KEY, FETCH_EVERY_DAYS)
-      if (shouldFetchResult) {
-        void refreshResult()
-      }
+      const latest = await refreshResult()
       if (historyScope !== 'none') {
-        const shouldFetchHistory = shouldFetchAfterDays(historyLastFetchKey, FETCH_EVERY_DAYS)
-        if (shouldFetchHistory) {
-          void refreshHistory()
+        const cachedHistory = readCachedJson<TopBuyersDrawHistoryCache>(historyCacheKey)
+        const hasLatestInHistory = Boolean(
+          latest?.drawId
+          && cachedHistory?.results?.some((item) => item.drawId === latest.drawId),
+        )
+        if (!cachedHistory?.results?.length || (latest?.drawId && !hasLatestInHistory)) {
+          await refreshHistory({ append: false })
         }
       }
     }
 
     const intervalId = window.setInterval(() => {
-      runRefresh()
+      void runRefresh()
     }, AUTO_REFRESH_INTERVAL_MS)
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        runRefresh()
+        void runRefresh()
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -460,17 +534,19 @@ export function useTopBuyersDraw(autoRefresh = false, historyScope: HistoryScope
       window.clearInterval(intervalId)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [autoRefresh, historyLastFetchKey, historyScope, refreshHistory, refreshResult])
+  }, [autoRefresh, historyCacheKey, historyScope, refreshHistory, refreshResult])
 
   return {
     result,
     history,
     isLoading,
     isHistoryLoading,
+    hasMoreHistory,
     isPublishing,
     errorMessage,
     refreshResult,
     refreshHistory,
+    loadMoreHistory,
     publishResult,
   }
 }

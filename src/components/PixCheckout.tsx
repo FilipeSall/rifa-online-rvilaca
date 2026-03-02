@@ -302,6 +302,7 @@ export default function PixCheckout({
   }, [canRecoverReservation, clearError, handleCreatePix, onRecoverReservation])
 
   const isGenerating = loading || status === 'generating'
+  const isCpfMissing = !cpf || cpf.replace(/\D/g, '').length < 11
 
   return (
     <div className="rounded-2xl border border-white/15 bg-luxury-card/70 p-5 backdrop-blur-sm text-white">
@@ -311,14 +312,21 @@ export default function PixCheckout({
       </p>
 
       {status === 'idle' && (
-        <button
-          className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 px-4 text-sm font-bold uppercase tracking-wider text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
-          disabled={isGenerating}
-          onClick={handleCreatePix}
-          type="button"
-        >
-          Gerar QR Code PIX
-        </button>
+        <div className={isCpfMissing ? 'group relative mt-4' : 'mt-4'}>
+          <button
+            className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 px-4 text-sm font-bold uppercase tracking-wider text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+            disabled={isGenerating || isCpfMissing}
+            onClick={handleCreatePix}
+            type="button"
+          >
+            Gerar QR Code PIX
+          </button>
+          {isCpfMissing && (
+            <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+              Preencha o CPF para continuar
+            </span>
+          )}
+        </div>
       )}
 
       {(status === 'generating' || status === 'pending') && (

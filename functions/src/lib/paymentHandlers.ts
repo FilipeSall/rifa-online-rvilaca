@@ -3,17 +3,17 @@ import { FieldValue, Timestamp, type DocumentData, type Firestore } from 'fireba
 import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
 import { extractExternalId, extractPixPayload } from './horsepayPayload.js'
-import { getHorsePayToken, horsePayRequest, toHttpsError } from './horsepayClient.js'
+import { toHttpsError } from './horsepayClient.js'
 import {
   CAMPAIGN_DOC_ID,
   DEPOSIT_RETRY_DELAY_MS,
-  HORSEPAY_BASE_URL,
   MAX_DEPOSIT_ORDER_ATTEMPTS,
   REGION,
   type OrderStatus,
   type OrderType,
   type PixType,
 } from './constants.js'
+import { createPaymentGateway, resolveHorsePayBaseUrl, shouldUseMockHorsePay } from './paymentGateway.js'
 import { getCampaignDocCached } from './campaignDocCache.js'
 import {
   readCampaignCoupons,
@@ -184,6 +184,19 @@ function parseFirebaseProjectId(): string | null {
 }
 
 function getWebhookUrl(webhookToken?: string | null): string | null {
+  const configuredCallbackUrl = sanitizeString(process.env.HORSEPAY_WEBHOOK_CALLBACK_URL)
+  if (configuredCallbackUrl) {
+    try {
+      const parsed = new URL(configuredCallbackUrl)
+      if (webhookToken && !parsed.searchParams.has('token')) {
+        parsed.searchParams.set('token', webhookToken)
+      }
+      return parsed.toString()
+    } catch {
+      return null
+    }
+  }
+
   const projectId = parseFirebaseProjectId()
 
   if (!projectId) {
@@ -986,32 +999,21 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
         hasAmountMismatch,
       })
 
-      const accessToken = await getHorsePayToken({
-        baseUrl: HORSEPAY_BASE_URL,
+      const paymentGateway = createPaymentGateway({
+        useMock: shouldUseMockHorsePay(),
+        baseUrl: resolveHorsePayBaseUrl(),
         clientKey: secrets.getClientKey(),
         clientSecret: secrets.getClientSecret(),
       })
 
       for (let attempt = 1; attempt <= MAX_DEPOSIT_ORDER_ATTEMPTS; attempt += 1) {
         const clientReferenceId = `${clientReferenceBase}_a${attempt}`
-        const newOrderPayload: JsonRecord = {
+        const newOrder = await paymentGateway.createDepositOrder({
           amount: expectedAmount,
-          payer_name: payerName,
-          callback_url: callbackUrl,
-          client_reference_id: clientReferenceId,
-          payment_method: 'PIX',
-        }
-
-        if (phone) {
-          newOrderPayload.phone = phone
-        }
-
-        const newOrder = await horsePayRequest<JsonRecord>({
-          baseUrl: HORSEPAY_BASE_URL,
-          method: 'post',
-          path: '/transaction/neworder',
-          token: accessToken,
-          data: newOrderPayload,
+          payerName,
+          callbackUrl,
+          clientReferenceId,
+          phone,
         })
 
         const externalId = extractExternalId(newOrder)
@@ -1035,7 +1037,7 @@ export function createPixDepositHandler(db: Firestore, secrets: HorsePaySecretRe
           dataKeys: getTopLevelKeys(newOrder.data),
           resultKeys: getTopLevelKeys(newOrder.result),
           transactionKeys: getTopLevelKeys(newOrder.transaction),
-          payloadHasPhoneField: Object.prototype.hasOwnProperty.call(newOrderPayload, 'phone'),
+          payloadHasPhoneField: Boolean(phone),
         })
 
         if (!qrCodeFromGateway && qrCode && copyPaste) {
@@ -1225,8 +1227,9 @@ export function createRequestWithdrawHandler(db: Firestore, secrets: HorsePaySec
         throw new HttpsError('invalid-argument', 'pixKey e obrigatorio')
       }
 
-      const accessToken = await getHorsePayToken({
-        baseUrl: HORSEPAY_BASE_URL,
+      const paymentGateway = createPaymentGateway({
+        useMock: shouldUseMockHorsePay(),
+        baseUrl: resolveHorsePayBaseUrl(),
         clientKey: secrets.getClientKey(),
         clientSecret: secrets.getClientSecret(),
       })
@@ -1240,17 +1243,11 @@ export function createRequestWithdrawHandler(db: Firestore, secrets: HorsePaySec
         clientReferenceId,
       })
 
-      const response = await horsePayRequest<JsonRecord>({
-        baseUrl: HORSEPAY_BASE_URL,
-        method: 'post',
-        path: '/transaction/withdraw',
-        token: accessToken,
-        data: {
-          amount,
-          pix_key: pixKey,
-          pix_type: pixType,
-          client_reference_id: clientReferenceId,
-        },
+      const response = await paymentGateway.requestWithdraw({
+        amount,
+        pixKey,
+        pixType,
+        clientReferenceId,
       })
 
       const externalId = extractExternalId(response)
@@ -1302,17 +1299,13 @@ export function createGetBalanceHandler(secrets: HorsePaySecretReaders) {
 
     try {
       logger.info('getBalance started', { uid: maskUid(uid) })
-      const accessToken = await getHorsePayToken({
-        baseUrl: HORSEPAY_BASE_URL,
+      const paymentGateway = createPaymentGateway({
+        useMock: shouldUseMockHorsePay(),
+        baseUrl: resolveHorsePayBaseUrl(),
         clientKey: secrets.getClientKey(),
         clientSecret: secrets.getClientSecret(),
       })
-      const response = await horsePayRequest<JsonRecord>({
-        baseUrl: HORSEPAY_BASE_URL,
-        method: 'get',
-        path: '/user/balance',
-        token: accessToken,
-      })
+      const response = await paymentGateway.getBalance()
       logger.info('getBalance response received', {
         uid: maskUid(uid),
         topLevelKeys: getTopLevelKeys(response),

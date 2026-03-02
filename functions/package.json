@@ -4,11 +4,11 @@
   "type": "module",
   "main": "lib/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test \"lib/**/*.test.js\"",
+    "build": "rm -rf lib && tsc -p tsconfig.json",
+    "test": "bun run build && node --test \"lib/**/*.test.js\"",
     "migrate:number-chunks": "node scripts/migrate-number-states-to-chunks.mjs",
     "validate:chunks-and-cleanup-legacy": "node scripts/validate-chunks-and-cleanup-number-states.mjs",
-    "reconcile:paid-orders-number-chunks": "npm run build && node scripts/reconcile-paid-orders-number-chunks.mjs"
+    "reconcile:paid-orders-number-chunks": "bun run build && node scripts/reconcile-paid-orders-number-chunks.mjs"
   },
   "engines": {
     "node": "22"

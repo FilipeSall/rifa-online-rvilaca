@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { httpsCallable } from 'firebase/functions'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import {
@@ -28,6 +29,16 @@ import { buildCampaignSettingsInput } from '../services/campaignSettingsFormServ
 import { formatCurrency } from '../utils/formatters'
 import { getScheduleStatusLabel, resolveCampaignScheduleStatus } from '../../../utils/campaignSchedule'
 import { CustomSelect } from '../../ui/CustomSelect'
+import { functions } from '../../../lib/firebase'
+
+type RefreshWeeklyTopBuyersRankingCacheOutput = {
+  updatedAtMs?: number
+  weekId?: string
+  sourceDrawDate?: string | null
+  items?: unknown[]
+}
+
+type CallableEnvelope<T> = T | { result?: T }
 
 function applyPhoneMask(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 13)
@@ -141,7 +152,12 @@ export default function CampaignTab() {
   const [selectedFeaturedVideoFile, setSelectedFeaturedVideoFile] = useState<File | null>(null)
   const [isUploadingFeaturedVideo, setIsUploadingFeaturedVideo] = useState(false)
   const [isRemovingFeaturedVideo, setIsRemovingFeaturedVideo] = useState(false)
+  const [isRefreshingWeeklyRanking, setIsRefreshingWeeklyRanking] = useState(false)
   const [shouldHighlightScheduleInputs, setShouldHighlightScheduleInputs] = useState(false)
+  const refreshWeeklyRankingCallable = useMemo(
+    () => httpsCallable<Record<string, never>, unknown>(functions, 'refreshWeeklyTopBuyersRankingCache'),
+    [],
+  )
 
   const activeCoupons = useMemo(() => coupons.filter((item) => item.active).length, [coupons])
   const activePackPrices = useMemo(() => packPrices.filter((item) => item.active).length, [packPrices])
@@ -840,6 +856,32 @@ export default function CampaignTab() {
     }
   }
 
+  const handleRefreshWeeklyRanking = async () => {
+    setIsRefreshingWeeklyRanking(true)
+
+    try {
+      const response = await refreshWeeklyRankingCallable({})
+      const payloadEnvelope = response.data as CallableEnvelope<RefreshWeeklyTopBuyersRankingCacheOutput>
+      const payload = payloadEnvelope && typeof payloadEnvelope === 'object' && 'result' in payloadEnvelope
+        ? ((payloadEnvelope as { result?: RefreshWeeklyTopBuyersRankingCacheOutput }).result || {})
+        : (payloadEnvelope as RefreshWeeklyTopBuyersRankingCacheOutput)
+      const weekId = typeof payload.weekId === 'string' ? payload.weekId : '-'
+      const sourceDrawDate = typeof payload.sourceDrawDate === 'string' ? payload.sourceDrawDate : null
+      const itemsCount = Array.isArray(payload.items) ? payload.items.length : 0
+      const sourceLabel = sourceDrawDate ? ` | draw: ${sourceDrawDate}` : ''
+
+      toast.success(`Ranking semanal atualizado (${itemsCount} posições) | semana: ${weekId}${sourceLabel}`, {
+        toastId: 'campaign-refresh-weekly-ranking-success',
+      })
+    } catch (error) {
+      toast.error(parseErrorMessage(error, 'Falha ao atualizar ranking semanal manualmente.'), {
+        toastId: 'campaign-refresh-weekly-ranking-error',
+      })
+    } finally {
+      setIsRefreshingWeeklyRanking(false)
+    }
+  }
+
   return (
     <section className="space-y-6 pb-28">
       <article className="relative overflow-hidden rounded-3xl border border-white/10 bg-luxury-card p-6">
@@ -852,6 +894,19 @@ export default function CampaignTab() {
             <p className="mt-3 max-w-2xl text-sm text-gray-300">
               Configure preco, brackets de tickets, tag mais compradas, desconto progressivo e cupons da campanha.
             </p>
+            <div className="mt-4">
+              <button
+                className="h-10 rounded-lg border border-cyan-300/35 bg-cyan-500/10 px-4 text-[11px] font-bold uppercase tracking-wider text-cyan-100 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                onClick={handleRefreshWeeklyRanking}
+                disabled={isRefreshingWeeklyRanking || isLoading}
+              >
+                {isRefreshingWeeklyRanking ? 'Atualizando ranking...' : 'Atualizar ranking semanal (manual)'}
+              </button>
+              <p className="mt-2 text-xs text-cyan-100/80">
+                Usa o snapshot de sexta salvo no banco e atualiza o cache publico do ranking semanal.
+              </p>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-neon-pink/20 bg-black/40 px-4 py-3">

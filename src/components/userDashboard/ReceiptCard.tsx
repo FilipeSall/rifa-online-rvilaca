@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { exportOrderReceiptPdf } from '../../utils/receiptPdf'
+import { toast } from 'react-toastify'
+import { buildOrderReceiptPdfShareFile, exportOrderReceiptPdf } from '../../utils/receiptPdf'
 import { formatCpf } from '../../utils/cpf'
 import { formatTicketNumbers } from '../../utils/ticketNumber'
 import type { UserOrder } from '../../types/userDashboard'
@@ -9,7 +11,7 @@ function toWhatsappPhoneDigits(phone: string) {
   return phone.replace(/\D/g, '')
 }
 
-function openWhatsAppShare(order: UserOrder, supportWhatsappNumber: string) {
+function buildWhatsAppReceiptMessage(order: UserOrder) {
   const statusLabel =
     order.status === 'pago'
       ? 'Pago'
@@ -18,7 +20,7 @@ function openWhatsAppShare(order: UserOrder, supportWhatsappNumber: string) {
         : order.status === 'expirado'
           ? 'Expirado'
           : 'Cancelado'
-  const message = [
+  return [
     'Comprovante de compra - Rifa Online',
     `Pedido: ${order.id}`,
     `Status: ${statusLabel}`,
@@ -28,9 +30,12 @@ function openWhatsAppShare(order: UserOrder, supportWhatsappNumber: string) {
     `Valor total: ${order.totalBrl}`,
     `Numeros: ${formatTicketNumbers(order.numbers).join(', ') || '-'}`,
   ].join('\n')
+}
 
+function openWhatsAppTextChat(order: UserOrder, supportWhatsappNumber: string) {
   const targetPhone = toWhatsappPhoneDigits(supportWhatsappNumber)
   const path = targetPhone ? `/${targetPhone}` : ''
+  const message = buildWhatsAppReceiptMessage(order)
   const url = `https://wa.me${path}?text=${encodeURIComponent(message)}`
   window.open(url, '_blank', 'noopener,noreferrer')
 }
@@ -43,8 +48,55 @@ type ReceiptCardProps = {
 
 export default function ReceiptCard({ order, campaignTitle, supportWhatsappNumber }: ReceiptCardProps) {
   const navigate = useNavigate()
+  const [isSendingPdf, setIsSendingPdf] = useState(false)
   const stripe =
     order.status === 'pago' ? 'bg-emerald-500' : order.status === 'aguardando' ? 'bg-amber-500' : 'bg-red-500'
+
+  const handleSendReceiptToWhatsApp = async () => {
+    if (isSendingPdf) {
+      return
+    }
+
+    setIsSendingPdf(true)
+
+    try {
+      const shareFile = buildOrderReceiptPdfShareFile(order)
+      const hasShareApi = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+      const supportsFileShare = hasShareApi
+        && (
+          typeof navigator.canShare !== 'function'
+          || navigator.canShare({ files: [shareFile] })
+        )
+
+      if (supportsFileShare) {
+        await navigator.share({
+          title: `Comprovante ${order.id}`,
+          text: `Enviar comprovante em PDF para suporte: ${supportWhatsappNumber}`,
+          files: [shareFile],
+        })
+        toast.success('PDF pronto para envio no WhatsApp. Selecione o contato de suporte.', {
+          toastId: `receipt-whatsapp-share-success-${order.id}`,
+        })
+        return
+      }
+
+      openWhatsAppTextChat(order, supportWhatsappNumber)
+      exportOrderReceiptPdf(order)
+      toast.info('Seu navegador nao permite anexo automatico no WhatsApp Web. O PDF foi baixado para envio manual.', {
+        toastId: `receipt-whatsapp-share-fallback-${order.id}`,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      const isAbort = message.toLowerCase().includes('abort')
+      if (!isAbort) {
+        toast.error('Nao foi possivel preparar o envio do PDF no WhatsApp.', {
+          toastId: `receipt-whatsapp-share-error-${order.id}`,
+        })
+      }
+    } finally {
+      setIsSendingPdf(false)
+    }
+  }
 
   return (
     <div
@@ -98,10 +150,11 @@ export default function ReceiptCard({ order, campaignTitle, supportWhatsappNumbe
               <button
                 type="button"
                 className="flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-500/30 px-4 py-2.5 text-sm font-bold text-emerald-400 transition-all hover:bg-emerald-500 hover:text-white"
-                onClick={() => openWhatsAppShare(order, supportWhatsappNumber)}
+                onClick={handleSendReceiptToWhatsApp}
+                disabled={isSendingPdf}
               >
                 <span className="material-symbols-outlined text-[18px]">share</span>
-                Enviar no WhatsApp
+                {isSendingPdf ? 'Preparando PDF...' : 'Enviar PDF no WhatsApp'}
               </button>
             </>
           )}

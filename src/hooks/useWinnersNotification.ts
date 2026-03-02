@@ -4,7 +4,7 @@ import { markFetchedNow, readCachedJson, shouldFetchAfterDays, writeCachedJson }
 
 const LAST_VIEWED_DRAW_STORAGE_KEY = 'rifa-online:winners:last-viewed-draw-id'
 const AUTO_REFRESH_INTERVAL_MS = 3 * 60 * 1000
-const FETCH_EVERY_DAYS = 5
+const FETCH_EVERY_DAYS = 7
 const HISTORY_LIMIT = 12
 const WINNERS_CACHE_KEY = 'rifa-online:cache:winners-feed:v1'
 const WINNERS_LAST_FETCH_KEY = 'rifa-online:last-fetch:winners-feed:v1'

@@ -52,4 +52,4 @@ Este arquivo explica o contexto backend para outra IA atuar com seguranca.
 - Confirmar impacto de leitura/escrita por request.
 - Confirmar idempotencia em paths de pagamento e webhook.
 - Confirmar mensagens e `details` de erro para UX do frontend.
-- Rodar build: `npm --prefix functions run build`.
+- Rodar build: `cd functions && bun run build`.
