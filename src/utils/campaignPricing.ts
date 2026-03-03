@@ -5,7 +5,7 @@ import type {
   CampaignSettings,
 } from '../types/campaign'
 
-type PricingCampaignConfig = Pick<CampaignSettings, 'pricePerCota' | 'packPrices' | 'featuredPromotion'>
+type PricingCampaignConfig = Pick<CampaignSettings, 'pricePerCota' | 'packPrices' | 'featuredPromotions'>
 
 export type CampaignPricingBreakdown = {
   quantity: number
@@ -41,17 +41,46 @@ function calculateCouponDiscount(subtotal: number, coupon: CampaignCoupon | null
 function calculatePromotionDiscount(
   subtotalBase: number,
   quantity: number,
-  promotion: CampaignFeaturedPromotion | null,
+  promotions: CampaignFeaturedPromotion[],
 ) {
-  if (!promotion || !promotion.active || subtotalBase <= 0 || quantity < promotion.targetQuantity) {
+  if (!Array.isArray(promotions) || promotions.length === 0 || subtotalBase <= 0) {
+    return { discount: 0, promotion: null as CampaignFeaturedPromotion | null }
+  }
+
+  const candidates = promotions.filter(
+    (promotion) =>
+      promotion.active
+      && promotion.discountValue > 0
+      && quantity >= promotion.targetQuantity,
+  )
+  if (candidates.length === 0) {
+    return { discount: 0, promotion: null }
+  }
+
+  const bestPromotion = [...candidates].sort((left, right) => {
+    if (right.targetQuantity !== left.targetQuantity) {
+      return right.targetQuantity - left.targetQuantity
+    }
+
+    if (right.discountValue !== left.discountValue) {
+      return right.discountValue - left.discountValue
+    }
+
     return 0
+  })[0]
+
+  if (!bestPromotion) {
+    return { discount: 0, promotion: null }
   }
 
-  if (promotion.discountType === 'percent') {
-    return Number(Math.min(subtotalBase, subtotalBase * (promotion.discountValue / 100)).toFixed(2))
-  }
+  const discount = bestPromotion.discountType === 'percent'
+    ? Number(Math.min(subtotalBase, subtotalBase * (bestPromotion.discountValue / 100)).toFixed(2))
+    : Number(Math.min(subtotalBase, bestPromotion.discountValue).toFixed(2))
 
-  return Number(Math.min(subtotalBase, promotion.discountValue).toFixed(2))
+  return {
+    discount,
+    promotion: bestPromotion,
+  }
 }
 
 export function resolveCouponByCode(coupons: CampaignCoupon[], rawCode: string | null | undefined) {
@@ -78,7 +107,8 @@ export function calculateCampaignPricing(
   const subtotalBase = matchedPack
     ? toMoney(matchedPack.price)
     : toMoney(safeQuantity * campaign.pricePerCota)
-  const promotionDiscount = calculatePromotionDiscount(subtotalBase, safeQuantity, campaign.featuredPromotion)
+  const promotionResult = calculatePromotionDiscount(subtotalBase, safeQuantity, campaign.featuredPromotions)
+  const promotionDiscount = promotionResult.discount
   const subtotalAfterPromotion = toMoney(Math.max(subtotalBase - promotionDiscount, 0))
   const couponDiscount = calculateCouponDiscount(subtotalAfterPromotion, coupon)
   const total = toMoney(Math.max(subtotalAfterPromotion - couponDiscount, 0))
@@ -91,9 +121,6 @@ export function calculateCampaignPricing(
     subtotalAfterPromotion,
     couponDiscount,
     total,
-    appliedPromotion:
-      campaign.featuredPromotion && campaign.featuredPromotion.active && safeQuantity >= campaign.featuredPromotion.targetQuantity
-        ? campaign.featuredPromotion
-        : null,
+    appliedPromotion: promotionResult.promotion,
   }
 }

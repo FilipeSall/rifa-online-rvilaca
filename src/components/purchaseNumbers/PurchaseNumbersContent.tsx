@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { OPEN_PURCHASE_CART_EVENT } from '../../const/purchaseNumbers'
 import type { usePurchaseNumbers } from '../../hooks/usePurchaseNumbers'
 import { useAuthStore } from '../../stores/authStore'
+import { calculateCampaignPricing } from '../../utils/campaignPricing'
 import MobileAuthCard from './MobileAuthCard'
 import NumberSelectionCard from './NumberSelectionCard'
 import QuantitySelectionCard from './QuantitySelectionCard'
@@ -241,19 +242,28 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     [purchaseState.campaign.packPrices],
   )
   const discountPackQuantities = useMemo(() => {
-    const progressiveDiscount = purchaseState.campaign.featuredPromotion
-    if (
-      !progressiveDiscount
-      || !progressiveDiscount.active
-      || progressiveDiscount.discountValue <= 0
-    ) {
+    const activePromotions = purchaseState.campaign.featuredPromotions
+      .filter((promotion) => promotion.active && promotion.discountValue > 0)
+    if (activePromotions.length === 0) {
       return []
     }
 
     return purchaseState.campaign.packPrices
-      .filter((pack) => pack.active && pack.quantity >= progressiveDiscount.targetQuantity)
+      .filter((pack) => pack.active)
+      .filter((pack) => {
+        const pricing = calculateCampaignPricing(pack.quantity, {
+          pricePerCota: purchaseState.campaign.pricePerCota,
+          packPrices: purchaseState.campaign.packPrices,
+          featuredPromotions: activePromotions,
+        })
+        return pricing.promotionDiscount > 0
+      })
       .map((pack) => pack.quantity)
-  }, [purchaseState.campaign.featuredPromotion, purchaseState.campaign.packPrices])
+  }, [
+    purchaseState.campaign.featuredPromotions,
+    purchaseState.campaign.packPrices,
+    purchaseState.campaign.pricePerCota,
+  ])
 
   return (
     <>
@@ -264,7 +274,6 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
               quantity={quantity}
               minQuantity={minSelectableQuantity}
               packQuantities={availablePackQuantities}
-              featuredPromotion={purchaseState.campaign.featuredPromotion}
               mostPurchasedPackQuantities={mostPurchasedPackQuantities}
               discountPackQuantities={discountPackQuantities}
               maxSelectable={maxSelectable}

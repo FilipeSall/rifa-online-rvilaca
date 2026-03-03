@@ -885,7 +885,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     return [reservationCap]
   }, [activePackQuantities, reservationCap])
   const minSelectableQuantity = availablePackQuantities[0]
-  const maxSelectable = availablePackQuantities[availablePackQuantities.length - 1]
+  const maxSelectable = Math.max(reservationCap, minSelectableQuantity)
 
   const selectedCount = selectedNumbers.length
   const unitPrice = Number.isFinite(campaign.pricePerCota) && campaign.pricePerCota > 0

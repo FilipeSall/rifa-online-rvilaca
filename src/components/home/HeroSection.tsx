@@ -4,6 +4,7 @@ import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 import { DEFAULT_BONUS_PRIZE, DEFAULT_CAMPAIGN_TITLE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../const/campaign'
 import { calculateCampaignPricing } from '../../utils/campaignPricing'
 import { formatCurrency } from '../../utils/purchaseNumbers'
+import type { CampaignFeaturedPromotion } from '../../types/campaign'
 import Skeleton from 'react-loading-skeleton'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import { Autoplay, Pagination } from 'swiper/modules'
@@ -60,26 +61,30 @@ export default function HeroSection({
       }))
   }, [campaign.midias.heroCarousel])
 
-  const activeFeaturedPromotion = useMemo(
+  const activeFeaturedPromotions = useMemo(
     () => {
-      const promotion = campaign.featuredPromotion
-      if (!promotion?.active) {
-        return null
-      }
+      const promotions = Array.isArray(campaign.featuredPromotions) ? campaign.featuredPromotions : []
+      return promotions
+        .map((promotion) => {
+          if (!promotion?.active) {
+            return null
+          }
 
-      const discountType = promotion.discountType === 'fixed' ? ('fixed' as const) : ('percent' as const)
-      const normalizedDiscount = Number(promotion.discountValue)
-      if (!Number.isFinite(normalizedDiscount) || normalizedDiscount <= 0) {
-        return null
-      }
+          const discountType = promotion.discountType === 'fixed' ? ('fixed' as const) : ('percent' as const)
+          const normalizedDiscount = Number(promotion.discountValue)
+          if (!Number.isFinite(normalizedDiscount) || normalizedDiscount <= 0) {
+            return null
+          }
 
-      return {
-        ...promotion,
-        discountType,
-        discountValue: Number((discountType === 'percent' ? Math.min(normalizedDiscount, 100) : normalizedDiscount).toFixed(2)),
-      }
+          return {
+            ...promotion,
+            discountType,
+            discountValue: Number((discountType === 'percent' ? Math.min(normalizedDiscount, 100) : normalizedDiscount).toFixed(2)),
+          }
+        })
+        .filter((promotion): promotion is CampaignFeaturedPromotion => Boolean(promotion))
     },
-    [campaign.featuredPromotion],
+    [campaign.featuredPromotions],
   )
   const mostPurchasedPackQuantities = useMemo(
     () => campaign.packPrices
@@ -88,58 +93,78 @@ export default function HeroSection({
     [campaign.packPrices],
   )
   const discountPackQuantities = useMemo(() => {
-    if (!activeFeaturedPromotion) {
+    if (activeFeaturedPromotions.length === 0) {
       return []
     }
 
     return campaign.packPrices
-      .filter((pack) => pack.active && pack.quantity >= activeFeaturedPromotion.targetQuantity)
+      .filter((pack) => pack.active)
+      .filter((pack) => {
+        const pricing = calculateCampaignPricing(pack.quantity, {
+          pricePerCota: campaign.pricePerCota,
+          packPrices: campaign.packPrices,
+          featuredPromotions: activeFeaturedPromotions,
+        })
+        return pricing.promotionDiscount > 0
+      })
       .map((pack) => pack.quantity)
-  }, [activeFeaturedPromotion, campaign.packPrices])
+  }, [activeFeaturedPromotions, campaign.packPrices, campaign.pricePerCota])
   const discountTooltipByPack = useMemo(() => {
-    if (!activeFeaturedPromotion) {
+    if (activeFeaturedPromotions.length === 0) {
       return {} as Record<number, string>
     }
 
     return heroQuickQuantityPacks.reduce<Record<number, string>>((accumulator, pack) => {
-      if (pack < activeFeaturedPromotion.targetQuantity) {
-        return accumulator
-      }
-
       const pricing = calculateCampaignPricing(pack, {
         pricePerCota: campaign.pricePerCota,
         packPrices: campaign.packPrices,
-        featuredPromotion: activeFeaturedPromotion,
+        featuredPromotions: activeFeaturedPromotions,
       })
       if (pricing.promotionDiscount <= 0) {
         return accumulator
       }
 
-      const discountLabel = activeFeaturedPromotion.discountType === 'percent'
-        ? `${activeFeaturedPromotion.discountValue.toFixed(2).replace(/\.00$/, '')}%`
-        : formatCurrency(activeFeaturedPromotion.discountValue)
+      const appliedPromotion = pricing.appliedPromotion
+      if (!appliedPromotion) {
+        return accumulator
+      }
+
+      const discountLabel = appliedPromotion.discountType === 'percent'
+        ? `${appliedPromotion.discountValue.toFixed(2).replace(/\.00$/, '')}%`
+        : formatCurrency(appliedPromotion.discountValue)
       accumulator[pack] = `Economize ${discountLabel} e pague ${formatCurrency(pricing.subtotalAfterPromotion)}.`
       return accumulator
     }, {})
   }, [
-    activeFeaturedPromotion,
+    activeFeaturedPromotions,
     campaign.packPrices,
     campaign.pricePerCota,
     heroQuickQuantityPacks,
   ])
   const promotionCallout = useMemo(() => {
-    if (!activeFeaturedPromotion) {
+    if (activeFeaturedPromotions.length === 0) {
       return null
     }
 
-    const discountLabel = activeFeaturedPromotion.discountType === 'percent'
-      ? `${activeFeaturedPromotion.discountValue.toFixed(2).replace(/\.00$/, '')}%`
-      : formatCurrency(activeFeaturedPromotion.discountValue)
+    const bestPromotion = [...activeFeaturedPromotions].sort((left, right) => {
+      if (right.targetQuantity !== left.targetQuantity) {
+        return right.targetQuantity - left.targetQuantity
+      }
+
+      return right.discountValue - left.discountValue
+    })[0]
+    if (!bestPromotion) {
+      return null
+    }
+
+    const discountLabel = bestPromotion.discountType === 'percent'
+      ? `${bestPromotion.discountValue.toFixed(2).replace(/\.00$/, '')}%`
+      : formatCurrency(bestPromotion.discountValue)
     return {
-      targetQuantityLabel: String(activeFeaturedPromotion.targetQuantity),
+      targetQuantityLabel: String(bestPromotion.targetQuantity),
       discountLabel,
     }
-  }, [activeFeaturedPromotion])
+  }, [activeFeaturedPromotions])
 
   const handleImageLoaded = useCallback((imageSrc: string) => {
     setLoadedImages((currentState) => {

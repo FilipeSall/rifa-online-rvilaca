@@ -71,7 +71,7 @@ export type CampaignSettings = {
   endsAt: string | null
   endsAtTime: string | null
   packPrices: CampaignPackPrice[]
-  featuredPromotion: CampaignFeaturedPromotion | null
+  featuredPromotions: CampaignFeaturedPromotion[]
   coupons: CampaignCoupon[]
   midias: CampaignMidias
   topBuyersWeeklySchedule: TopBuyersWeeklySchedule
@@ -93,7 +93,7 @@ export type UpsertCampaignSettingsInput = {
   endsAt?: string | null
   endsAtTime?: string | null
   packPrices?: CampaignPackPrice[]
-  featuredPromotion?: CampaignFeaturedPromotion | null
+  featuredPromotions?: CampaignFeaturedPromotion[] | null
   coupons?: CampaignCoupon[]
   midias?: CampaignMidias
   topBuyersWeeklySchedule?: TopBuyersWeeklySchedule | null
@@ -116,7 +116,7 @@ export type UpsertCampaignSettingsOutput = {
   endsAt: string | null
   endsAtTime: string | null
   packPrices: CampaignPackPrice[]
-  featuredPromotion: CampaignFeaturedPromotion | null
+  featuredPromotions: CampaignFeaturedPromotion[]
   coupons: CampaignCoupon[]
   midias: CampaignMidias
   topBuyersWeeklySchedule: TopBuyersWeeklySchedule

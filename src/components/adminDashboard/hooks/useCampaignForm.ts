@@ -45,7 +45,7 @@ export function useCampaignForm() {
   const [endsAt, setEndsAt] = useState('')
   const [endsAtTime, setEndsAtTime] = useState('')
   const [packPrices, setPackPrices] = useState<CampaignPackPrice[]>(buildDefaultCampaignPackPrices(DEFAULT_TICKET_PRICE))
-  const [featuredPromotion, setFeaturedPromotion] = useState<CampaignFeaturedPromotion | null>(null)
+  const [featuredPromotions, setFeaturedPromotions] = useState<CampaignFeaturedPromotion[]>([])
   const [coupons, setCoupons] = useState<CampaignCoupon[]>([])
   const [midias, setMidias] = useState<CampaignMidias>({ heroCarousel: [], featuredVideo: null })
   const [topBuyersDrawDayOfWeek, setTopBuyersDrawDayOfWeek] = useState<number>(DEFAULT_TOP_BUYERS_DRAW_DAY_OF_WEEK)
@@ -68,7 +68,7 @@ export function useCampaignForm() {
     setEndsAt(campaign.endsAt ?? '')
     setEndsAtTime(campaign.endsAtTime ?? '')
     setPackPrices(campaign.packPrices)
-    setFeaturedPromotion(campaign.featuredPromotion)
+    setFeaturedPromotions(campaign.featuredPromotions)
     setCoupons(campaign.coupons)
     setMidias(campaign.midias)
     setTopBuyersDrawDayOfWeek(campaign.topBuyersWeeklySchedule.dayOfWeek)
@@ -90,7 +90,7 @@ export function useCampaignForm() {
     campaign.endsAt,
     campaign.endsAtTime,
     campaign.packPrices,
-    campaign.featuredPromotion,
+    campaign.featuredPromotions,
     campaign.topBuyersWeeklySchedule.dayOfWeek,
     campaign.topBuyersWeeklySchedule.drawTime,
     campaign.topBuyersWeeklySchedule.skipWeekId,
@@ -126,7 +126,7 @@ export function useCampaignForm() {
       endsAt,
       endsAtTime,
       packPrices,
-      featuredPromotion,
+      featuredPromotions,
       coupons,
       midias,
       topBuyersDrawDayOfWeek,
@@ -168,9 +168,8 @@ export function useCampaignForm() {
     title,
     endsAtTime,
     packPrices,
-    featuredPromotion,
+    featuredPromotions,
     midias,
-    topBuyersSkipWeekId,
     topBuyersDrawDayOfWeek,
     topBuyersDrawTime,
     topBuyersSkipWeekId,
@@ -193,7 +192,7 @@ export function useCampaignForm() {
         endsAt,
         endsAtTime,
         packPrices,
-        featuredPromotion,
+        featuredPromotions,
         coupons: nextCoupons,
         midias,
         topBuyersDrawDayOfWeek,
@@ -237,7 +236,7 @@ export function useCampaignForm() {
       title,
       endsAtTime,
       packPrices,
-      featuredPromotion,
+      featuredPromotions,
       midias,
       topBuyersDrawDayOfWeek,
       topBuyersDrawTime,
@@ -262,7 +261,7 @@ export function useCampaignForm() {
         endsAt,
         endsAtTime,
         packPrices,
-        featuredPromotion,
+        featuredPromotions,
         coupons,
         midias: nextMidias,
         topBuyersDrawDayOfWeek,
@@ -307,7 +306,7 @@ export function useCampaignForm() {
       title,
       endsAtTime,
       packPrices,
-      featuredPromotion,
+      featuredPromotions,
       topBuyersDrawDayOfWeek,
       topBuyersDrawTime,
       topBuyersSkipWeekId,
@@ -332,7 +331,7 @@ export function useCampaignForm() {
     endsAt,
     endsAtTime,
     packPrices,
-    featuredPromotion,
+    featuredPromotions,
     coupons,
     midias,
     setTitle,
@@ -349,7 +348,7 @@ export function useCampaignForm() {
     setEndsAt,
     setEndsAtTime,
     setPackPrices,
-    setFeaturedPromotion,
+    setFeaturedPromotions,
     setCoupons,
     setMidias,
     topBuyersDrawDayOfWeek,

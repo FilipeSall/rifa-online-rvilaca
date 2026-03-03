@@ -108,10 +108,28 @@ function formatBrazilDateTime(valueMs: number) {
   }
 
   return new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'full',
-    timeStyle: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
     timeZone: TOP_BUYERS_SCHEDULE_TIMEZONE,
   }).format(new Date(valueMs))
+}
+
+function formatBrazilDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value
+  }
+
+  const parsed = new Date(`${value}T00:00:00`)
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: TOP_BUYERS_SCHEDULE_TIMEZONE,
+  }).format(parsed)
 }
 
 export default function CampaignTab() {
@@ -135,7 +153,7 @@ export default function CampaignTab() {
     endsAt,
     endsAtTime,
     packPrices,
-    featuredPromotion,
+    featuredPromotions,
     coupons,
     midias,
     topBuyersDrawDayOfWeek,
@@ -155,7 +173,7 @@ export default function CampaignTab() {
     setEndsAt,
     setEndsAtTime,
     setPackPrices,
-    setFeaturedPromotion,
+    setFeaturedPromotions,
     setMidias,
     setTopBuyersDrawDayOfWeek,
     setTopBuyersDrawTime,
@@ -241,7 +259,7 @@ export default function CampaignTab() {
       endsAt,
       endsAtTime,
       packPrices,
-      featuredPromotion,
+      featuredPromotions,
       coupons,
       midias,
       topBuyersDrawDayOfWeek,
@@ -260,7 +278,7 @@ export default function CampaignTab() {
     startsAt,
     startsAtTime,
     packPrices,
-    featuredPromotion,
+    featuredPromotions,
     supportWhatsappNumber,
     topBuyersDrawDayOfWeek,
     topBuyersDrawTime,
@@ -286,7 +304,7 @@ export default function CampaignTab() {
       endsAt: campaign.endsAt ?? '',
       endsAtTime: campaign.endsAtTime ?? '',
       packPrices: campaign.packPrices,
-      featuredPromotion: campaign.featuredPromotion,
+      featuredPromotions: campaign.featuredPromotions,
       coupons: campaign.coupons,
       midias: campaign.midias,
       topBuyersDrawDayOfWeek: campaign.topBuyersWeeklySchedule.dayOfWeek,
@@ -301,7 +319,7 @@ export default function CampaignTab() {
     campaign.mainPrize,
     campaign.midias,
     campaign.packPrices,
-    campaign.featuredPromotion,
+    campaign.featuredPromotions,
     campaign.pricePerCota,
     campaign.secondPrize,
     campaign.startsAt,
@@ -352,26 +370,27 @@ export default function CampaignTab() {
     return Number.isFinite(parsed) && parsed > 0 ? Number(parsed.toFixed(2)) : campaign.pricePerCota
   }, [campaign.pricePerCota, pricePerCotaInput])
   const defaultPromotionQuantity = CAMPAIGN_PACK_QUANTITIES[2] ?? CAMPAIGN_PACK_QUANTITIES[0]
-  const promotionDraft = useMemo(() => {
-    const base = featuredPromotion || createDefaultFeaturedPromotion(defaultPromotionQuantity)
-    const targetQuantity = Number.isInteger(base.targetQuantity) && base.targetQuantity > 0
-      ? Math.min(base.targetQuantity, MAX_QUANTITY)
-      : defaultPromotionQuantity
-    const discountType: CampaignCouponDiscountType = base.discountType === 'fixed' ? 'fixed' : 'percent'
-    const rawDiscount = Number(base.discountValue)
-    const discountValue = Number.isFinite(rawDiscount) && rawDiscount >= 0
-      ? Number((discountType === 'percent' ? Math.min(rawDiscount, 100) : rawDiscount).toFixed(2))
-      : 0
+  const promotionDrafts = useMemo(() => (
+    featuredPromotions.map((promotion) => {
+      const targetQuantity = Number.isInteger(promotion.targetQuantity) && promotion.targetQuantity > 0
+        ? Math.min(promotion.targetQuantity, MAX_QUANTITY)
+        : defaultPromotionQuantity
+      const discountType: CampaignCouponDiscountType = promotion.discountType === 'fixed' ? 'fixed' : 'percent'
+      const rawDiscount = Number(promotion.discountValue)
+      const discountValue = Number.isFinite(rawDiscount) && rawDiscount >= 0
+        ? Number((discountType === 'percent' ? Math.min(rawDiscount, 100) : rawDiscount).toFixed(2))
+        : 0
 
-    return {
-      ...base,
-      active: true,
-      targetQuantity,
-      discountType,
-      discountValue,
-      label: 'Mais compradas',
-    }
-  }, [defaultPromotionQuantity, featuredPromotion])
+      return {
+        ...promotion,
+        active: promotion.active !== false,
+        targetQuantity,
+        discountType,
+        discountValue,
+        label: 'Mais compradas',
+      }
+    })
+  ), [defaultPromotionQuantity, featuredPromotions])
   const topBuyersScheduleDraft = useMemo(
     () => normalizeTopBuyersWeeklySchedule({
       dayOfWeek: topBuyersDrawDayOfWeek,
@@ -494,11 +513,15 @@ export default function CampaignTab() {
     })
   }
 
-  const handlePromotionMinimumQuantityChange = (rawValue: string) => {
+  const handlePromotionMinimumQuantityChange = (index: number, rawValue: string) => {
     const parsed = Number(rawValue.replace(/[^0-9]/g, ''))
 
-    setFeaturedPromotion((current) => {
-      const base = current || createDefaultFeaturedPromotion(defaultPromotionQuantity)
+    setFeaturedPromotions((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) {
+        return item
+      }
+
+      const base = item || createDefaultFeaturedPromotion(defaultPromotionQuantity)
       if (!Number.isInteger(parsed) || parsed <= 0) {
         return {
           ...base,
@@ -513,12 +536,16 @@ export default function CampaignTab() {
         targetQuantity: Math.min(parsed, MAX_QUANTITY),
         label: 'Mais compradas',
       }
-    })
+    }))
   }
 
-  const handlePromotionDiscountTypeChange = (nextDiscountType: CampaignCouponDiscountType) => {
-    setFeaturedPromotion((current) => {
-      const base = current || createDefaultFeaturedPromotion(defaultPromotionQuantity)
+  const handlePromotionDiscountTypeChange = (index: number, nextDiscountType: CampaignCouponDiscountType) => {
+    setFeaturedPromotions((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) {
+        return item
+      }
+
+      const base = item || createDefaultFeaturedPromotion(defaultPromotionQuantity)
       const normalizedValue = nextDiscountType === 'percent'
         ? Number(Math.min(base.discountValue, 100).toFixed(2))
         : Number(base.discountValue.toFixed(2))
@@ -530,14 +557,18 @@ export default function CampaignTab() {
         discountValue: normalizedValue,
         label: 'Mais compradas',
       }
-    })
+    }))
   }
 
-  const handlePromotionDiscountInputChange = (rawValue: string) => {
+  const handlePromotionDiscountInputChange = (index: number, rawValue: string) => {
     const parsed = Number(rawValue.replace(',', '.'))
 
-    setFeaturedPromotion((current) => {
-      const base = current || createDefaultFeaturedPromotion(defaultPromotionQuantity)
+    setFeaturedPromotions((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) {
+        return item
+      }
+
+      const base = item || createDefaultFeaturedPromotion(defaultPromotionQuantity)
       const normalizedValue = Number.isFinite(parsed) && parsed >= 0
         ? Number((base.discountType === 'percent' ? Math.min(parsed, 100) : parsed).toFixed(2))
         : 0
@@ -547,7 +578,27 @@ export default function CampaignTab() {
         discountValue: normalizedValue,
         label: 'Mais compradas',
       }
+    }))
+  }
+
+  const handleAddPromotion = () => {
+    setFeaturedPromotions((current) => {
+      const maxTarget = current.reduce((max, item) => Math.max(max, item.targetQuantity || 0), defaultPromotionQuantity)
+      return [
+        ...current,
+        {
+          active: true,
+          targetQuantity: Math.min(maxTarget + 100, MAX_QUANTITY),
+          discountType: 'percent',
+          discountValue: 5,
+          label: 'Mais compradas',
+        },
+      ]
     })
+  }
+
+  const handleRemovePromotion = (index: number) => {
+    setFeaturedPromotions((current) => current.filter((_, itemIndex) => itemIndex !== index))
   }
 
   const handleGenerateCouponCode = () => {
@@ -1073,49 +1124,80 @@ export default function CampaignTab() {
                   <p className="mt-1 text-[11px] text-gray-300">
                     Numero de ingressos para obter descontos por venda.
                   </p>
-                  <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <div className="md:col-span-1">
-                      <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-discount-min-quantity">
-                        Quantidade minima
-                      </label>
-                      <input
-                        id="campaign-discount-min-quantity"
-                        className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-neon-pink/60"
-                        inputMode="numeric"
-                        type="text"
-                        value={String(promotionDraft.targetQuantity)}
-                        onChange={(event) => handlePromotionMinimumQuantityChange(event.target.value)}
-                      />
-                    </div>
-                    <div className="md:col-span-1">
-                      <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-discount-type">
-                        Tipo de desconto
-                      </label>
-                      <CustomSelect
-                        id="campaign-discount-type"
-                        value={promotionDraft.discountType}
-                        options={promotionDiscountTypeOptions}
-                        onChange={(nextValue) => handlePromotionDiscountTypeChange(nextValue === 'fixed' ? 'fixed' : 'percent')}
-                      />
-                    </div>
-                    <div className="md:col-span-1">
-                      <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor="campaign-discount-value">
-                        {promotionDraft.discountType === 'percent' ? 'Valor do desconto (%)' : 'Valor fixo do desconto (R$)'}
-                      </label>
-                      <input
-                        id="campaign-discount-value"
-                        className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-neon-pink/60"
-                        inputMode="decimal"
-                        type="text"
-                        value={promotionDraft.discountValue.toString().replace('.', ',')}
-                        onChange={(event) => handlePromotionDiscountInputChange(event.target.value)}
-                      />
-                    </div>
+                  <div className="mt-3 space-y-3">
+                    {promotionDrafts.length === 0 ? (
+                      <p className="text-xs text-gray-400">Nenhuma regra cadastrada. Clique em adicionar para criar.</p>
+                    ) : (
+                      promotionDrafts.map((promotion, index) => (
+                        <div key={`promotion-${index}`} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">
+                              Regra {index + 1}
+                            </p>
+                            <button
+                              className="text-[10px] font-semibold uppercase tracking-[0.12em] text-red-300 transition hover:text-red-200"
+                              type="button"
+                              onClick={() => handleRemovePromotion(index)}
+                              disabled={promotionDrafts.length <= 1}
+                            >
+                              Remover
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 items-end gap-3 md:grid-cols-3">
+                            <div className="md:col-span-1">
+                              <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor={`campaign-discount-min-quantity-${index}`}>
+                                Quantidade minima
+                              </label>
+                              <input
+                                id={`campaign-discount-min-quantity-${index}`}
+                                className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-neon-pink/60"
+                                inputMode="numeric"
+                                type="text"
+                                value={String(promotion.targetQuantity)}
+                                onChange={(event) => handlePromotionMinimumQuantityChange(index, event.target.value)}
+                              />
+                            </div>
+                            <div className="md:col-span-1">
+                              <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor={`campaign-discount-type-${index}`}>
+                                Tipo de desconto
+                              </label>
+                              <CustomSelect
+                                id={`campaign-discount-type-${index}`}
+                                value={promotion.discountType}
+                                options={promotionDiscountTypeOptions}
+                                onChange={(nextValue) => handlePromotionDiscountTypeChange(index, nextValue === 'fixed' ? 'fixed' : 'percent')}
+                              />
+                            </div>
+                            <div className="md:col-span-1">
+                              <label className="text-[10px] uppercase tracking-[0.16em] text-gray-500" htmlFor={`campaign-discount-value-${index}`}>
+                                {promotion.discountType === 'percent' ? 'Valor do desconto (%)' : 'Valor fixo do desconto (R$)'}
+                              </label>
+                              <input
+                                id={`campaign-discount-value-${index}`}
+                                className="mt-2 h-11 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-neon-pink/60"
+                                inputMode="decimal"
+                                type="text"
+                                value={promotion.discountValue.toString().replace('.', ',')}
+                                onChange={(event) => handlePromotionDiscountInputChange(index, event.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    <button
+                      className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition hover:border-neon-pink/60 hover:text-neon-pink"
+                      type="button"
+                      onClick={handleAddPromotion}
+                    >
+                      Adicionar regra de desconto
+                    </button>
                   </div>
                 </div>
               </div>
               <p className="mt-3 text-[11px] text-gray-400">
-                O desconto progressivo aplica automaticamente quando a compra atingir a quantidade minima configurada.
+                O desconto progressivo aplica automaticamente quando a compra atingir a quantidade minima configurada. As promocoes nao se acumulam;
+                a maior regra elegivel prevalece.
               </p>
 
               <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-4">
@@ -1367,7 +1449,7 @@ export default function CampaignTab() {
                       <span>
                         <span className="font-semibold text-cyan-50">Pular o sorteio desta semana</span>
                         <span className="mt-1 block text-[11px] text-cyan-100/70">
-                          Semana do sorteio: <span className="font-semibold">{topBuyersNextDrawWeekId}</span>. O ranking continua sendo atualizado,
+                          Semana do sorteio: <span className="font-semibold">{formatBrazilDate(topBuyersNextDrawWeekId)}</span>. O ranking continua sendo atualizado,
                           mas o sorteio semanal nao podera ser publicado.
                         </span>
                       </span>

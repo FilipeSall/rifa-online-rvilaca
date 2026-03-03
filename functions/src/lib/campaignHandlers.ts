@@ -96,6 +96,7 @@ interface UpsertCampaignSettingsInput {
   endsAt?: string | null
   endsAtTime?: string | null
   packPrices?: CampaignPackPrice[]
+  featuredPromotions?: CampaignFeaturedPromotion[] | null
   featuredPromotion?: CampaignFeaturedPromotion | null
   coupons?: CampaignCoupon[]
   midias?: CampaignMidias
@@ -119,7 +120,7 @@ interface UpsertCampaignSettingsOutput {
   endsAt: string | null
   endsAtTime: string | null
   packPrices: CampaignPackPrice[]
-  featuredPromotion: CampaignFeaturedPromotion | null
+  featuredPromotions: CampaignFeaturedPromotion[]
   coupons: CampaignCoupon[]
   midias: CampaignMidias
   topBuyersWeeklySchedule: TopBuyersWeeklySchedule
@@ -180,14 +181,23 @@ function buildDefaultPackPrices(unitPrice: number): CampaignPackPrice[] {
   }))
 }
 
-function buildDefaultFeaturedPromotion(): CampaignFeaturedPromotion {
-  return {
-    active: true,
-    targetQuantity: 500,
-    discountType: 'percent',
-    discountValue: 5,
-    label: 'Mais compradas',
-  }
+function buildDefaultFeaturedPromotions(): CampaignFeaturedPromotion[] {
+  return [
+    {
+      active: true,
+      targetQuantity: 500,
+      discountType: 'percent',
+      discountValue: 5,
+      label: 'Mais compradas',
+    },
+    {
+      active: true,
+      targetQuantity: 1000,
+      discountType: 'percent',
+      discountValue: 10,
+      label: 'Mais compradas',
+    },
+  ]
 }
 
 function sanitizeCampaignTitle(value: unknown): string | null {
@@ -439,6 +449,53 @@ function sanitizeCampaignFeaturedPromotion(value: unknown): CampaignFeaturedProm
     discountValue: Number(rawDiscountValue.toFixed(2)),
     label: 'Mais compradas',
   }
+}
+
+function sanitizeCampaignFeaturedPromotions(
+  value: unknown,
+  fallbackValue: unknown,
+): CampaignFeaturedPromotion[] | null | undefined {
+  if (value === undefined) {
+    if (fallbackValue !== undefined) {
+      const fallback = sanitizeCampaignFeaturedPromotion(fallbackValue)
+      if (fallback === undefined) {
+        return undefined
+      }
+      if (fallback === null) {
+        return []
+      }
+      const defaults = buildDefaultFeaturedPromotions()
+      const hasSame = (item: CampaignFeaturedPromotion) =>
+        item.targetQuantity === fallback.targetQuantity
+        && item.discountType === fallback.discountType
+        && item.discountValue === fallback.discountValue
+      return [
+        fallback,
+        ...defaults.filter((item) => !hasSame(item)),
+      ]
+    }
+
+    return undefined
+  }
+
+  if (value === null || value === '') {
+    return []
+  }
+
+  const items = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? Object.values(value as Record<string, unknown>)
+      : null
+  if (!items) {
+    throw new HttpsError('invalid-argument', 'featuredPromotions deve ser uma lista.')
+  }
+
+  const normalized = items
+    .map((item) => sanitizeCampaignFeaturedPromotion(item))
+    .filter((item): item is CampaignFeaturedPromotion => Boolean(item))
+
+  return normalized
 }
 
 function sanitizeTopBuyersWeeklySchedule(
@@ -721,26 +778,25 @@ export function readCampaignPurchaseQuantityLimits(data: DocumentData | undefine
   const fallbackQuantities = [...CAMPAIGN_PACK_QUANTITIES].sort((left, right) => left - right)
   const quantities = activeQuantities.length > 0 ? activeQuantities : fallbackQuantities
   const min = quantities[0] ?? CAMPAIGN_PACK_QUANTITIES[0]
-  const max = quantities[quantities.length - 1] ?? min
 
   return {
     min,
-    max: Math.max(min, max),
+    max: Math.max(min, MAX_PURCHASE_QUANTITY),
   }
 }
 
-export function readCampaignFeaturedPromotion(data: DocumentData | undefined): CampaignFeaturedPromotion | null {
+export function readCampaignFeaturedPromotions(data: DocumentData | undefined): CampaignFeaturedPromotion[] {
   try {
-    const sanitized = sanitizeCampaignFeaturedPromotion(data?.featuredPromotion)
+    const sanitized = sanitizeCampaignFeaturedPromotions(data?.featuredPromotions, data?.featuredPromotion)
     if (sanitized === undefined) {
-      return buildDefaultFeaturedPromotion()
+      return buildDefaultFeaturedPromotions()
     }
-    return sanitized
+    return sanitized ?? []
   } catch (error) {
-    logger.warn('readCampaignFeaturedPromotion fallback to defaults due to malformed data', {
+    logger.warn('readCampaignFeaturedPromotions fallback to defaults due to malformed data', {
       error: String(error),
     })
-    return buildDefaultFeaturedPromotion()
+    return buildDefaultFeaturedPromotions()
   }
 }
 
@@ -874,7 +930,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       const currentPricePerCota = readCampaignPricePerCota(currentData)
       const priceForPackFallback = nextPricePerCota ?? currentPricePerCota
       const nextPackPrices = sanitizeCampaignPackPrices(payload.packPrices, priceForPackFallback)
-      const nextFeaturedPromotion = sanitizeCampaignFeaturedPromotion(payload.featuredPromotion)
+      const nextFeaturedPromotions = sanitizeCampaignFeaturedPromotions(
+        payload.featuredPromotions,
+        payload.featuredPromotion,
+      )
       const nextCoupons = sanitizeCoupons(payload.coupons)
       const nextMidias = sanitizeCampaignMidias(payload.midias)
       const nextTopBuyersWeeklySchedule = sanitizeTopBuyersWeeklySchedule(payload.topBuyersWeeklySchedule)
@@ -946,8 +1005,8 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         updateData.packPrices = nextPackPrices
       }
 
-      if (nextFeaturedPromotion !== undefined) {
-        updateData.featuredPromotion = nextFeaturedPromotion
+      if (nextFeaturedPromotions !== undefined) {
+        updateData.featuredPromotions = nextFeaturedPromotions
       }
 
       if (nextCoupons !== null) {
@@ -1018,8 +1077,8 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
           updateData.packPrices = buildDefaultPackPrices(readCampaignPricePerCota(updateData))
         }
 
-        if (updateData.featuredPromotion === undefined) {
-          updateData.featuredPromotion = buildDefaultFeaturedPromotion()
+        if (updateData.featuredPromotions === undefined) {
+          updateData.featuredPromotions = buildDefaultFeaturedPromotions()
         }
 
         if (!updateData.midias) {
@@ -1046,7 +1105,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         nextEndsAt === undefined &&
         nextEndsAtTime === undefined &&
         nextPackPrices === null &&
-        nextFeaturedPromotion === undefined &&
+        nextFeaturedPromotions === undefined &&
         nextCoupons === null &&
         nextMidias === null &&
         nextTopBuyersWeeklySchedule === undefined
@@ -1060,7 +1119,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         nextCouponsCount: Array.isArray(nextCoupons) ? nextCoupons.length : null,
         hasNewPackPrices: Array.isArray(nextPackPrices),
         nextPackPricesCount: Array.isArray(nextPackPrices) ? nextPackPrices.length : null,
-        hasNewFeaturedPromotion: nextFeaturedPromotion !== undefined,
+        hasNewFeaturedPromotions: nextFeaturedPromotions !== undefined,
         hasNewMidias: nextMidias !== null,
         nextHeroCarouselCount: nextMidias ? nextMidias.heroCarousel.length : null,
         hasFeaturedVideo: Boolean(nextMidias?.featuredVideo?.url),
@@ -1090,7 +1149,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         endsAt: readCampaignDate(campaignData, 'endsAt'),
         endsAtTime: readCampaignTime(campaignData, 'endsAtTime'),
         packPrices: readCampaignPackPrices(campaignData),
-        featuredPromotion: readCampaignFeaturedPromotion(campaignData),
+        featuredPromotions: readCampaignFeaturedPromotions(campaignData),
         coupons: readCampaignCoupons(campaignData),
         midias: readCampaignMidias(campaignData),
         topBuyersWeeklySchedule: readTopBuyersWeeklySchedule(campaignData),
@@ -1100,7 +1159,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         uid,
         campaignId: CAMPAIGN_DOC_ID,
         packPricesCount: output.packPrices.length,
-        hasFeaturedPromotion: Boolean(output.featuredPromotion?.active),
+        hasFeaturedPromotion: output.featuredPromotions.some((promotion) => promotion.active),
         couponsCount: output.coupons.length,
         heroCarouselCount: output.midias.heroCarousel.length,
         hasFeaturedVideo: Boolean(output.midias.featuredVideo?.url),

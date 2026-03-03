@@ -12,13 +12,22 @@ export const DEFAULT_TOP_BUYERS_DRAW_DAY_OF_WEEK = 5 as const
 export const DEFAULT_TOP_BUYERS_DRAW_TIME = '14:00' as const
 export const TOP_BUYERS_SCHEDULE_TIMEZONE = 'America/Sao_Paulo' as const
 export const CAMPAIGN_PACK_QUANTITIES = [20, 50, 100, 250, 350, 500, 750, 1000] as const
-export const DEFAULT_CAMPAIGN_FEATURED_PROMOTION = {
-  active: true,
-  targetQuantity: 500,
-  discountType: 'percent',
-  discountValue: 5,
-  label: 'Mais compradas',
-} as const
+export const DEFAULT_CAMPAIGN_FEATURED_PROMOTIONS = [
+  {
+    active: true,
+    targetQuantity: 500,
+    discountType: 'percent',
+    discountValue: 5,
+    label: 'Mais compradas',
+  },
+  {
+    active: true,
+    targetQuantity: 1000,
+    discountType: 'percent',
+    discountValue: 10,
+    label: 'Mais compradas',
+  },
+] as const
 
 export const CAMPAIGN_STATUS_OPTIONS = [
   { value: 'active', label: 'Ativa' },

@@ -17,7 +17,7 @@ import { createPaymentGateway, resolveHorsePayBaseUrl, shouldUseMockHorsePay } f
 import { getCampaignDocCached } from './campaignDocCache.js'
 import {
   readCampaignCoupons,
-  readCampaignFeaturedPromotion,
+  readCampaignFeaturedPromotions,
   readCampaignPackPrices,
   readCampaignPurchaseQuantityLimits,
   readCampaignPricePerCota,
@@ -386,9 +386,9 @@ function resolveCoupon(params: {
 function calculatePromotionDiscount(
   subtotalBase: number,
   quantity: number,
-  featuredPromotion: ReturnType<typeof readCampaignFeaturedPromotion>,
+  featuredPromotions: ReturnType<typeof readCampaignFeaturedPromotions>,
 ) {
-  if (!featuredPromotion || !featuredPromotion.active || quantity < featuredPromotion.targetQuantity) {
+  if (!Array.isArray(featuredPromotions) || featuredPromotions.length === 0) {
     return {
       discount: 0,
       label: null as string | null,
@@ -397,34 +397,67 @@ function calculatePromotionDiscount(
     }
   }
 
-  if (featuredPromotion.discountType === 'percent') {
-    const discount = Number(Math.min(subtotalBase, subtotalBase * (featuredPromotion.discountValue / 100)).toFixed(2))
+  const candidates = featuredPromotions.filter(
+    (promotion) => promotion.active && promotion.discountValue > 0 && quantity >= promotion.targetQuantity,
+  )
+  if (candidates.length === 0) {
     return {
-      discount,
-      label: featuredPromotion.label || null,
-      discountType: featuredPromotion.discountType,
-      discountValue: featuredPromotion.discountValue,
+      discount: 0,
+      label: null as string | null,
+      discountType: null as 'percent' | 'fixed' | null,
+      discountValue: null as number | null,
     }
   }
 
-  const discount = Number(Math.min(subtotalBase, featuredPromotion.discountValue).toFixed(2))
+  const bestPromotion = [...candidates].sort((left, right) => {
+    if (right.targetQuantity !== left.targetQuantity) {
+      return right.targetQuantity - left.targetQuantity
+    }
+
+    if (right.discountValue !== left.discountValue) {
+      return right.discountValue - left.discountValue
+    }
+
+    return 0
+  })[0]
+
+  if (!bestPromotion) {
+    return {
+      discount: 0,
+      label: null as string | null,
+      discountType: null as 'percent' | 'fixed' | null,
+      discountValue: null as number | null,
+    }
+  }
+
+  if (bestPromotion.discountType === 'percent') {
+    const discount = Number(Math.min(subtotalBase, subtotalBase * (bestPromotion.discountValue / 100)).toFixed(2))
+    return {
+      discount,
+      label: bestPromotion.label || null,
+      discountType: bestPromotion.discountType,
+      discountValue: bestPromotion.discountValue,
+    }
+  }
+
+  const discount = Number(Math.min(subtotalBase, bestPromotion.discountValue).toFixed(2))
   return {
     discount,
-    label: featuredPromotion.label || null,
-    discountType: featuredPromotion.discountType,
-    discountValue: featuredPromotion.discountValue,
+    label: bestPromotion.label || null,
+    discountType: bestPromotion.discountType,
+    discountValue: bestPromotion.discountValue,
   }
 }
 
 function calculatePricingSummary(campaignData: DocumentData | undefined, quantity: number): PricingSummary {
   const unitPriceAtCheckout = readCampaignPricePerCota(campaignData)
   const packPrices = readCampaignPackPrices(campaignData)
-  const featuredPromotion = readCampaignFeaturedPromotion(campaignData)
+  const featuredPromotions = readCampaignFeaturedPromotions(campaignData)
   const matchedPack = packPrices.find((pack) => pack.active && pack.quantity === quantity) || null
   const subtotalBaseAmount = matchedPack
     ? Number(matchedPack.price.toFixed(2))
     : Number((quantity * unitPriceAtCheckout).toFixed(2))
-  const promotion = calculatePromotionDiscount(subtotalBaseAmount, quantity, featuredPromotion)
+  const promotion = calculatePromotionDiscount(subtotalBaseAmount, quantity, featuredPromotions)
   const subtotalAfterPromotionAmount = Number(Math.max(subtotalBaseAmount - promotion.discount, 0).toFixed(2))
 
   return {

@@ -40,7 +40,7 @@ export type CampaignFormState = {
   endsAt: string
   endsAtTime: string
   packPrices: CampaignPackPrice[]
-  featuredPromotion: CampaignFeaturedPromotion | null
+  featuredPromotions: CampaignFeaturedPromotion[]
   coupons: CampaignCoupon[]
   midias: CampaignMidias
   topBuyersDrawDayOfWeek: number
@@ -238,6 +238,16 @@ function sanitizeFeaturedPromotion(value: unknown): CampaignFeaturedPromotion | 
   }
 }
 
+function sanitizeFeaturedPromotions(value: unknown): CampaignFeaturedPromotion[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((item) => sanitizeFeaturedPromotion(item))
+    .filter((item): item is CampaignFeaturedPromotion => Boolean(item))
+}
+
 function sanitizeTopBuyersWeeklySchedule(params: {
   dayOfWeek: unknown
   drawTime: unknown
@@ -342,7 +352,7 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
     }
   }
 
-  const normalizedFeaturedPromotion = sanitizeFeaturedPromotion(formState.featuredPromotion)
+  const normalizedFeaturedPromotions = sanitizeFeaturedPromotions(formState.featuredPromotions)
   const normalizedTopBuyersWeeklySchedule = sanitizeTopBuyersWeeklySchedule({
     dayOfWeek: formState.topBuyersDrawDayOfWeek,
     drawTime: formState.topBuyersDrawTime,
@@ -370,7 +380,7 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
       packPrices: normalizedPackPrices.length > 0
         ? normalizedPackPrices
         : buildDefaultCampaignPackPrices(Number(normalizedPrice.toFixed(2))),
-      featuredPromotion: normalizedFeaturedPromotion,
+      featuredPromotions: normalizedFeaturedPromotions,
       coupons: formState.coupons,
       midias: sanitizeCampaignMidias(formState.midias),
       topBuyersWeeklySchedule: normalizedTopBuyersWeeklySchedule,

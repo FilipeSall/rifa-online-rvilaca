@@ -10,7 +10,7 @@ import {
     DEFAULT_BONUS_PRIZE,
     DEFAULT_CAMPAIGN_STATUS,
     DEFAULT_CAMPAIGN_TITLE,
-    DEFAULT_CAMPAIGN_FEATURED_PROMOTION,
+    DEFAULT_CAMPAIGN_FEATURED_PROMOTIONS,
     DEFAULT_MAIN_PRIZE,
     DEFAULT_SECOND_PRIZE,
     DEFAULT_SUPPORT_WHATSAPP_NUMBER,
@@ -234,18 +234,12 @@ function sanitizeCampaignPackPrices(value: unknown, unitPriceFallback: number): 
     })
 }
 
-function sanitizeCampaignFeaturedPromotion(value: unknown): CampaignFeaturedPromotion | null {
-  if (value === undefined) {
-    return {
-      ...DEFAULT_CAMPAIGN_FEATURED_PROMOTION,
-    }
-  }
-
+function sanitizeCampaignFeaturedPromotionItem(value: unknown): CampaignFeaturedPromotion | null {
   if (!value || typeof value !== 'object') {
     return null
   }
 
-    const payload = value as Record<string, unknown>
+  const payload = value as Record<string, unknown>
   const targetQuantity = Number(payload.targetQuantity)
   if (!Number.isInteger(targetQuantity) || targetQuantity <= 0 || targetQuantity > MAX_QUANTITY) {
     return null
@@ -266,6 +260,33 @@ function sanitizeCampaignFeaturedPromotion(value: unknown): CampaignFeaturedProm
     discountValue,
     label: 'Mais compradas',
   }
+}
+
+function sanitizeCampaignFeaturedPromotions(value: unknown, fallback: unknown): CampaignFeaturedPromotion[] {
+  const items = Array.isArray(value) ? value : []
+  const normalized = items
+    .map((item) => sanitizeCampaignFeaturedPromotionItem(item))
+    .filter((item): item is CampaignFeaturedPromotion => Boolean(item))
+
+  if (normalized.length > 0) {
+    return normalized
+  }
+
+  const fallbackItem = sanitizeCampaignFeaturedPromotionItem(fallback)
+  if (fallbackItem) {
+    const defaults = DEFAULT_CAMPAIGN_FEATURED_PROMOTIONS.map((item) => ({ ...item }))
+    const hasSame = (item: CampaignFeaturedPromotion) =>
+      item.targetQuantity === fallbackItem.targetQuantity
+      && item.discountType === fallbackItem.discountType
+      && item.discountValue === fallbackItem.discountValue
+    const merged = [
+      fallbackItem,
+      ...defaults.filter((item) => !hasSame(item)),
+    ]
+    return merged
+  }
+
+  return DEFAULT_CAMPAIGN_FEATURED_PROMOTIONS.map((item) => ({ ...item }))
 }
 
 function sanitizeCouponDiscountType(value: unknown): CampaignCouponDiscountType {
@@ -549,7 +570,7 @@ function mapSnapshotToSettings(raw: unknown): CampaignSettings {
         endsAt: sanitizeCampaignDate(payload.endsAt),
         endsAtTime: sanitizeCampaignTime(payload.endsAtTime),
         packPrices,
-        featuredPromotion: sanitizeCampaignFeaturedPromotion(payload.featuredPromotion),
+        featuredPromotions: sanitizeCampaignFeaturedPromotions(payload.featuredPromotions, payload.featuredPromotion),
         coupons: sanitizeCoupons(payload.coupons),
         midias: sanitizeCampaignMidias(payload.midias ?? payload.media),
         topBuyersWeeklySchedule: sanitizeTopBuyersWeeklySchedule(payload.topBuyersWeeklySchedule),
@@ -574,9 +595,7 @@ function createDefaultCampaignSettings(): CampaignSettings {
         endsAt: null,
         endsAtTime: null,
         packPrices: buildDefaultCampaignPackPrices(DEFAULT_TICKET_PRICE),
-        featuredPromotion: {
-          ...DEFAULT_CAMPAIGN_FEATURED_PROMOTION,
-        },
+        featuredPromotions: DEFAULT_CAMPAIGN_FEATURED_PROMOTIONS.map((item) => ({ ...item })),
         coupons: [],
         midias: getDefaultCampaignMidias(),
         topBuyersWeeklySchedule: sanitizeTopBuyersWeeklySchedule(undefined),
@@ -649,7 +668,7 @@ export function useCampaignSettings() {
                     endsAt: sanitizeCampaignDate(payload.endsAt),
                     endsAtTime: sanitizeCampaignTime(payload.endsAtTime),
                     packPrices,
-                    featuredPromotion: sanitizeCampaignFeaturedPromotion(payload.featuredPromotion),
+                    featuredPromotions: sanitizeCampaignFeaturedPromotions(payload.featuredPromotions, payload.featuredPromotion),
                     coupons: sanitizeCoupons(payload.coupons),
                     midias: sanitizeCampaignMidias(payload.midias),
                     topBuyersWeeklySchedule: sanitizeTopBuyersWeeklySchedule(payload.topBuyersWeeklySchedule),
@@ -687,9 +706,7 @@ export function useCampaignSettings() {
                 endsAt: null,
                 endsAtTime: null,
                 packPrices: buildDefaultCampaignPackPrices(DEFAULT_TICKET_PRICE),
-                featuredPromotion: {
-                  ...DEFAULT_CAMPAIGN_FEATURED_PROMOTION,
-                },
+                featuredPromotions: DEFAULT_CAMPAIGN_FEATURED_PROMOTIONS.map((item) => ({ ...item })),
                 coupons: [],
                 midias: getDefaultCampaignMidias(),
                 topBuyersWeeklySchedule: sanitizeTopBuyersWeeklySchedule(undefined),

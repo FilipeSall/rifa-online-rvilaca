@@ -1,9 +1,6 @@
-import type { CampaignFeaturedPromotion } from '../../types/campaign'
-
 type QuantitySelectionCardProps = {
   quantity: number
   packQuantities: number[]
-  featuredPromotion: CampaignFeaturedPromotion | null
   mostPurchasedPackQuantities: number[]
   discountPackQuantities: number[]
   minQuantity: number
@@ -14,7 +11,6 @@ type QuantitySelectionCardProps = {
 export default function QuantitySelectionCard({
   quantity,
   packQuantities,
-  featuredPromotion,
   mostPurchasedPackQuantities,
   discountPackQuantities,
   minQuantity,
@@ -25,12 +21,6 @@ export default function QuantitySelectionCard({
     packQuantities.filter((pack) => pack >= minQuantity && pack <= maxSelectable),
   )).sort((left, right) => left - right)
   const effectivePacks = suggestedPacks.slice(0, 8)
-  const hasProgressiveDiscount = Boolean(
-    featuredPromotion
-    && featuredPromotion.active
-    && featuredPromotion.discountValue > 0,
-  )
-
   return (
     <article className="relative overflow-visible rounded-2xl border border-white/15 bg-[linear-gradient(140deg,rgba(20,12,34,0.9),rgba(7,13,29,0.9))] px-5 py-6 shadow-[0_24px_60px_rgba(0,0,0,0.48)] ring-1 ring-white/5">
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
@@ -54,7 +44,6 @@ export default function QuantitySelectionCard({
           {effectivePacks.map((pack) => {
             const isMostPurchasedPack = mostPurchasedPackQuantities.includes(pack)
             const isDiscountPack = discountPackQuantities.includes(pack)
-              || (hasProgressiveDiscount && featuredPromotion !== null && pack >= featuredPromotion.targetQuantity)
             const shouldShowBadge = isMostPurchasedPack || isDiscountPack
 
             return (
