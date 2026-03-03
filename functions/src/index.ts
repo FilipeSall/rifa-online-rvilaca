@@ -3,6 +3,7 @@ import { getFirestore } from 'firebase-admin/firestore'
 import { defineSecret } from 'firebase-functions/params'
 import { onCall, onRequest } from 'firebase-functions/v2/https'
 import { setGlobalOptions } from 'firebase-functions/v2/options'
+import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { REGION } from './lib/constants.js'
 import {
   createGetDashboardSummaryHandler,
@@ -11,6 +12,7 @@ import {
 } from './lib/campaignHandlers.js'
 import {
   createGetChampionsRankingHandler,
+  createProcessWeeklyTopBuyersRankingScheduleHandler,
   createRefreshWeeklyTopBuyersRankingCacheHandler,
   createGetWeeklyTopBuyersRankingHandler,
 } from './lib/rankingHandlers.js'
@@ -137,6 +139,14 @@ export const getWeeklyTopBuyersRanking = onCall(callableOptions, createGetWeekly
 export const refreshWeeklyTopBuyersRankingCache = onCall(
   callableOptions,
   createRefreshWeeklyTopBuyersRankingCacheHandler(db),
+)
+export const processWeeklyTopBuyersRankingSchedule = onSchedule(
+  {
+    region: REGION,
+    schedule: '*/5 * * * *',
+    timeZone: 'America/Sao_Paulo',
+  },
+  createProcessWeeklyTopBuyersRankingScheduleHandler(db),
 )
 export const publishTopBuyersDraw = onCall(callableOptions, createPublishTopBuyersDrawHandler(db))
 export const getLatestTopBuyersDraw = onCall(callableOptions, createGetLatestTopBuyersDrawHandler(db))

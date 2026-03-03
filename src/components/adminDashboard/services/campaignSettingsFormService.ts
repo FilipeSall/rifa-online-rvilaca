@@ -1,5 +1,7 @@
 import {
   CAMPAIGN_PACK_QUANTITIES,
+  DEFAULT_TOP_BUYERS_DRAW_DAY_OF_WEEK,
+  DEFAULT_TOP_BUYERS_DRAW_TIME,
   DEFAULT_ADDITIONAL_PRIZES,
   DEFAULT_BONUS_PRIZE,
   DEFAULT_CAMPAIGN_TITLE,
@@ -18,6 +20,7 @@ import type {
   CampaignHeroCarouselMedia,
   CampaignMidias,
   CampaignPackPrice,
+  TopBuyersWeeklySchedule,
   UpsertCampaignSettingsInput,
 } from '../../../types/campaign'
 import { parseCampaignDateTime, resolveCampaignScheduleStatus } from '../../../utils/campaignSchedule'
@@ -40,6 +43,8 @@ export type CampaignFormState = {
   featuredPromotion: CampaignFeaturedPromotion | null
   coupons: CampaignCoupon[]
   midias: CampaignMidias
+  topBuyersDrawDayOfWeek: number
+  topBuyersDrawTime: string
 }
 
 type CampaignValidationResult = {
@@ -232,6 +237,26 @@ function sanitizeFeaturedPromotion(value: unknown): CampaignFeaturedPromotion | 
   }
 }
 
+function sanitizeTopBuyersWeeklySchedule(params: {
+  dayOfWeek: unknown
+  drawTime: unknown
+}): TopBuyersWeeklySchedule {
+  const parsedDay = Number(params.dayOfWeek)
+  const dayOfWeek = Number.isInteger(parsedDay) && parsedDay >= 0 && parsedDay <= 6
+    ? parsedDay
+    : DEFAULT_TOP_BUYERS_DRAW_DAY_OF_WEEK
+  const drawTimeRaw = typeof params.drawTime === 'string' ? params.drawTime.trim() : ''
+  const drawTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(drawTimeRaw)
+    ? drawTimeRaw
+    : DEFAULT_TOP_BUYERS_DRAW_TIME
+
+  return {
+    dayOfWeek: dayOfWeek as TopBuyersWeeklySchedule['dayOfWeek'],
+    drawTime,
+    timezone: 'America/Sao_Paulo',
+  }
+}
+
 export function buildCampaignSettingsInput(formState: CampaignFormState): CampaignValidationResult {
   const normalizedTitle = formState.title.trim() || DEFAULT_CAMPAIGN_TITLE
   const normalizedMainPrize = formState.mainPrize.trim() || DEFAULT_MAIN_PRIZE
@@ -313,6 +338,10 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
   }
 
   const normalizedFeaturedPromotion = sanitizeFeaturedPromotion(formState.featuredPromotion)
+  const normalizedTopBuyersWeeklySchedule = sanitizeTopBuyersWeeklySchedule({
+    dayOfWeek: formState.topBuyersDrawDayOfWeek,
+    drawTime: formState.topBuyersDrawTime,
+  })
 
   return {
     errorToastId: null,
@@ -338,6 +367,7 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
       featuredPromotion: normalizedFeaturedPromotion,
       coupons: formState.coupons,
       midias: sanitizeCampaignMidias(formState.midias),
+      topBuyersWeeklySchedule: normalizedTopBuyersWeeklySchedule,
     },
   }
 }

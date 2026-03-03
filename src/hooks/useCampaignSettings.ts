@@ -15,6 +15,8 @@ import {
     DEFAULT_SECOND_PRIZE,
     DEFAULT_SUPPORT_WHATSAPP_NUMBER,
     DEFAULT_TICKET_PRICE,
+    DEFAULT_TOP_BUYERS_DRAW_DAY_OF_WEEK,
+    DEFAULT_TOP_BUYERS_DRAW_TIME,
     DEFAULT_TOTAL_NUMBERS,
 } from '../const/campaign'
 import { MAX_QUANTITY } from '../const/purchaseNumbers'
@@ -29,6 +31,7 @@ import type {
     CampaignPackPrice,
     CampaignSettings,
     CampaignStatus,
+    TopBuyersWeeklySchedule,
     UpsertCampaignSettingsInput,
     UpsertCampaignSettingsOutput,
 } from '../types/campaign'
@@ -119,6 +122,26 @@ function sanitizeCampaignTime(value: unknown) {
     }
 
     return normalized
+}
+
+function sanitizeTopBuyersWeeklySchedule(value: unknown): TopBuyersWeeklySchedule {
+    const payload = value && typeof value === 'object'
+        ? (value as Record<string, unknown>)
+        : {}
+    const dayOfWeek = Number(payload.dayOfWeek)
+    const parsedDay = Number.isInteger(dayOfWeek) && dayOfWeek >= 0 && dayOfWeek <= 6
+        ? dayOfWeek
+        : DEFAULT_TOP_BUYERS_DRAW_DAY_OF_WEEK
+    const drawTime = typeof payload.drawTime === 'string'
+        && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(payload.drawTime.trim())
+        ? payload.drawTime.trim()
+        : DEFAULT_TOP_BUYERS_DRAW_TIME
+
+    return {
+        dayOfWeek: parsedDay as TopBuyersWeeklySchedule['dayOfWeek'],
+        drawTime,
+        timezone: 'America/Sao_Paulo',
+    }
 }
 
 function sanitizeSupportWhatsappNumber(value: unknown) {
@@ -523,6 +546,7 @@ function mapSnapshotToSettings(raw: unknown): CampaignSettings {
         featuredPromotion: sanitizeCampaignFeaturedPromotion(payload.featuredPromotion),
         coupons: sanitizeCoupons(payload.coupons),
         midias: sanitizeCampaignMidias(payload.midias ?? payload.media),
+        topBuyersWeeklySchedule: sanitizeTopBuyersWeeklySchedule(payload.topBuyersWeeklySchedule),
     }
 }
 
@@ -549,6 +573,7 @@ function createDefaultCampaignSettings(): CampaignSettings {
         },
         coupons: [],
         midias: getDefaultCampaignMidias(),
+        topBuyersWeeklySchedule: sanitizeTopBuyersWeeklySchedule(undefined),
     }
 }
 
@@ -621,6 +646,7 @@ export function useCampaignSettings() {
                     featuredPromotion: sanitizeCampaignFeaturedPromotion(payload.featuredPromotion),
                     coupons: sanitizeCoupons(payload.coupons),
                     midias: sanitizeCampaignMidias(payload.midias),
+                    topBuyersWeeklySchedule: sanitizeTopBuyersWeeklySchedule(payload.topBuyersWeeklySchedule),
                 })
                 setExists(true)
 
@@ -659,6 +685,7 @@ export function useCampaignSettings() {
                 },
                 coupons: [],
                 midias: getDefaultCampaignMidias(),
+                topBuyersWeeklySchedule: sanitizeTopBuyersWeeklySchedule(undefined),
             }),
         [saveCampaignSettings],
     )

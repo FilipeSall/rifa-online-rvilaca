@@ -133,7 +133,7 @@ export const PACK_OPTIONS: PackOption[] = [
 export const FAQ_ITEMS: FaqItem[] = [
   {
     q: 'Como funciona o ranking semanal do sorteio exclusivo?',
-    a: 'A cada semana, o sistema fecha e congela às 23:59 da sexta-feira (America/Sao_Paulo) o Top 50 de participantes com maior quantidade de cotas pagas no período semanal. Esse ranking é a base oficial do sorteio exclusivo da semana.',
+    a: 'A cada semana, o sistema congela automaticamente o Top 50 exatamente 1 hora antes do sorteio semanal configurado (America/Sao_Paulo). Esse ranking congelado é a base oficial do sorteio exclusivo da semana.',
   },
   {
     q: 'Qual extração da Loteria Federal é usada?',

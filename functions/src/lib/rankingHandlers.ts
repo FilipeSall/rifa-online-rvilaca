@@ -3,6 +3,14 @@ import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
 import { CAMPAIGN_DOC_ID } from './constants.js'
 import { asRecord, readString, readTimestampMillis, requireActiveUid, sanitizeString } from './shared.js'
+import { getCampaignDocCached } from './campaignDocCache.js'
+import {
+  buildDefaultTopBuyersWeeklySchedule,
+  readTopBuyersWeeklySchedule,
+  resolveCurrentCycleWindow,
+  type TopBuyersCycleWindow,
+  type TopBuyersWeeklySchedule,
+} from './topBuyersSchedule.js'
 
 interface GetChampionsRankingInput {
   limit?: number
@@ -37,24 +45,31 @@ interface GetWeeklyTopBuyersRankingOutput {
   weekId: string
   weekStartAtMs: number
   weekEndAtMs: number
+  freezeAtMs: number
+  drawAtMs: number
+  scheduleDayOfWeek: number
+  scheduleDrawTime: string
+  scheduleTimezone: string
   items: ChampionRankingItem[]
 }
 
 interface RefreshWeeklyTopBuyersRankingCacheOutput extends GetWeeklyTopBuyersRankingOutput {
   sourceDrawId: string | null
   sourceDrawDate: string | null
-  updatedBy: 'friday-auto' | 'manual' | 'bootstrap' | 'live-fallback'
+  updatedBy: 'scheduler-auto' | 'manual' | 'bootstrap' | 'live-fallback'
 }
 
-const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
 const MAX_PUBLIC_RANKING_LIMIT = 50
 const RANKING_CACHE_TTL_MS = 3 * 60 * 1000
+const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
+const BRAZIL_FRIDAY_DAY_OF_WEEK = 5
 const CHAMPIONS_PUBLIC_CACHE_DOC_ID = '_public-champions-ranking'
 const WEEKLY_PUBLIC_CACHE_DOC_ID = '_public-weekly-top-buyers-ranking'
 const TOP_BUYERS_DRAW_HISTORY_COLLECTION = 'topBuyersDrawResults'
-const BRAZIL_FRIDAY_DAY_OF_WEEK = 5
+const WEEKLY_SCHEDULER_STATE_DOC_ID = '_weekly-top-buyers-scheduler-state'
 const LIVE_FALLBACK_SOURCE_DRAW_ID = 'live-fallback'
 const MANUAL_REBUILD_SOURCE_DRAW_ID = 'manual-rebuild'
+const SCHEDULED_FREEZE_SOURCE_DRAW_ID = 'scheduled-freeze'
 
 
 type RankingCacheEntry = {
@@ -73,6 +88,11 @@ type RankingWindow = {
   weekId: string
   startMs: number
   endMs: number
+  freezeAtMs: number
+  drawAtMs: number
+  scheduleDayOfWeek: number
+  scheduleDrawTime: string
+  scheduleTimezone: string
 }
 
 type WeeklyTopBuyersDrawRankingSnapshot = {
@@ -81,13 +101,23 @@ type WeeklyTopBuyersDrawRankingSnapshot = {
   weekId: string
   weekStartAtMs: number
   weekEndAtMs: number
+  freezeAtMs: number
+  drawAtMs: number
+  scheduleDayOfWeek: number
+  scheduleDrawTime: string
+  scheduleTimezone: string
   items: ChampionRankingItem[]
 }
 
 type WeeklyFrozenRankingCacheDoc = GetWeeklyTopBuyersRankingOutput & {
   sourceDrawId: string | null
   sourceDrawDate: string | null
-  updatedBy: 'friday-auto' | 'manual' | 'bootstrap' | 'live-fallback'
+  updatedBy: 'scheduler-auto' | 'manual' | 'bootstrap' | 'live-fallback'
+}
+
+type WeeklySchedulerStateDoc = {
+  lastProcessedFreezeAtMs: number
+  lastProcessedWeekId: string
 }
 
 type RankingAggregate = {
@@ -200,6 +230,7 @@ function isBrazilFridayDateId(dateId: string) {
 }
 
 function getWeeklyRankingWindow(nowMs = Date.now()): RankingWindow {
+  const defaultSchedule = buildDefaultTopBuyersWeeklySchedule()
   const localNow = toBrazilLocalDate(nowMs)
   const localDayOfWeek = localNow.getUTCDay()
   const localStartOfDayMs = Date.UTC(
@@ -218,6 +249,11 @@ function getWeeklyRankingWindow(nowMs = Date.now()): RankingWindow {
     weekId: formatBrazilDateId(toUtcFromBrazilLocal(localWeekStartMs)),
     startMs: toUtcFromBrazilLocal(localWeekStartMs),
     endMs: toUtcFromBrazilLocal(localWeekEndMs),
+    freezeAtMs: toUtcFromBrazilLocal(localWeekEndMs),
+    drawAtMs: toUtcFromBrazilLocal(localWeekEndMs) + (60 * 60 * 1000),
+    scheduleDayOfWeek: defaultSchedule.dayOfWeek,
+    scheduleDrawTime: defaultSchedule.drawTime,
+    scheduleTimezone: defaultSchedule.timezone,
   }
 }
 
@@ -261,12 +297,18 @@ function resolveRankingWindowFromDrawData(data: DocumentData, drawDate: string):
   const weekIdRaw = sanitizeString(data.weekId)
   const weekStartAtMs = Number(data.weekStartAtMs)
   const weekEndAtMs = Number(data.weekEndAtMs)
+  const defaultSchedule = buildDefaultTopBuyersWeeklySchedule()
 
   if (Number.isFinite(weekStartAtMs) && Number.isFinite(weekEndAtMs) && weekEndAtMs >= weekStartAtMs) {
     return {
       weekId: weekIdRaw || formatBrazilDateId(weekStartAtMs),
       startMs: weekStartAtMs,
       endMs: weekEndAtMs,
+      freezeAtMs: weekEndAtMs,
+      drawAtMs: weekEndAtMs + (60 * 60 * 1000),
+      scheduleDayOfWeek: defaultSchedule.dayOfWeek,
+      scheduleDrawTime: defaultSchedule.drawTime,
+      scheduleTimezone: defaultSchedule.timezone,
     }
   }
 
@@ -287,8 +329,25 @@ function parseWeeklyFrozenRankingCacheDoc(data: DocumentData | undefined): Weekl
   const weekStartAtMs = Number(data.weekStartAtMs)
   const weekEndAtMs = Number(data.weekEndAtMs)
   const updatedAtMs = Number(data.updatedAtMs)
+  const freezeAtMs = Number(data.freezeAtMs)
+  const drawAtMs = Number(data.drawAtMs)
+  const scheduleDayOfWeek = Number(data.scheduleDayOfWeek)
+  const scheduleDrawTime = sanitizeString(data.scheduleDrawTime)
+  const scheduleTimezone = sanitizeString(data.scheduleTimezone)
 
-  if (!weekId || !Number.isFinite(weekStartAtMs) || !Number.isFinite(weekEndAtMs) || !Number.isFinite(updatedAtMs)) {
+  if (
+    !weekId
+    || !Number.isFinite(weekStartAtMs)
+    || !Number.isFinite(weekEndAtMs)
+    || !Number.isFinite(updatedAtMs)
+    || !Number.isFinite(freezeAtMs)
+    || !Number.isFinite(drawAtMs)
+    || !Number.isInteger(scheduleDayOfWeek)
+    || scheduleDayOfWeek < 0
+    || scheduleDayOfWeek > 6
+    || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(scheduleDrawTime)
+    || !scheduleTimezone
+  ) {
     return null
   }
 
@@ -298,11 +357,16 @@ function parseWeeklyFrozenRankingCacheDoc(data: DocumentData | undefined): Weekl
     weekId,
     weekStartAtMs,
     weekEndAtMs,
+    freezeAtMs,
+    drawAtMs,
+    scheduleDayOfWeek,
+    scheduleDrawTime,
+    scheduleTimezone,
     items: normalizeRankingSnapshotItems(data.items),
     sourceDrawId: sanitizeString(data.sourceDrawId) || null,
     sourceDrawDate: sanitizeString(data.sourceDrawDate) || null,
-    updatedBy: data.updatedBy === 'friday-auto'
-      ? 'friday-auto'
+    updatedBy: data.updatedBy === 'scheduler-auto'
+      ? 'scheduler-auto'
       : data.updatedBy === 'manual'
         ? 'manual'
         : data.updatedBy === 'bootstrap'
@@ -372,6 +436,11 @@ async function readLatestTopBuyersDrawRankingSnapshot(
       weekId: window.weekId,
       weekStartAtMs: window.startMs,
       weekEndAtMs: window.endMs,
+      freezeAtMs: window.endMs,
+      drawAtMs: window.endMs + (60 * 60 * 1000),
+      scheduleDayOfWeek: buildDefaultTopBuyersWeeklySchedule().dayOfWeek,
+      scheduleDrawTime: buildDefaultTopBuyersWeeklySchedule().drawTime,
+      scheduleTimezone: buildDefaultTopBuyersWeeklySchedule().timezone,
       items,
     }
   }
@@ -396,7 +465,7 @@ async function publishWeeklyFrozenRankingCache(
   params: {
     ranking: WeeklyTopBuyersDrawRankingSnapshot
     updatedAtMs: number
-    updatedBy: 'friday-auto' | 'manual' | 'bootstrap' | 'live-fallback'
+    updatedBy: 'scheduler-auto' | 'manual' | 'bootstrap' | 'live-fallback'
   },
 ): Promise<WeeklyFrozenRankingCacheDoc> {
   const cacheDoc: WeeklyFrozenRankingCacheDoc = {
@@ -405,6 +474,11 @@ async function publishWeeklyFrozenRankingCache(
     weekId: params.ranking.weekId,
     weekStartAtMs: params.ranking.weekStartAtMs,
     weekEndAtMs: params.ranking.weekEndAtMs,
+    freezeAtMs: params.ranking.freezeAtMs,
+    drawAtMs: params.ranking.drawAtMs,
+    scheduleDayOfWeek: params.ranking.scheduleDayOfWeek,
+    scheduleDrawTime: params.ranking.scheduleDrawTime,
+    scheduleTimezone: params.ranking.scheduleTimezone,
     items: params.ranking.items,
     sourceDrawId: params.ranking.drawId,
     sourceDrawDate: params.ranking.drawDate,
@@ -419,6 +493,11 @@ async function publishWeeklyFrozenRankingCache(
     weekId: cacheDoc.weekId,
     weekStartAtMs: cacheDoc.weekStartAtMs,
     weekEndAtMs: cacheDoc.weekEndAtMs,
+    freezeAtMs: cacheDoc.freezeAtMs,
+    drawAtMs: cacheDoc.drawAtMs,
+    scheduleDayOfWeek: cacheDoc.scheduleDayOfWeek,
+    scheduleDrawTime: cacheDoc.scheduleDrawTime,
+    scheduleTimezone: cacheDoc.scheduleTimezone,
     items: cacheDoc.items,
     sourceDrawId: cacheDoc.sourceDrawId,
     sourceDrawDate: cacheDoc.sourceDrawDate,
@@ -431,7 +510,7 @@ async function publishWeeklyFrozenRankingCache(
 async function refreshWeeklyFrozenRankingFromDraw(
   db: Firestore,
   options: {
-    updatedBy: 'friday-auto' | 'manual' | 'bootstrap'
+    updatedBy: 'scheduler-auto' | 'manual' | 'bootstrap'
     fridayOnly: boolean
     allowFallbackToAnyDraw?: boolean
     targetWeekId?: string
@@ -638,6 +717,11 @@ function toWeeklyTopBuyersOutput(payload: WeeklyFrozenRankingCacheDoc, limit: nu
     weekId: payload.weekId,
     weekStartAtMs: payload.weekStartAtMs,
     weekEndAtMs: payload.weekEndAtMs,
+    freezeAtMs: payload.freezeAtMs,
+    drawAtMs: payload.drawAtMs,
+    scheduleDayOfWeek: payload.scheduleDayOfWeek,
+    scheduleDrawTime: payload.scheduleDrawTime,
+    scheduleTimezone: payload.scheduleTimezone,
     items: payload.items.slice(0, limit),
   }
 }
@@ -652,6 +736,11 @@ function toRefreshWeeklyTopBuyersOutput(
     weekId: payload.weekId,
     weekStartAtMs: payload.weekStartAtMs,
     weekEndAtMs: payload.weekEndAtMs,
+    freezeAtMs: payload.freezeAtMs,
+    drawAtMs: payload.drawAtMs,
+    scheduleDayOfWeek: payload.scheduleDayOfWeek,
+    scheduleDrawTime: payload.scheduleDrawTime,
+    scheduleTimezone: payload.scheduleTimezone,
     items: payload.items.slice(0, limit),
     sourceDrawId: payload.sourceDrawId,
     sourceDrawDate: payload.sourceDrawDate,
@@ -673,7 +762,7 @@ async function buildAndPublishWeeklyLiveRankingCache(
   rankingWindow: RankingWindow,
   options: {
     sourceDrawId: string
-    updatedBy: 'manual' | 'live-fallback'
+    updatedBy: 'scheduler-auto' | 'manual' | 'bootstrap' | 'live-fallback'
   },
 ): Promise<WeeklyFrozenRankingCacheDoc> {
   const items = await buildRanking(db, MAX_PUBLIC_RANKING_LIMIT, {
@@ -688,11 +777,139 @@ async function buildAndPublishWeeklyLiveRankingCache(
       weekId: rankingWindow.weekId,
       weekStartAtMs: rankingWindow.startMs,
       weekEndAtMs: rankingWindow.endMs,
+      freezeAtMs: rankingWindow.freezeAtMs,
+      drawAtMs: rankingWindow.drawAtMs,
+      scheduleDayOfWeek: rankingWindow.scheduleDayOfWeek,
+      scheduleDrawTime: rankingWindow.scheduleDrawTime,
+      scheduleTimezone: rankingWindow.scheduleTimezone,
       items,
     },
     updatedAtMs: Date.now(),
     updatedBy: options.updatedBy,
   })
+}
+
+function toRankingWindow(cycle: TopBuyersCycleWindow): RankingWindow {
+  return {
+    weekId: cycle.weekId,
+    startMs: cycle.windowStartAtMs,
+    endMs: cycle.windowEndAtMs,
+    freezeAtMs: cycle.freezeAtMs,
+    drawAtMs: cycle.drawAtMs,
+    scheduleDayOfWeek: cycle.scheduleDayOfWeek,
+    scheduleDrawTime: cycle.scheduleDrawTime,
+    scheduleTimezone: cycle.scheduleTimezone,
+  }
+}
+
+function isPublishedCacheForRankingWindow(
+  published: WeeklyFrozenRankingCacheDoc | null,
+  rankingWindow: RankingWindow,
+): published is WeeklyFrozenRankingCacheDoc {
+  return Boolean(
+    published
+    && published.weekId === rankingWindow.weekId
+    && published.freezeAtMs === rankingWindow.freezeAtMs
+  )
+}
+
+async function resolveCurrentRankingWindow(db: Firestore, nowMs = Date.now()) {
+  const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
+  const schedule = readTopBuyersWeeklySchedule(campaignData)
+  const cycleWindow = resolveCurrentCycleWindow(schedule, nowMs)
+  return {
+    schedule,
+    rankingWindow: toRankingWindow(cycleWindow),
+  }
+}
+
+async function readWeeklySchedulerState(db: Firestore): Promise<WeeklySchedulerStateDoc | null> {
+  const snapshot = await db.collection('draws').doc(WEEKLY_SCHEDULER_STATE_DOC_ID).get()
+  if (!snapshot.exists) {
+    return null
+  }
+
+  const data = snapshot.data() as DocumentData | undefined
+  if (!data) {
+    return null
+  }
+
+  const lastProcessedFreezeAtMs = Number(data.lastProcessedFreezeAtMs)
+  const lastProcessedWeekId = sanitizeString(data.lastProcessedWeekId)
+  if (!Number.isFinite(lastProcessedFreezeAtMs) || !lastProcessedWeekId) {
+    return null
+  }
+
+  return {
+    lastProcessedFreezeAtMs,
+    lastProcessedWeekId,
+  }
+}
+
+export async function maybeProcessScheduledWeeklyFreeze(
+  db: Firestore,
+  nowMs = Date.now(),
+  trigger: string = 'unknown',
+): Promise<{
+  processed: boolean
+  rankingWindow: RankingWindow
+  cacheDoc: WeeklyFrozenRankingCacheDoc | null
+  schedule: TopBuyersWeeklySchedule
+}> {
+  const { schedule, rankingWindow } = await resolveCurrentRankingWindow(db, nowMs)
+  const schedulerState = await readWeeklySchedulerState(db)
+  const alreadyProcessed = Boolean(
+    schedulerState
+    && schedulerState.lastProcessedFreezeAtMs === rankingWindow.freezeAtMs
+    && schedulerState.lastProcessedWeekId === rankingWindow.weekId,
+  )
+  const dueNow = nowMs >= rankingWindow.freezeAtMs
+  const shouldProcess = dueNow && !alreadyProcessed
+  let cacheDoc: WeeklyFrozenRankingCacheDoc | null = null
+
+  if (shouldProcess) {
+    cacheDoc = await buildAndPublishWeeklyLiveRankingCache(db, rankingWindow, {
+      sourceDrawId: SCHEDULED_FREEZE_SOURCE_DRAW_ID,
+      updatedBy: 'scheduler-auto',
+    })
+  }
+
+  await db.collection('draws').doc(WEEKLY_SCHEDULER_STATE_DOC_ID).set({
+    lastRunAtMs: nowMs,
+    lastTrigger: trigger,
+    ...(shouldProcess
+      ? {
+          lastProcessedFreezeAtMs: rankingWindow.freezeAtMs,
+          lastProcessedWeekId: rankingWindow.weekId,
+          lastProcessedAtMs: nowMs,
+        }
+      : {}),
+  }, { merge: true })
+
+  return {
+    processed: shouldProcess,
+    rankingWindow,
+    cacheDoc,
+    schedule,
+  }
+}
+
+export function createProcessWeeklyTopBuyersRankingScheduleHandler(db: Firestore) {
+  return async () => {
+    const startedAtMs = Date.now()
+    const result = await maybeProcessScheduledWeeklyFreeze(db, startedAtMs, 'scheduler-job')
+    const durationMs = Date.now() - startedAtMs
+
+    logger.info('processWeeklyTopBuyersRankingSchedule completed', {
+      trigger: 'scheduler-job',
+      weekId: result.rankingWindow.weekId,
+      freezeAtMs: result.rankingWindow.freezeAtMs,
+      drawAtMs: result.rankingWindow.drawAtMs,
+      processed: result.processed,
+      itemsCount: result.cacheDoc?.items.length ?? 0,
+      durationMs,
+    })
+  }
 }
 
 export function createGetChampionsRankingHandler(db: Firestore) {
@@ -720,58 +937,45 @@ export function createGetChampionsRankingHandler(db: Firestore) {
 
 export function createGetWeeklyTopBuyersRankingHandler(db: Firestore) {
   return async (request: { data: unknown }): Promise<GetWeeklyTopBuyersRankingOutput> => {
+    const startedAtMs = Date.now()
     const payload = asRecord(request.data) as GetWeeklyTopBuyersRankingInput
     const limit = sanitizeLimit(payload.limit, MAX_PUBLIC_RANKING_LIMIT, MAX_PUBLIC_RANKING_LIMIT)
-    const nowMs = Date.now()
-    const currentWindow = getWeeklyRankingWindow(nowMs)
 
     try {
+      const nowMs = Date.now()
+      const scheduled = await maybeProcessScheduledWeeklyFreeze(db, nowMs, 'getWeeklyTopBuyersRanking')
       const published = await readPublishedWeeklyFrozenRankingCache(db)
 
-      if (isFridayInBrazil(nowMs)) {
-        const refreshed = await refreshWeeklyFrozenRankingFromDraw(db, {
-          updatedBy: 'friday-auto',
-          fridayOnly: true,
-          allowFallbackToAnyDraw: false,
-          targetWeekId: currentWindow.weekId,
+      if (isPublishedCacheForRankingWindow(published, scheduled.rankingWindow)) {
+        const output = toWeeklyTopBuyersOutput(published, limit)
+        logger.info('getWeeklyTopBuyersRanking completed', {
+          trigger: 'getWeeklyTopBuyersRanking',
+          weekId: scheduled.rankingWindow.weekId,
+          freezeAtMs: scheduled.rankingWindow.freezeAtMs,
+          drawAtMs: scheduled.rankingWindow.drawAtMs,
+          processed: scheduled.processed,
+          itemsCount: output.items.length,
+          durationMs: Date.now() - startedAtMs,
         })
-
-        if (refreshed) {
-          return toWeeklyTopBuyersOutput(refreshed, limit)
-        }
+        return output
       }
 
-      const isPublishedCurrentWeek = Boolean(published && published.weekId === currentWindow.weekId)
-      if (published && published.items.length > 0 && isPublishedCurrentWeek && hasDrawSnapshotSource(published.sourceDrawId)) {
-        return toWeeklyTopBuyersOutput(published, limit)
-      }
-
-      const drawSnapshotCurrentWeek = await refreshWeeklyFrozenRankingFromDraw(db, {
+      const bootstrapped = await buildAndPublishWeeklyLiveRankingCache(db, scheduled.rankingWindow, {
+        sourceDrawId: SCHEDULED_FREEZE_SOURCE_DRAW_ID,
         updatedBy: 'bootstrap',
-        fridayOnly: false,
-        allowFallbackToAnyDraw: false,
-        targetWeekId: currentWindow.weekId,
       })
 
-      if (drawSnapshotCurrentWeek) {
-        return toWeeklyTopBuyersOutput(drawSnapshotCurrentWeek, limit)
-      }
-
-      const liveFallback = await loadWeeklyLiveRankingCached(db, currentWindow)
-      const liveCacheDoc = await publishWeeklyFrozenRankingCache(db, {
-        ranking: {
-          drawId: LIVE_FALLBACK_SOURCE_DRAW_ID,
-          drawDate: '',
-          weekId: currentWindow.weekId,
-          weekStartAtMs: currentWindow.startMs,
-          weekEndAtMs: currentWindow.endMs,
-          items: liveFallback.items,
-        },
-        updatedAtMs: liveFallback.updatedAtMs,
-        updatedBy: 'live-fallback',
+      const output = toWeeklyTopBuyersOutput(bootstrapped, limit)
+      logger.info('getWeeklyTopBuyersRanking completed', {
+        trigger: 'getWeeklyTopBuyersRanking',
+        weekId: scheduled.rankingWindow.weekId,
+        freezeAtMs: scheduled.rankingWindow.freezeAtMs,
+        drawAtMs: scheduled.rankingWindow.drawAtMs,
+        processed: scheduled.processed,
+        itemsCount: output.items.length,
+        durationMs: Date.now() - startedAtMs,
       })
-
-      return toWeeklyTopBuyersOutput(liveCacheDoc, limit)
+      return output
     } catch (error) {
       logger.error('getWeeklyTopBuyersRanking failed', {
         error: String(error),
@@ -786,6 +990,7 @@ export function createRefreshWeeklyTopBuyersRankingCacheHandler(db: Firestore) {
     auth?: { uid?: string | null } | null
     data?: unknown
   }): Promise<RefreshWeeklyTopBuyersRankingCacheOutput> => {
+    const startedAtMs = Date.now()
     const uid = requireActiveUid(request.auth)
     await assertAdminRole(db, uid)
 
@@ -793,32 +998,60 @@ export function createRefreshWeeklyTopBuyersRankingCacheHandler(db: Firestore) {
     const limit = sanitizeLimit(payload.limit, MAX_PUBLIC_RANKING_LIMIT, MAX_PUBLIC_RANKING_LIMIT)
     const allowFallbackToAnyDraw = payload.allowFallbackToAnyDraw === true
     const forceRebuild = payload.forceRebuild === true
-    const currentWindow = getWeeklyRankingWindow(Date.now())
 
     try {
+      const nowMs = Date.now()
+      const scheduled = await maybeProcessScheduledWeeklyFreeze(db, nowMs, 'refreshWeeklyTopBuyersRankingCache')
+
       if (forceRebuild) {
-        const rebuilt = await buildAndPublishWeeklyLiveRankingCache(db, currentWindow, {
+        const rebuilt = await buildAndPublishWeeklyLiveRankingCache(db, scheduled.rankingWindow, {
           sourceDrawId: MANUAL_REBUILD_SOURCE_DRAW_ID,
           updatedBy: 'manual',
         })
-        return toRefreshWeeklyTopBuyersOutput(rebuilt, limit)
+        const output = toRefreshWeeklyTopBuyersOutput(rebuilt, limit)
+        logger.info('refreshWeeklyTopBuyersRankingCache completed', {
+          trigger: 'refreshWeeklyTopBuyersRankingCache',
+          weekId: scheduled.rankingWindow.weekId,
+          freezeAtMs: scheduled.rankingWindow.freezeAtMs,
+          drawAtMs: scheduled.rankingWindow.drawAtMs,
+          processed: scheduled.processed,
+          itemsCount: output.items.length,
+          durationMs: Date.now() - startedAtMs,
+        })
+        return output
       }
 
-      let refreshed = await refreshWeeklyFrozenRankingFromDraw(db, {
+      const published = await readPublishedWeeklyFrozenRankingCache(db)
+      if (isPublishedCacheForRankingWindow(published, scheduled.rankingWindow)) {
+        const output = toRefreshWeeklyTopBuyersOutput(published, limit)
+        logger.info('refreshWeeklyTopBuyersRankingCache completed', {
+          trigger: 'refreshWeeklyTopBuyersRankingCache',
+          weekId: scheduled.rankingWindow.weekId,
+          freezeAtMs: scheduled.rankingWindow.freezeAtMs,
+          drawAtMs: scheduled.rankingWindow.drawAtMs,
+          processed: scheduled.processed,
+          itemsCount: output.items.length,
+          durationMs: Date.now() - startedAtMs,
+        })
+        return output
+      }
+
+      const refreshed = await buildAndPublishWeeklyLiveRankingCache(db, scheduled.rankingWindow, {
+        sourceDrawId: allowFallbackToAnyDraw ? LIVE_FALLBACK_SOURCE_DRAW_ID : MANUAL_REBUILD_SOURCE_DRAW_ID,
         updatedBy: 'manual',
-        fridayOnly: false,
-        allowFallbackToAnyDraw,
-        targetWeekId: allowFallbackToAnyDraw ? undefined : currentWindow.weekId,
       })
 
-      if (!refreshed) {
-        refreshed = await buildAndPublishWeeklyLiveRankingCache(db, currentWindow, {
-          sourceDrawId: MANUAL_REBUILD_SOURCE_DRAW_ID,
-          updatedBy: 'manual',
-        })
-      }
-
-      return toRefreshWeeklyTopBuyersOutput(refreshed, limit)
+      const output = toRefreshWeeklyTopBuyersOutput(refreshed, limit)
+      logger.info('refreshWeeklyTopBuyersRankingCache completed', {
+        trigger: 'refreshWeeklyTopBuyersRankingCache',
+        weekId: scheduled.rankingWindow.weekId,
+        freezeAtMs: scheduled.rankingWindow.freezeAtMs,
+        drawAtMs: scheduled.rankingWindow.drawAtMs,
+        processed: scheduled.processed,
+        itemsCount: output.items.length,
+        durationMs: Date.now() - startedAtMs,
+      })
+      return output
     } catch (error) {
       if (error instanceof HttpsError) {
         throw error

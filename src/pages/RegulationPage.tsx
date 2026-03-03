@@ -1,64 +1,9 @@
+import { useMemo } from 'react'
 import Footer from '../components/home/Footer'
 import Header from '../components/home/Header'
-
-const weeklyRankingText = `A cada semana da campanha será apurado o ranking dos 50 participantes que adquirirem a maior quantidade de números no período semanal definido.
-Estes participantes concorrerão a um sorteio exclusivo realizado com base na extração da Loteria Federal do sábado correspondente.
-O número do prêmio da Loteria Federal será convertido matematicamente em posição do ranking, determinando o ganhador.
-O ranking semanal será encerrado e congelado às 23:59 da sexta-feira anterior ao sorteio.`
-
-const ruleBlocks = [
-  {
-    title: 'Janela semanal e elegibilidade',
-    items: [
-      'A janela semanal considerada no sistema é de domingo 00:00 até sexta-feira 23:59 (America/Sao_Paulo).',
-      'Somente compras com status pago dentro da janela entram no ranking semanal.',
-      'O ranking semanal considera os 50 maiores compradores do período.',
-      'Empates são resolvidos por ordem de primeira compra paga mais antiga na semana.',
-    ],
-  },
-  {
-    title: 'Apuração pela Loteria Federal',
-    items: [
-      'A apuração usa a extração oficial da Loteria Federal na data prevista no calendário da campanha.',
-      'São consideradas as 5 extrações oficiais do concurso para a etapa de validação.',
-      'A conversão do número sorteado em posição do ranking segue a regra matemática configurada no sistema.',
-    ],
-  },
-  {
-    title: 'Regra de redundância e garantia de ganhador',
-    items: [
-      'Se não houver correspondência na primeira tentativa, a apuração avança pelas extrações subsequentes.',
-      'Se necessário, é aplicado o critério de fallback previsto em regulamento para garantir ganhador na rodada.',
-      'Cada resultado publicado registra trilha de tentativas, posição vencedora, código vencedor e participante contemplado.',
-    ],
-  },
-  {
-    title: 'Publicação e conferência',
-    items: [
-      'O resultado oficial é publicado no painel administrativo e na área pública de ganhadores.',
-      'A identificação do contemplado é vinculada ao cadastro e aos pedidos pagos do participante.',
-      'O participante pode conferir o concurso da data correspondente nos canais oficiais da Loteria Federal.',
-    ],
-  },
-]
-
-const regulationHighlights = [
-  {
-    label: 'Janela semanal',
-    value: 'Domingo 00:00 até sexta 23:59',
-    note: 'Fuso America/Sao_Paulo',
-  },
-  {
-    label: 'Base da apuração',
-    value: 'Loteria Federal oficial',
-    note: 'As 5 extrações do concurso são consideradas',
-  },
-  {
-    label: 'Garantia de ganhador',
-    value: 'Fallback auditável de redundância',
-    note: 'A trilha de cálculo é registrada por sorteio',
-  },
-]
+import { TOP_BUYERS_SCHEDULE_TIMEZONE, TOP_BUYERS_WEEKDAY_OPTIONS } from '../const/campaign'
+import { useCampaignSettings } from '../hooks/useCampaignSettings'
+import { normalizeTopBuyersWeeklySchedule, resolveFreezeAtMs, resolveNextDrawAtMs } from '../utils/topBuyersSchedule'
 
 const validationChecklist = [
   'Confira a data do sorteio publicada no resultado oficial.',
@@ -66,7 +11,102 @@ const validationChecklist = [
   'Compare o cálculo divulgado com a regra descrita neste regulamento.',
 ]
 
+function formatBrazilDateTime(valueMs: number) {
+  if (!Number.isFinite(valueMs) || valueMs <= 0) {
+    return '-'
+  }
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'full',
+    timeStyle: 'short',
+    timeZone: TOP_BUYERS_SCHEDULE_TIMEZONE,
+  }).format(new Date(valueMs))
+}
+
 export default function RegulationPage() {
+  const { campaign } = useCampaignSettings()
+  const topBuyersSchedule = useMemo(
+    () => normalizeTopBuyersWeeklySchedule(campaign.topBuyersWeeklySchedule),
+    [campaign.topBuyersWeeklySchedule],
+  )
+  const topBuyersNextDrawAtMs = useMemo(
+    () => resolveNextDrawAtMs(topBuyersSchedule),
+    [topBuyersSchedule],
+  )
+  const topBuyersNextFreezeAtMs = useMemo(
+    () => resolveFreezeAtMs(topBuyersNextDrawAtMs),
+    [topBuyersNextDrawAtMs],
+  )
+  const topBuyersWeekdayLabel = useMemo(
+    () => TOP_BUYERS_WEEKDAY_OPTIONS.find((item) => item.value === topBuyersSchedule.dayOfWeek)?.label || 'Sexta-feira',
+    [topBuyersSchedule.dayOfWeek],
+  )
+  const weeklyRankingText = useMemo(
+    () => `A cada semana da campanha será apurado o ranking dos 50 participantes que adquirirem a maior quantidade de números no período semanal definido.
+Estes participantes concorrerão a um sorteio exclusivo realizado com base na extração da Loteria Federal correspondente.
+O número do prêmio da Loteria Federal será convertido matematicamente em posição do ranking, determinando o ganhador.
+O ranking semanal é encerrado e congelado exatamente 1 hora antes do sorteio semanal configurado (${topBuyersWeekdayLabel} às ${topBuyersSchedule.drawTime}, ${TOP_BUYERS_SCHEDULE_TIMEZONE}).`,
+    [topBuyersSchedule.drawTime, topBuyersWeekdayLabel],
+  )
+  const ruleBlocks = useMemo(
+    () => [
+      {
+        title: 'Janela semanal e elegibilidade',
+        items: [
+          `A janela semanal é definida por ciclos de congelamento: do congelamento anterior até o congelamento atual (T-1h do sorteio).`,
+          `Somente compras com status pago dentro da janela entram no ranking semanal.`,
+          'O ranking semanal considera os 50 maiores compradores do período.',
+          'Empates são resolvidos por ordem de primeira compra paga mais antiga na semana.',
+        ],
+      },
+      {
+        title: 'Apuração pela Loteria Federal',
+        items: [
+          'A apuração usa a extração oficial da Loteria Federal na data prevista no calendário da campanha.',
+          'São consideradas as 5 extrações oficiais do concurso para a etapa de validação.',
+          'A conversão do número sorteado em posição do ranking segue a regra matemática configurada no sistema.',
+        ],
+      },
+      {
+        title: 'Regra de redundância e garantia de ganhador',
+        items: [
+          'Se não houver correspondência na primeira tentativa, a apuração avança pelas extrações subsequentes.',
+          'Se necessário, é aplicado o critério de fallback previsto em regulamento para garantir ganhador na rodada.',
+          'Cada resultado publicado registra trilha de tentativas, posição vencedora, código vencedor e participante contemplado.',
+        ],
+      },
+      {
+        title: 'Publicação e conferência',
+        items: [
+          'O resultado oficial é publicado no painel administrativo e na área pública de ganhadores.',
+          'A identificação do contemplado é vinculada ao cadastro e aos pedidos pagos do participante.',
+          'O participante pode conferir o concurso da data correspondente nos canais oficiais da Loteria Federal.',
+        ],
+      },
+    ],
+    [],
+  )
+  const regulationHighlights = useMemo(
+    () => [
+      {
+        label: 'Próximo sorteio Top',
+        value: formatBrazilDateTime(topBuyersNextDrawAtMs),
+        note: `Agenda semanal: ${topBuyersWeekdayLabel} às ${topBuyersSchedule.drawTime}`,
+      },
+      {
+        label: 'Próximo congelamento',
+        value: formatBrazilDateTime(topBuyersNextFreezeAtMs),
+        note: 'Regra T-1h antes do sorteio',
+      },
+      {
+        label: 'Fuso oficial',
+        value: TOP_BUYERS_SCHEDULE_TIMEZONE,
+        note: 'Configuração única para ranking e sorteio Top',
+      },
+    ],
+    [topBuyersNextDrawAtMs, topBuyersNextFreezeAtMs, topBuyersSchedule.drawTime, topBuyersWeekdayLabel],
+  )
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-luxury-bg font-display text-white selection:bg-neon-pink selection:text-black">
       <Header />

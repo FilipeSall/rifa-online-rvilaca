@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
 import { FAQ_ITEMS, type RankingItem } from '../../const/home'
+import { TOP_BUYERS_SCHEDULE_TIMEZONE, TOP_BUYERS_WEEKDAY_OPTIONS } from '../../const/campaign'
+import { useCampaignSettings } from '../../hooks/useCampaignSettings'
+import { normalizeTopBuyersWeeklySchedule, resolveFreezeAtMs, resolveNextDrawAtMs } from '../../utils/topBuyersSchedule'
 
 function formatDrawDate(drawDate: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(drawDate)) return drawDate || '-'
@@ -33,6 +36,7 @@ function formatDateTime(timestampMs: number | null) {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: TOP_BUYERS_SCHEDULE_TIMEZONE,
   }).format(new Date(timestampMs))
 }
 
@@ -134,14 +138,37 @@ function RankingSection() {
   const generalRanking = useChampionsRanking()
   const weeklyRanking = useWeeklyTopBuyersRanking()
   const { result: latestDrawResult } = useTopBuyersDraw()
+  const { campaign } = useCampaignSettings()
+  const topBuyersSchedule = useMemo(
+    () => normalizeTopBuyersWeeklySchedule(campaign.topBuyersWeeklySchedule),
+    [campaign.topBuyersWeeklySchedule],
+  )
+  const topBuyersNextDrawAtMs = useMemo(
+    () => resolveNextDrawAtMs(topBuyersSchedule),
+    [topBuyersSchedule],
+  )
+  const topBuyersNextFreezeAtMs = useMemo(
+    () => resolveFreezeAtMs(topBuyersNextDrawAtMs),
+    [topBuyersNextDrawAtMs],
+  )
+  const topBuyersWeekdayLabel = useMemo(
+    () => TOP_BUYERS_WEEKDAY_OPTIONS.find((item) => item.value === topBuyersSchedule.dayOfWeek)?.label || 'Sexta-feira',
+    [topBuyersSchedule.dayOfWeek],
+  )
 
   const weeklySubtitle = useMemo(() => {
     if (!weeklyRanking.weekStartAtMs || !weeklyRanking.weekEndAtMs) {
-      return 'Janela semanal: domingo 00:00 ate sexta 23:59 (America/Sao_Paulo).'
+      return `Congelamento semanal em T-1h do sorteio (${topBuyersWeekdayLabel} ${topBuyersSchedule.drawTime}, ${TOP_BUYERS_SCHEDULE_TIMEZONE}).`
     }
 
     return `Semana ${formatWeekId(weeklyRanking.weekId)} | ${formatDateTime(weeklyRanking.weekStartAtMs)} ate ${formatDateTime(weeklyRanking.weekEndAtMs)}.`
-  }, [weeklyRanking.weekEndAtMs, weeklyRanking.weekId, weeklyRanking.weekStartAtMs])
+  }, [
+    topBuyersSchedule.drawTime,
+    topBuyersWeekdayLabel,
+    weeklyRanking.weekEndAtMs,
+    weeklyRanking.weekId,
+    weeklyRanking.weekStartAtMs,
+  ])
 
   return (
     <section className="py-20 bg-luxury-bg relative overflow-hidden" id="ganhadores">
@@ -163,6 +190,10 @@ function RankingSection() {
               {formatWinningPosition(latestDrawResult.winningPosition, latestDrawResult.participantCount)}).
             </p>
           ) : null}
+          <p className="mt-2 text-xs text-cyan-100/85">
+            Próximo sorteio Top: <span className="font-bold">{formatDateTime(topBuyersNextDrawAtMs)}</span> | congelamento do ranking:
+            <span className="font-bold"> {formatDateTime(topBuyersNextFreezeAtMs)}</span> ({TOP_BUYERS_SCHEDULE_TIMEZONE}).
+          </p>
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -170,7 +201,7 @@ function RankingSection() {
             accentClassName="bg-gradient-to-r from-amber-400 via-neon-pink to-yellow-300"
             emptyMessage="Ainda nao ha compras pagas para montar o ranking geral."
             errorMessage={generalRanking.errorMessage}
-            footer="Ranking geral por quantidade total de cotas pagas na campanha. Ranking atualizado toda sexta-feira."
+            footer="Ranking geral por quantidade total de cotas pagas na campanha."
             isLoading={generalRanking.isLoading}
             items={generalRanking.items}
             subtitle="Classificacao acumulada em toda a edicao."
@@ -181,7 +212,7 @@ function RankingSection() {
             accentClassName="bg-gradient-to-r from-emerald-400 via-cyan-300 to-blue-300"
             emptyMessage="Ainda nao ha compras pagas na janela semanal."
             errorMessage={weeklyRanking.errorMessage}
-            footer="Regra: domingo 00:00 ate sexta 23:59, desempate por compra mais antiga. Ranking atualizado toda sexta-feira."
+            footer={`Regra: ranking congela 1h antes do sorteio semanal (${topBuyersWeekdayLabel} ${topBuyersSchedule.drawTime}), desempate por compra mais antiga.`}
             isLoading={weeklyRanking.isLoading}
             items={weeklyRanking.items}
             subtitle={weeklySubtitle}

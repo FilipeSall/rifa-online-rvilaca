@@ -5,6 +5,7 @@ import { CAMPAIGN_DOC_ID, DEFAULT_BONUS_PRIZE, DEFAULT_MAIN_PRIZE, DEFAULT_SECON
 import { getCampaignDocCached, invalidateCampaignDocCache } from './campaignDocCache.js'
 import { asRecord, readString, readTimestampMillis, requireActiveUid, sanitizeString } from './shared.js'
 import { pickTopBuyersWinningTicketNumber } from './topBuyersWinner.js'
+import { readTopBuyersWeeklySchedule, resolveCurrentCycleWindow } from './topBuyersSchedule.js'
 
 const TOP_BUYERS_DRAW_HISTORY_COLLECTION = 'topBuyersDrawResults'
 const DEFAULT_RANKING_LIMIT = 50
@@ -997,20 +998,37 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
     const payload = asRecord(request.data) as PublishTopBuyersDrawInput
     const extractionNumbers = sanitizeExtractionNumbers(payload.extractionNumbers)
     const rankingLimit = sanitizeRankingLimit(payload.rankingLimit)
-    const rankingWindow = getWeeklyRankingWindow()
     const requestedDrawPrize = sanitizeString(payload.drawPrize)
     const requestedDrawPrizeKey = normalizeDrawPrizeKey(requestedDrawPrize)
+
+    const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID, { forceRefresh: true })
+    const nowMs = Date.now()
+    const topBuyersSchedule = readTopBuyersWeeklySchedule(campaignData)
+    const cycleWindow = resolveCurrentCycleWindow(topBuyersSchedule, nowMs)
+    const rankingWindow = {
+      weekId: cycleWindow.weekId,
+      startMs: cycleWindow.windowStartAtMs,
+      endMs: cycleWindow.windowEndAtMs,
+    }
+    if (nowMs < cycleWindow.freezeAtMs) {
+      throw new HttpsError(
+        'failed-precondition',
+        'O ranking semanal ainda nao foi congelado para este sorteio. Aguarde o horario T-1h.',
+      )
+    }
+
     logger.info('publishTopBuyersDraw:start', {
       campaignId: CAMPAIGN_DOC_ID,
       uid,
       rankingLimit,
       weekId: rankingWindow.weekId,
+      freezeAtMs: cycleWindow.freezeAtMs,
+      drawAtMs: cycleWindow.drawAtMs,
       extractionNumbersCount: extractionNumbers.length,
       requestedDrawPrize: requestedDrawPrize || null,
       requestedDrawPrizeKey: requestedDrawPrizeKey || null,
     })
 
-    const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID, { forceRefresh: true })
     const mainPrize = sanitizeString(campaignData?.mainPrize) || DEFAULT_MAIN_PRIZE
     const secondPrize = sanitizeString(campaignData?.secondPrize)
     const bonusPrize = sanitizeString(campaignData?.bonusPrize)
@@ -1079,7 +1097,7 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
         'Este premio ja foi sorteado em uma rodada anterior e nao pode ser reutilizado.',
       )
     }
-    const drawDate = formatBrazilDateId(Date.now())
+    const drawDate = formatBrazilDateId(cycleWindow.drawAtMs)
 
     try {
       const rankingBuild = await buildRankingSnapshot(db, rankingLimit, rankingWindow)

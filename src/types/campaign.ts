@@ -47,6 +47,12 @@ export type CampaignMidias = {
   featuredVideo: CampaignFeaturedVideoMedia | null
 }
 
+export type TopBuyersWeeklySchedule = {
+  dayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6
+  drawTime: string
+  timezone: 'America/Sao_Paulo'
+}
+
 export type CampaignSettings = {
   id: string
   title: string
@@ -67,6 +73,7 @@ export type CampaignSettings = {
   featuredPromotion: CampaignFeaturedPromotion | null
   coupons: CampaignCoupon[]
   midias: CampaignMidias
+  topBuyersWeeklySchedule: TopBuyersWeeklySchedule
 }
 
 export type UpsertCampaignSettingsInput = {
@@ -88,6 +95,7 @@ export type UpsertCampaignSettingsInput = {
   featuredPromotion?: CampaignFeaturedPromotion | null
   coupons?: CampaignCoupon[]
   midias?: CampaignMidias
+  topBuyersWeeklySchedule?: TopBuyersWeeklySchedule | null
 }
 
 export type UpsertCampaignSettingsOutput = {
@@ -110,4 +118,5 @@ export type UpsertCampaignSettingsOutput = {
   featuredPromotion: CampaignFeaturedPromotion | null
   coupons: CampaignCoupon[]
   midias: CampaignMidias
+  topBuyersWeeklySchedule: TopBuyersWeeklySchedule
 }

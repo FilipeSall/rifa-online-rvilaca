@@ -9,6 +9,11 @@ type GetWeeklyTopBuyersRankingOutput = {
   weekId?: string
   weekStartAtMs?: number
   weekEndAtMs?: number
+  freezeAtMs?: number
+  drawAtMs?: number
+  scheduleDayOfWeek?: number
+  scheduleDrawTime?: string
+  scheduleTimezone?: string
   items?: RankingItem[]
 }
 const RANKING_LIMIT = 20
@@ -65,6 +70,11 @@ export function useWeeklyTopBuyersRanking() {
   const [weekId, setWeekId] = useState<string | null>(null)
   const [weekStartAtMs, setWeekStartAtMs] = useState<number | null>(null)
   const [weekEndAtMs, setWeekEndAtMs] = useState<number | null>(null)
+  const [freezeAtMs, setFreezeAtMs] = useState<number | null>(null)
+  const [drawAtMs, setDrawAtMs] = useState<number | null>(null)
+  const [scheduleDayOfWeek, setScheduleDayOfWeek] = useState<number | null>(null)
+  const [scheduleDrawTime, setScheduleDrawTime] = useState<string | null>(null)
+  const [scheduleTimezone, setScheduleTimezone] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const hasCachedSnapshotRef = useRef(false)
@@ -111,12 +121,37 @@ export function useWeeklyTopBuyersRanking() {
         typeof payload.weekEndAtMs === 'number' && Number.isFinite(payload.weekEndAtMs)
           ? payload.weekEndAtMs
           : null
+      const nextFreezeAtMs =
+        typeof payload.freezeAtMs === 'number' && Number.isFinite(payload.freezeAtMs)
+          ? payload.freezeAtMs
+          : null
+      const nextDrawAtMs =
+        typeof payload.drawAtMs === 'number' && Number.isFinite(payload.drawAtMs)
+          ? payload.drawAtMs
+          : null
+      const nextScheduleDayOfWeek =
+        Number.isInteger(payload.scheduleDayOfWeek) && Number(payload.scheduleDayOfWeek) >= 0 && Number(payload.scheduleDayOfWeek) <= 6
+          ? Number(payload.scheduleDayOfWeek)
+          : null
+      const nextScheduleDrawTime =
+        typeof payload.scheduleDrawTime === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(payload.scheduleDrawTime)
+          ? payload.scheduleDrawTime
+          : null
+      const nextScheduleTimezone =
+        typeof payload.scheduleTimezone === 'string' && payload.scheduleTimezone.trim()
+          ? payload.scheduleTimezone.trim()
+          : null
 
       setItems(nextItems)
       setUpdatedAtMs(nextUpdatedAtMs)
       setWeekId(nextWeekId)
       setWeekStartAtMs(nextWeekStartAtMs)
       setWeekEndAtMs(nextWeekEndAtMs)
+      setFreezeAtMs(nextFreezeAtMs)
+      setDrawAtMs(nextDrawAtMs)
+      setScheduleDayOfWeek(nextScheduleDayOfWeek)
+      setScheduleDrawTime(nextScheduleDrawTime)
+      setScheduleTimezone(nextScheduleTimezone)
       setErrorMessage(null)
     } catch {
       if (!hasCachedSnapshotRef.current) {
@@ -152,6 +187,26 @@ export function useWeeklyTopBuyersRanking() {
           typeof payload.weekEndAtMs === 'number' && Number.isFinite(payload.weekEndAtMs)
             ? payload.weekEndAtMs
             : null
+        const nextFreezeAtMs =
+          typeof payload.freezeAtMs === 'number' && Number.isFinite(payload.freezeAtMs)
+            ? payload.freezeAtMs
+            : null
+        const nextDrawAtMs =
+          typeof payload.drawAtMs === 'number' && Number.isFinite(payload.drawAtMs)
+            ? payload.drawAtMs
+            : null
+        const nextScheduleDayOfWeek =
+          Number.isInteger(payload.scheduleDayOfWeek) && Number(payload.scheduleDayOfWeek) >= 0 && Number(payload.scheduleDayOfWeek) <= 6
+            ? Number(payload.scheduleDayOfWeek)
+            : null
+        const nextScheduleDrawTime =
+          typeof payload.scheduleDrawTime === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(payload.scheduleDrawTime)
+            ? payload.scheduleDrawTime
+            : null
+        const nextScheduleTimezone =
+          typeof payload.scheduleTimezone === 'string' && payload.scheduleTimezone.trim()
+            ? payload.scheduleTimezone.trim()
+            : null
 
         hasCachedSnapshotRef.current = true
         setItems(nextItems)
@@ -159,6 +214,11 @@ export function useWeeklyTopBuyersRanking() {
         setWeekId(nextWeekId)
         setWeekStartAtMs(nextWeekStartAtMs)
         setWeekEndAtMs(nextWeekEndAtMs)
+        setFreezeAtMs(nextFreezeAtMs)
+        setDrawAtMs(nextDrawAtMs)
+        setScheduleDayOfWeek(nextScheduleDayOfWeek)
+        setScheduleDrawTime(nextScheduleDrawTime)
+        setScheduleTimezone(nextScheduleTimezone)
         setErrorMessage(null)
         setIsLoading(false)
 
@@ -203,6 +263,11 @@ export function useWeeklyTopBuyersRanking() {
     weekId,
     weekStartAtMs,
     weekEndAtMs,
+    freezeAtMs,
+    drawAtMs,
+    scheduleDayOfWeek,
+    scheduleDrawTime,
+    scheduleTimezone,
     isLoading,
     errorMessage,
   }

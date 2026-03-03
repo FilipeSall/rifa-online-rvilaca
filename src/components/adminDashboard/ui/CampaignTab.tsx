@@ -4,6 +4,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import {
   CAMPAIGN_PACK_QUANTITIES,
+  TOP_BUYERS_SCHEDULE_TIMEZONE,
+  TOP_BUYERS_WEEKDAY_OPTIONS,
   DEFAULT_BONUS_PRIZE,
   DEFAULT_CAMPAIGN_TITLE,
   DEFAULT_MAIN_PRIZE,
@@ -30,6 +32,7 @@ import { formatCurrency } from '../utils/formatters'
 import { getScheduleStatusLabel, resolveCampaignScheduleStatus } from '../../../utils/campaignSchedule'
 import { CustomSelect } from '../../ui/CustomSelect'
 import { functions } from '../../../lib/firebase'
+import { normalizeTopBuyersWeeklySchedule, resolveFreezeAtMs, resolveNextDrawAtMs } from '../../../utils/topBuyersSchedule'
 
 type RefreshWeeklyTopBuyersRankingCacheOutput = {
   updatedAtMs?: number
@@ -94,6 +97,18 @@ function parseErrorMessage(error: unknown, fallback: string) {
   return fallback
 }
 
+function formatBrazilDateTime(valueMs: number) {
+  if (!Number.isFinite(valueMs) || valueMs <= 0) {
+    return '-'
+  }
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'full',
+    timeStyle: 'short',
+    timeZone: TOP_BUYERS_SCHEDULE_TIMEZONE,
+  }).format(new Date(valueMs))
+}
+
 export default function CampaignTab() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -118,6 +133,8 @@ export default function CampaignTab() {
     featuredPromotion,
     coupons,
     midias,
+    topBuyersDrawDayOfWeek,
+    topBuyersDrawTime,
     setTitle,
     setPricePerCotaInput,
     setMainPrize,
@@ -134,6 +151,8 @@ export default function CampaignTab() {
     setPackPrices,
     setFeaturedPromotion,
     setMidias,
+    setTopBuyersDrawDayOfWeek,
+    setTopBuyersDrawTime,
     handleSaveCampaignSettings,
     persistCoupons,
     persistMidias,
@@ -169,6 +188,13 @@ export default function CampaignTab() {
       { value: 'percent', label: 'Percentual (%)' },
       { value: 'fixed', label: 'Valor fixo (R$)' },
     ] as const,
+    [],
+  )
+  const topBuyersWeekdaySelectOptions = useMemo(
+    () => TOP_BUYERS_WEEKDAY_OPTIONS.map((option) => ({
+      value: String(option.value),
+      label: option.label,
+    })),
     [],
   )
   const heroCarouselItems = useMemo(
@@ -211,6 +237,8 @@ export default function CampaignTab() {
       featuredPromotion,
       coupons,
       midias,
+      topBuyersDrawDayOfWeek,
+      topBuyersDrawTime,
     }).payload
   ), [
     additionalPrizes,
@@ -226,6 +254,8 @@ export default function CampaignTab() {
     packPrices,
     featuredPromotion,
     supportWhatsappNumber,
+    topBuyersDrawDayOfWeek,
+    topBuyersDrawTime,
     whatsappContactMessage,
     title,
     totalNumbersInput,
@@ -250,6 +280,8 @@ export default function CampaignTab() {
       featuredPromotion: campaign.featuredPromotion,
       coupons: campaign.coupons,
       midias: campaign.midias,
+      topBuyersDrawDayOfWeek: campaign.topBuyersWeeklySchedule.dayOfWeek,
+      topBuyersDrawTime: campaign.topBuyersWeeklySchedule.drawTime,
     }).payload
   ), [
     campaign.additionalPrizes,
@@ -265,6 +297,8 @@ export default function CampaignTab() {
     campaign.startsAt,
     campaign.startsAtTime,
     campaign.supportWhatsappNumber,
+    campaign.topBuyersWeeklySchedule.dayOfWeek,
+    campaign.topBuyersWeeklySchedule.drawTime,
     campaign.whatsappContactMessage,
     campaign.title,
     campaign.totalNumbers,
@@ -327,6 +361,21 @@ export default function CampaignTab() {
       label: 'Mais compradas',
     }
   }, [defaultPromotionQuantity, featuredPromotion])
+  const topBuyersScheduleDraft = useMemo(
+    () => normalizeTopBuyersWeeklySchedule({
+      dayOfWeek: topBuyersDrawDayOfWeek,
+      drawTime: topBuyersDrawTime,
+    }),
+    [topBuyersDrawDayOfWeek, topBuyersDrawTime],
+  )
+  const topBuyersNextDrawAtMs = useMemo(
+    () => resolveNextDrawAtMs(topBuyersScheduleDraft),
+    [topBuyersScheduleDraft],
+  )
+  const topBuyersNextFreezeAtMs = useMemo(
+    () => resolveFreezeAtMs(topBuyersNextDrawAtMs),
+    [topBuyersNextDrawAtMs],
+  )
 
   useEffect(() => {
     if (!heroAltInput.trim()) {
@@ -1245,6 +1294,44 @@ export default function CampaignTab() {
                   O status e definido automaticamente pelo periodo configurado:
                   antes do inicio = agendada, durante o periodo = ativa, apos o fim = encerrada.
                 </p>
+
+                <div className="rounded-xl border border-cyan-300/25 bg-cyan-500/10 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100">Agendamento do Sorteio Top (Semanal)</p>
+                  <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-top-buyers-weekday">
+                        Dia da semana
+                      </label>
+                      <CustomSelect
+                        id="campaign-top-buyers-weekday"
+                        value={String(topBuyersScheduleDraft.dayOfWeek)}
+                        options={topBuyersWeekdaySelectOptions}
+                        onChange={(nextValue) => {
+                          const parsed = Number(nextValue)
+                          setTopBuyersDrawDayOfWeek(Number.isInteger(parsed) ? parsed : 5)
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-top-buyers-time">
+                        Hora do sorteio
+                      </label>
+                      <input
+                        id="campaign-top-buyers-time"
+                        className="mt-2 h-11 w-full rounded-md border border-cyan-200/30 bg-black/25 px-3 text-sm font-semibold text-cyan-50 outline-none transition-colors focus:border-cyan-200/80"
+                        step={60}
+                        type="time"
+                        value={topBuyersScheduleDraft.drawTime}
+                        onChange={(event) => setTopBuyersDrawTime(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-1 text-xs text-cyan-100/85">
+                    <p>Fuso oficial: <span className="font-semibold">{TOP_BUYERS_SCHEDULE_TIMEZONE}</span></p>
+                    <p>Próximo sorteio: <span className="font-semibold">{formatBrazilDateTime(topBuyersNextDrawAtMs)}</span></p>
+                    <p>Próximo congelamento (T-1h): <span className="font-semibold">{formatBrazilDateTime(topBuyersNextFreezeAtMs)}</span></p>
+                  </div>
+                </div>
 
                 <div className="rounded-xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-3">
                   <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-support-whatsapp">

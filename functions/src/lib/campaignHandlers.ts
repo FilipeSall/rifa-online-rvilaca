@@ -18,8 +18,19 @@ import {
   type CampaignStatus,
 } from './constants.js'
 import { readCampaignNumberRange } from './numberStateStore.js'
-import { asRecord, readMetricNumber, requireActiveUid, sanitizeString } from './shared.js'
+import {
+  asRecord,
+  readMetricNumber,
+  readTimestampMillis,
+  requireActiveUid,
+  sanitizeString,
+} from './shared.js'
 import { getCampaignDocCached, invalidateCampaignDocCache } from './campaignDocCache.js'
+import {
+  buildDefaultTopBuyersWeeklySchedule,
+  readTopBuyersWeeklySchedule,
+  type TopBuyersWeeklySchedule,
+} from './topBuyersSchedule.js'
 
 type CampaignCouponDiscountType = 'percent' | 'fixed'
 
@@ -88,6 +99,7 @@ interface UpsertCampaignSettingsInput {
   featuredPromotion?: CampaignFeaturedPromotion | null
   coupons?: CampaignCoupon[]
   midias?: CampaignMidias
+  topBuyersWeeklySchedule?: TopBuyersWeeklySchedule | null
 }
 
 interface UpsertCampaignSettingsOutput {
@@ -110,6 +122,7 @@ interface UpsertCampaignSettingsOutput {
   featuredPromotion: CampaignFeaturedPromotion | null
   coupons: CampaignCoupon[]
   midias: CampaignMidias
+  topBuyersWeeklySchedule: TopBuyersWeeklySchedule
 }
 
 interface DashboardSummaryOutput {
@@ -416,6 +429,23 @@ function sanitizeCampaignFeaturedPromotion(value: unknown): CampaignFeaturedProm
     discountValue: Number(rawDiscountValue.toFixed(2)),
     label: 'Mais compradas',
   }
+}
+
+function sanitizeTopBuyersWeeklySchedule(
+  value: unknown,
+): TopBuyersWeeklySchedule | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (value === null || value === '') {
+    return buildDefaultTopBuyersWeeklySchedule()
+  }
+
+  const payload = asRecord(value)
+  return readTopBuyersWeeklySchedule({
+    topBuyersWeeklySchedule: payload,
+  } as DocumentData)
 }
 
 function getDefaultCampaignMidias(): CampaignMidias {
@@ -837,6 +867,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       const nextFeaturedPromotion = sanitizeCampaignFeaturedPromotion(payload.featuredPromotion)
       const nextCoupons = sanitizeCoupons(payload.coupons)
       const nextMidias = sanitizeCampaignMidias(payload.midias)
+      const nextTopBuyersWeeklySchedule = sanitizeTopBuyersWeeklySchedule(payload.topBuyersWeeklySchedule)
 
       const updateData: DocumentData = {
         updatedAt: FieldValue.serverTimestamp(),
@@ -917,6 +948,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         updateData.midias = nextMidias
       }
 
+      if (nextTopBuyersWeeklySchedule !== undefined) {
+        updateData.topBuyersWeeklySchedule = nextTopBuyersWeeklySchedule
+      }
+
       const effectiveStartsAt =
         nextStartsAt !== undefined ? nextStartsAt : readCampaignDate(currentData, 'startsAt')
       const effectiveStartsAtTime =
@@ -981,6 +1016,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
           updateData.midias = getDefaultCampaignMidias()
         }
 
+        if (!updateData.topBuyersWeeklySchedule) {
+          updateData.topBuyersWeeklySchedule = buildDefaultTopBuyersWeeklySchedule()
+        }
+
         updateData.createdAt = FieldValue.serverTimestamp()
       } else if (
         nextTitle === null &&
@@ -999,7 +1038,8 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         nextPackPrices === null &&
         nextFeaturedPromotion === undefined &&
         nextCoupons === null &&
-        nextMidias === null
+        nextMidias === null &&
+        nextTopBuyersWeeklySchedule === undefined
       ) {
         throw new HttpsError('invalid-argument', 'Nenhum dado valido para atualizar campanha.')
       }
@@ -1014,6 +1054,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         hasNewMidias: nextMidias !== null,
         nextHeroCarouselCount: nextMidias ? nextMidias.heroCarousel.length : null,
         hasFeaturedVideo: Boolean(nextMidias?.featuredVideo?.url),
+        hasTopBuyersWeeklySchedule: nextTopBuyersWeeklySchedule !== undefined,
       })
 
       await campaignRef.set(updateData, { merge: true })
@@ -1042,6 +1083,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         featuredPromotion: readCampaignFeaturedPromotion(campaignData),
         coupons: readCampaignCoupons(campaignData),
         midias: readCampaignMidias(campaignData),
+        topBuyersWeeklySchedule: readTopBuyersWeeklySchedule(campaignData),
       } satisfies UpsertCampaignSettingsOutput
 
       logger.info('upsertCampaignSettings succeeded', {
@@ -1074,8 +1116,9 @@ export function createGetDashboardSummaryHandler(db: Firestore) {
   return async (request: { auth?: { uid?: string } | null; data: unknown }) => {
     const uid = requireActiveUid(request.auth)
     await assertAdminRole(db, uid)
+    const nowMs = Date.now()
 
-    const [summarySnapshot, dailySnapshot, cancelledCountResult] = await Promise.all([
+    const [summarySnapshot, dailySnapshot, failedCountResult, pendingSnapshot] = await Promise.all([
       db.collection('metrics').doc('sales_summary').get(),
       db
         .collection('salesMetricsDaily')
@@ -1087,13 +1130,27 @@ export function createGetDashboardSummaryHandler(db: Firestore) {
         .where('type', '==', 'deposit')
         .count()
         .get(),
+      db.collection('orders')
+        .where('status', '==', 'pending')
+        .where('type', '==', 'deposit')
+        .select('reservationExpiresAt')
+        .get(),
     ])
 
     const totalRevenue = readMetricNumber(summarySnapshot.get('totalRevenue'))
     const paidOrders = Math.max(0, Math.floor(readMetricNumber(summarySnapshot.get('paidOrders'))))
     const soldNumbers = Math.max(0, Math.floor(readMetricNumber(summarySnapshot.get('soldNumbers'))))
     const avgTicket = paidOrders > 0 ? Number((totalRevenue / paidOrders).toFixed(2)) : 0
-    const cancelledOrders = cancelledCountResult.data().count
+    const failedOrders = failedCountResult.data().count
+    const expiredPendingOrders = pendingSnapshot.docs.reduce((total, orderDoc) => {
+      const reservationExpiresAtMs = readTimestampMillis(orderDoc.get('reservationExpiresAt'))
+      if (reservationExpiresAtMs !== null && reservationExpiresAtMs <= nowMs) {
+        return total + 1
+      }
+
+      return total
+    }, 0)
+    const cancelledOrders = failedOrders + expiredPendingOrders
     const daily = dailySnapshot.docs.map((dailyDoc) => ({
       date: sanitizeString(dailyDoc.get('date')) || dailyDoc.id,
       revenue: readMetricNumber(dailyDoc.get('revenue')),
