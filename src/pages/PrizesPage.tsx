@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import prizesPortrait from '../assets/IMG_9378.webp'
 import Footer from '../components/home/Footer'
 import Header from '../components/home/Header'
+import CampaignDeadlineCountdownCard from '../components/winners/CampaignDeadlineCountdownCard'
 import PrizeWinnersShowcase from '../components/winners/PrizeWinnersShowcase'
 import { useMainRaffleDraw } from '../hooks/useMainRaffleDraw'
+import { usePublicCampaignDeadline } from '../hooks/usePublicCampaignDeadline'
 import { useTopBuyersDraw } from '../hooks/useTopBuyersDraw'
 import { pickComparableWinnerTicketNumber } from '../utils/topBuyersWinner'
 
@@ -172,6 +174,7 @@ function buildMainRaffleFallbackPath(item: {
 }
 
 export default function PrizesPage() {
+  const { hasDeadline, targetTimeMs, isExpired } = usePublicCampaignDeadline()
   const { result, history, isHistoryLoading } = useTopBuyersDraw(false, 'public')
   const {
     result: latestMainResult,
@@ -271,6 +274,11 @@ export default function PrizesPage() {
                       loading="lazy"
                       onLoad={() => setIsPrizesPortraitLoaded(true)}
                       onError={() => setIsPrizesPortraitLoaded(true)}
+                    />
+                    <CampaignDeadlineCountdownCard
+                      hasDeadline={hasDeadline}
+                      targetTimeMs={targetTimeMs}
+                      isExpired={isExpired}
                     />
                   </div>
                 </div>

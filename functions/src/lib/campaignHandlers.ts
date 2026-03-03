@@ -148,6 +148,16 @@ interface PublicSalesSnapshotOutput {
   updatedAtMs: number
 }
 
+interface PublicCampaignDeadlineOutput {
+  campaignId: string
+  endsAt: string | null
+  endsAtTime: string | null
+  timezone: 'America/Sao_Paulo'
+  updatedAtMs: number
+}
+
+const CAMPAIGN_DEADLINE_TIMEZONE = 'America/Sao_Paulo' as const
+
 function sanitizeCampaignPrice(value: unknown): number | null {
   if (value === undefined || value === null || value === '') {
     return null
@@ -1166,6 +1176,21 @@ export function createGetDashboardSummaryHandler(db: Firestore) {
       avgTicket,
       daily,
     } satisfies DashboardSummaryOutput
+  }
+}
+
+export function createGetPublicCampaignDeadlineHandler(db: Firestore) {
+  return async (): Promise<PublicCampaignDeadlineOutput> => {
+    const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID)
+    const updatedAtMs = readTimestampMillis(campaignData?.updatedAt) ?? 0
+
+    return {
+      campaignId: CAMPAIGN_DOC_ID,
+      endsAt: readCampaignDate(campaignData, 'endsAt'),
+      endsAtTime: readCampaignTime(campaignData, 'endsAtTime'),
+      timezone: CAMPAIGN_DEADLINE_TIMEZONE,
+      updatedAtMs,
+    }
   }
 }
 

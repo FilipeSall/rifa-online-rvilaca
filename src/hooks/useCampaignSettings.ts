@@ -20,6 +20,7 @@ import {
     DEFAULT_TOTAL_NUMBERS,
 } from '../const/campaign'
 import { MAX_QUANTITY } from '../const/purchaseNumbers'
+import { clearPublicCampaignDeadlineCache } from './usePublicCampaignDeadline'
 import { db, functions } from '../lib/firebase'
 import type {
     CampaignFeaturedVideoMedia,
@@ -649,6 +650,7 @@ export function useCampaignSettings() {
                     topBuyersWeeklySchedule: sanitizeTopBuyersWeeklySchedule(payload.topBuyersWeeklySchedule),
                 })
                 setExists(true)
+                clearPublicCampaignDeadlineCache()
 
                 return payload
             } catch (error) {

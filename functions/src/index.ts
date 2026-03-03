@@ -7,6 +7,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { REGION } from './lib/constants.js'
 import {
   createGetDashboardSummaryHandler,
+  createGetPublicCampaignDeadlineHandler,
   createGetPublicSalesSnapshotHandler,
   createUpsertCampaignSettingsHandler,
 } from './lib/campaignHandlers.js'
@@ -132,6 +133,7 @@ export const requestWithdraw = onCall(
 export const getBalance = onCall(securedCallableOptions, createGetBalanceHandler(horsePaySecrets))
 
 export const getDashboardSummary = onCall(callableOptions, createGetDashboardSummaryHandler(db))
+export const getPublicCampaignDeadline = onCall(callableOptions, createGetPublicCampaignDeadlineHandler(db))
 export const getPublicSalesSnapshot = onCall(callableOptions, createGetPublicSalesSnapshotHandler(db))
 
 export const getChampionsRanking = onCall(callableOptions, createGetChampionsRankingHandler(db))
