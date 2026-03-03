@@ -45,6 +45,7 @@ export type CampaignFormState = {
   midias: CampaignMidias
   topBuyersDrawDayOfWeek: number
   topBuyersDrawTime: string
+  topBuyersSkipWeekId: string
 }
 
 type CampaignValidationResult = {
@@ -240,6 +241,7 @@ function sanitizeFeaturedPromotion(value: unknown): CampaignFeaturedPromotion | 
 function sanitizeTopBuyersWeeklySchedule(params: {
   dayOfWeek: unknown
   drawTime: unknown
+  skipWeekId: unknown
 }): TopBuyersWeeklySchedule {
   const parsedDay = Number(params.dayOfWeek)
   const dayOfWeek = Number.isInteger(parsedDay) && parsedDay >= 0 && parsedDay <= 6
@@ -249,11 +251,14 @@ function sanitizeTopBuyersWeeklySchedule(params: {
   const drawTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(drawTimeRaw)
     ? drawTimeRaw
     : DEFAULT_TOP_BUYERS_DRAW_TIME
+  const skipWeekIdRaw = typeof params.skipWeekId === 'string' ? params.skipWeekId.trim() : ''
+  const skipWeekId = /^\d{4}-\d{2}-\d{2}$/.test(skipWeekIdRaw) ? skipWeekIdRaw : null
 
   return {
     dayOfWeek: dayOfWeek as TopBuyersWeeklySchedule['dayOfWeek'],
     drawTime,
     timezone: 'America/Sao_Paulo',
+    skipWeekId,
   }
 }
 
@@ -341,6 +346,7 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
   const normalizedTopBuyersWeeklySchedule = sanitizeTopBuyersWeeklySchedule({
     dayOfWeek: formState.topBuyersDrawDayOfWeek,
     drawTime: formState.topBuyersDrawTime,
+    skipWeekId: formState.topBuyersSkipWeekId,
   })
 
   return {

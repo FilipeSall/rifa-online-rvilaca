@@ -137,11 +137,16 @@ function sanitizeTopBuyersWeeklySchedule(value: unknown): TopBuyersWeeklySchedul
         && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(payload.drawTime.trim())
         ? payload.drawTime.trim()
         : DEFAULT_TOP_BUYERS_DRAW_TIME
+    const skipWeekId = typeof payload.skipWeekId === 'string'
+        && /^\d{4}-\d{2}-\d{2}$/.test(payload.skipWeekId.trim())
+        ? payload.skipWeekId.trim()
+        : null
 
     return {
         dayOfWeek: parsedDay as TopBuyersWeeklySchedule['dayOfWeek'],
         drawTime,
         timezone: 'America/Sao_Paulo',
+        skipWeekId,
     }
 }
 

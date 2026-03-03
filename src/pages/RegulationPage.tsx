@@ -45,7 +45,7 @@ export default function RegulationPage() {
     () => `A cada semana da campanha será apurado o ranking dos 50 participantes que adquirirem a maior quantidade de números no período semanal definido.
 Estes participantes concorrerão a um sorteio exclusivo realizado com base na extração da Loteria Federal correspondente.
 O número do prêmio da Loteria Federal será convertido matematicamente em posição do ranking, determinando o ganhador.
-O ranking semanal é encerrado e congelado exatamente 1 hora antes do sorteio semanal configurado (${topBuyersWeekdayLabel} às ${topBuyersSchedule.drawTime}, ${TOP_BUYERS_SCHEDULE_TIMEZONE}).`,
+O ranking semanal é encerrado e congelado na hora exata do sorteio semanal configurado (${topBuyersWeekdayLabel} às ${topBuyersSchedule.drawTime}, ${TOP_BUYERS_SCHEDULE_TIMEZONE}).`,
     [topBuyersSchedule.drawTime, topBuyersWeekdayLabel],
   )
   const ruleBlocks = useMemo(
@@ -53,7 +53,7 @@ O ranking semanal é encerrado e congelado exatamente 1 hora antes do sorteio se
       {
         title: 'Janela semanal e elegibilidade',
         items: [
-          `A janela semanal é definida por ciclos de congelamento: do congelamento anterior até o congelamento atual (T-1h do sorteio).`,
+          `A janela semanal é definida por ciclos de congelamento: do congelamento anterior até o congelamento atual (no horário do sorteio).`,
           `Somente compras com status pago dentro da janela entram no ranking semanal.`,
           'O ranking semanal considera os 50 maiores compradores do período.',
           'Empates são resolvidos por ordem de primeira compra paga mais antiga na semana.',
@@ -96,7 +96,7 @@ O ranking semanal é encerrado e congelado exatamente 1 hora antes do sorteio se
       {
         label: 'Próximo congelamento',
         value: formatBrazilDateTime(topBuyersNextFreezeAtMs),
-        note: 'Regra T-1h antes do sorteio',
+        note: 'Congelamento no horário do sorteio',
       },
       {
         label: 'Fuso oficial',

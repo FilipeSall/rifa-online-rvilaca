@@ -32,7 +32,12 @@ import { formatCurrency } from '../utils/formatters'
 import { getScheduleStatusLabel, resolveCampaignScheduleStatus } from '../../../utils/campaignSchedule'
 import { CustomSelect } from '../../ui/CustomSelect'
 import { functions } from '../../../lib/firebase'
-import { normalizeTopBuyersWeeklySchedule, resolveFreezeAtMs, resolveNextDrawAtMs } from '../../../utils/topBuyersSchedule'
+import {
+  normalizeTopBuyersWeeklySchedule,
+  resolveFreezeAtMs,
+  resolveNextDrawAtMs,
+  resolveWeekIdFromDrawAtMs,
+} from '../../../utils/topBuyersSchedule'
 
 type RefreshWeeklyTopBuyersRankingCacheOutput = {
   updatedAtMs?: number
@@ -135,6 +140,7 @@ export default function CampaignTab() {
     midias,
     topBuyersDrawDayOfWeek,
     topBuyersDrawTime,
+    topBuyersSkipWeekId,
     setTitle,
     setPricePerCotaInput,
     setMainPrize,
@@ -153,6 +159,7 @@ export default function CampaignTab() {
     setMidias,
     setTopBuyersDrawDayOfWeek,
     setTopBuyersDrawTime,
+    setTopBuyersSkipWeekId,
     handleSaveCampaignSettings,
     persistCoupons,
     persistMidias,
@@ -239,6 +246,7 @@ export default function CampaignTab() {
       midias,
       topBuyersDrawDayOfWeek,
       topBuyersDrawTime,
+      topBuyersSkipWeekId,
     }).payload
   ), [
     additionalPrizes,
@@ -256,6 +264,7 @@ export default function CampaignTab() {
     supportWhatsappNumber,
     topBuyersDrawDayOfWeek,
     topBuyersDrawTime,
+    topBuyersSkipWeekId,
     whatsappContactMessage,
     title,
     totalNumbersInput,
@@ -282,6 +291,7 @@ export default function CampaignTab() {
       midias: campaign.midias,
       topBuyersDrawDayOfWeek: campaign.topBuyersWeeklySchedule.dayOfWeek,
       topBuyersDrawTime: campaign.topBuyersWeeklySchedule.drawTime,
+      topBuyersSkipWeekId: campaign.topBuyersWeeklySchedule.skipWeekId ?? '',
     }).payload
   ), [
     campaign.additionalPrizes,
@@ -299,6 +309,7 @@ export default function CampaignTab() {
     campaign.supportWhatsappNumber,
     campaign.topBuyersWeeklySchedule.dayOfWeek,
     campaign.topBuyersWeeklySchedule.drawTime,
+    campaign.topBuyersWeeklySchedule.skipWeekId,
     campaign.whatsappContactMessage,
     campaign.title,
     campaign.totalNumbers,
@@ -376,12 +387,28 @@ export default function CampaignTab() {
     () => resolveFreezeAtMs(topBuyersNextDrawAtMs),
     [topBuyersNextDrawAtMs],
   )
+  const topBuyersNextDrawWeekId = useMemo(
+    () => resolveWeekIdFromDrawAtMs(topBuyersNextDrawAtMs, topBuyersScheduleDraft),
+    [topBuyersNextDrawAtMs, topBuyersScheduleDraft],
+  )
+  const isSkippingTopBuyersWeek = useMemo(
+    () => Boolean(topBuyersSkipWeekId && topBuyersSkipWeekId === topBuyersNextDrawWeekId),
+    [topBuyersNextDrawWeekId, topBuyersSkipWeekId],
+  )
 
   useEffect(() => {
     if (!heroAltInput.trim()) {
       setHeroAltInput(currentPrizeAlt)
     }
   }, [currentPrizeAlt, heroAltInput])
+
+  useEffect(() => {
+    if (!topBuyersSkipWeekId || topBuyersSkipWeekId === topBuyersNextDrawWeekId) {
+      return
+    }
+
+    setTopBuyersSkipWeekId('')
+  }, [topBuyersNextDrawWeekId, topBuyersSkipWeekId, setTopBuyersSkipWeekId])
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search)
@@ -1326,10 +1353,30 @@ export default function CampaignTab() {
                       />
                     </div>
                   </div>
+                  <div className="mt-4 rounded-lg border border-cyan-200/30 bg-black/30 px-3 py-3">
+                    <label className="flex items-start gap-3 text-xs text-cyan-50/90" htmlFor="campaign-top-buyers-skip-week">
+                      <input
+                        id="campaign-top-buyers-skip-week"
+                        className="mt-0.5 h-4 w-4 rounded border border-cyan-200/60 bg-black/40 text-neon-pink focus:ring-2 focus:ring-cyan-200/60"
+                        type="checkbox"
+                        checked={isSkippingTopBuyersWeek}
+                        onChange={(event) => {
+                          setTopBuyersSkipWeekId(event.target.checked ? topBuyersNextDrawWeekId : '')
+                        }}
+                      />
+                      <span>
+                        <span className="font-semibold text-cyan-50">Pular o sorteio desta semana</span>
+                        <span className="mt-1 block text-[11px] text-cyan-100/70">
+                          Semana do sorteio: <span className="font-semibold">{topBuyersNextDrawWeekId}</span>. O ranking continua sendo atualizado,
+                          mas o sorteio semanal nao podera ser publicado.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
                   <div className="mt-3 space-y-1 text-xs text-cyan-100/85">
                     <p>Fuso oficial: <span className="font-semibold">{TOP_BUYERS_SCHEDULE_TIMEZONE}</span></p>
                     <p>Próximo sorteio: <span className="font-semibold">{formatBrazilDateTime(topBuyersNextDrawAtMs)}</span></p>
-                    <p>Próximo congelamento (T-1h): <span className="font-semibold">{formatBrazilDateTime(topBuyersNextFreezeAtMs)}</span></p>
+                    <p>Congelamento do ranking: <span className="font-semibold">{formatBrazilDateTime(topBuyersNextFreezeAtMs)}</span> (no horário do sorteio)</p>
                   </div>
                 </div>
 

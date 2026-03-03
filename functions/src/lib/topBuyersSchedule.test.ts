@@ -22,12 +22,12 @@ test('readTopBuyersWeeklySchedule usa fallback padrao quando campos faltam', () 
   assert.equal(schedule.timezone, 'America/Sao_Paulo')
 })
 
-test('resolveFreezeAtMs calcula T-1h corretamente', () => {
+test('resolveFreezeAtMs retorna o horario do sorteio quando offset e zero', () => {
   const drawAtMs = msFromIsoInBrazil('2026-03-06T14:00:00')
   const freezeAtMs = resolveFreezeAtMs(drawAtMs)
   assert.equal(
     DateTime.fromMillis(freezeAtMs, { zone: TOP_BUYERS_SCHEDULE_TIMEZONE }).toFormat('yyyy-LL-dd HH:mm'),
-    '2026-03-06 13:00',
+    '2026-03-06 14:00',
   )
 })
 
@@ -49,7 +49,7 @@ test('resolveCurrentCycleWindow retorna ciclo anterior quando agora ainda esta a
   assert.equal(cycle.weekId, '2026-02-27')
   assert.equal(
     DateTime.fromMillis(cycle.freezeAtMs, { zone: TOP_BUYERS_SCHEDULE_TIMEZONE }).toFormat('yyyy-LL-dd HH:mm'),
-    '2026-02-27 13:00',
+    '2026-02-27 14:00',
   )
   assert.equal(cycle.windowStartAtMs, resolveFreezeAtMs(msFromIsoInBrazil('2026-02-20T14:00:00')) + 1)
   assert.equal(cycle.windowEndAtMs, resolveFreezeAtMs(msFromIsoInBrazil('2026-02-27T14:00:00')))
@@ -57,13 +57,13 @@ test('resolveCurrentCycleWindow retorna ciclo anterior quando agora ainda esta a
 
 test('resolveCurrentCycleWindow usa ciclo da semana atual quando agora ja passou do freeze', () => {
   const schedule = buildDefaultTopBuyersWeeklySchedule()
-  const nowMs = msFromIsoInBrazil('2026-03-06T13:30:00')
+  const nowMs = msFromIsoInBrazil('2026-03-06T14:30:00')
   const cycle = resolveCurrentCycleWindow(schedule, nowMs)
 
   assert.equal(cycle.weekId, '2026-03-06')
   assert.equal(
     DateTime.fromMillis(cycle.freezeAtMs, { zone: TOP_BUYERS_SCHEDULE_TIMEZONE }).toFormat('yyyy-LL-dd HH:mm'),
-    '2026-03-06 13:00',
+    '2026-03-06 14:00',
   )
   assert.equal(
     DateTime.fromMillis(cycle.drawAtMs, { zone: TOP_BUYERS_SCHEDULE_TIMEZONE }).toFormat('yyyy-LL-dd HH:mm'),

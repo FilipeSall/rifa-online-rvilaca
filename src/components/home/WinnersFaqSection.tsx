@@ -158,7 +158,7 @@ function RankingSection() {
 
   const weeklySubtitle = useMemo(() => {
     if (!weeklyRanking.weekStartAtMs || !weeklyRanking.weekEndAtMs) {
-      return `Congelamento semanal em T-1h do sorteio (${topBuyersWeekdayLabel} ${topBuyersSchedule.drawTime}, ${TOP_BUYERS_SCHEDULE_TIMEZONE}).`
+      return `Congelamento semanal no horario do sorteio (${topBuyersWeekdayLabel} ${topBuyersSchedule.drawTime}, ${TOP_BUYERS_SCHEDULE_TIMEZONE}).`
     }
 
     return `Semana ${formatWeekId(weeklyRanking.weekId)} | ${formatDateTime(weeklyRanking.weekStartAtMs)} ate ${formatDateTime(weeklyRanking.weekEndAtMs)}.`
@@ -212,7 +212,7 @@ function RankingSection() {
             accentClassName="bg-gradient-to-r from-emerald-400 via-cyan-300 to-blue-300"
             emptyMessage="Ainda nao ha compras pagas na janela semanal."
             errorMessage={weeklyRanking.errorMessage}
-            footer={`Regra: ranking congela 1h antes do sorteio semanal (${topBuyersWeekdayLabel} ${topBuyersSchedule.drawTime}), desempate por compra mais antiga.`}
+            footer={`Regra: ranking congela no horario do sorteio semanal (${topBuyersWeekdayLabel} ${topBuyersSchedule.drawTime}), desempate por compra mais antiga.`}
             isLoading={weeklyRanking.isLoading}
             items={weeklyRanking.items}
             subtitle={weeklySubtitle}

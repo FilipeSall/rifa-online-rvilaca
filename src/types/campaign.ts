@@ -51,6 +51,7 @@ export type TopBuyersWeeklySchedule = {
   dayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6
   drawTime: string
   timezone: 'America/Sao_Paulo'
+  skipWeekId?: string | null
 }
 
 export type CampaignSettings = {

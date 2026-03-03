@@ -50,6 +50,7 @@ export function useCampaignForm() {
   const [midias, setMidias] = useState<CampaignMidias>({ heroCarousel: [], featuredVideo: null })
   const [topBuyersDrawDayOfWeek, setTopBuyersDrawDayOfWeek] = useState<number>(DEFAULT_TOP_BUYERS_DRAW_DAY_OF_WEEK)
   const [topBuyersDrawTime, setTopBuyersDrawTime] = useState<string>(DEFAULT_TOP_BUYERS_DRAW_TIME)
+  const [topBuyersSkipWeekId, setTopBuyersSkipWeekId] = useState<string>('')
   const hasEnsuredCampaignRef = useRef(false)
 
   useEffect(() => {
@@ -72,6 +73,7 @@ export function useCampaignForm() {
     setMidias(campaign.midias)
     setTopBuyersDrawDayOfWeek(campaign.topBuyersWeeklySchedule.dayOfWeek)
     setTopBuyersDrawTime(campaign.topBuyersWeeklySchedule.drawTime)
+    setTopBuyersSkipWeekId(campaign.topBuyersWeeklySchedule.skipWeekId ?? '')
   }, [
     campaign.additionalPrizes,
     campaign.bonusPrize,
@@ -91,6 +93,7 @@ export function useCampaignForm() {
     campaign.featuredPromotion,
     campaign.topBuyersWeeklySchedule.dayOfWeek,
     campaign.topBuyersWeeklySchedule.drawTime,
+    campaign.topBuyersWeeklySchedule.skipWeekId,
     campaign.title,
   ])
 
@@ -128,6 +131,7 @@ export function useCampaignForm() {
       midias,
       topBuyersDrawDayOfWeek,
       topBuyersDrawTime,
+      topBuyersSkipWeekId,
     })
 
     if (errorMessage || !payload) {
@@ -166,8 +170,10 @@ export function useCampaignForm() {
     packPrices,
     featuredPromotion,
     midias,
+    topBuyersSkipWeekId,
     topBuyersDrawDayOfWeek,
     topBuyersDrawTime,
+    topBuyersSkipWeekId,
   ])
 
   const persistCoupons = useCallback(
@@ -192,6 +198,7 @@ export function useCampaignForm() {
         midias,
         topBuyersDrawDayOfWeek,
         topBuyersDrawTime,
+        topBuyersSkipWeekId,
       })
 
       if (errorMessage || !payload) {
@@ -234,6 +241,7 @@ export function useCampaignForm() {
       midias,
       topBuyersDrawDayOfWeek,
       topBuyersDrawTime,
+      topBuyersSkipWeekId,
     ],
   )
 
@@ -259,6 +267,7 @@ export function useCampaignForm() {
         midias: nextMidias,
         topBuyersDrawDayOfWeek,
         topBuyersDrawTime,
+        topBuyersSkipWeekId,
       })
 
       if (errorMessage || !payload) {
@@ -301,6 +310,7 @@ export function useCampaignForm() {
       featuredPromotion,
       topBuyersDrawDayOfWeek,
       topBuyersDrawTime,
+      topBuyersSkipWeekId,
     ],
   )
 
@@ -344,8 +354,10 @@ export function useCampaignForm() {
     setMidias,
     topBuyersDrawDayOfWeek,
     topBuyersDrawTime,
+    topBuyersSkipWeekId,
     setTopBuyersDrawDayOfWeek,
     setTopBuyersDrawTime,
+    setTopBuyersSkipWeekId,
     handleSaveCampaignSettings,
     persistCoupons,
     persistMidias,

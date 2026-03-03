@@ -6,12 +6,13 @@ export const TOP_BUYERS_SCHEDULE_TIMEZONE = 'America/Sao_Paulo' as const
 export const TOP_BUYERS_DEFAULT_DAY_OF_WEEK = 5 as const // Friday
 export const TOP_BUYERS_DEFAULT_DRAW_TIME = '14:00' as const
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
-const FREEZE_OFFSET_MS = 60 * 60 * 1000
+const FREEZE_OFFSET_MS = 0
 
 export type TopBuyersWeeklySchedule = {
   dayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6
   drawTime: string
   timezone: typeof TOP_BUYERS_SCHEDULE_TIMEZONE
+  skipWeekId?: string | null
 }
 
 export type TopBuyersCycleWindow = {
@@ -43,6 +44,15 @@ function sanitizeDrawTime(value: unknown): string {
   return normalized
 }
 
+function sanitizeWeekId(value: unknown): string | null {
+  const normalized = sanitizeString(value)
+  if (!normalized || !/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return null
+  }
+
+  return normalized
+}
+
 function parseDrawTime(drawTime: string): { hour: number, minute: number } {
   const match = /^(\d{2}):(\d{2})$/.exec(drawTime)
   if (!match) {
@@ -68,6 +78,7 @@ export function buildDefaultTopBuyersWeeklySchedule(): TopBuyersWeeklySchedule {
     dayOfWeek: TOP_BUYERS_DEFAULT_DAY_OF_WEEK,
     drawTime: TOP_BUYERS_DEFAULT_DRAW_TIME,
     timezone: TOP_BUYERS_SCHEDULE_TIMEZONE,
+    skipWeekId: null,
   }
 }
 
@@ -79,6 +90,7 @@ export function readTopBuyersWeeklySchedule(campaignData: DocumentData | undefin
     dayOfWeek: sanitizeDayOfWeek(rawSchedule.dayOfWeek),
     drawTime: sanitizeDrawTime(rawSchedule.drawTime),
     timezone: TOP_BUYERS_SCHEDULE_TIMEZONE,
+    skipWeekId: sanitizeWeekId(rawSchedule.skipWeekId),
   }
 }
 
@@ -105,7 +117,7 @@ export function resolveNextDrawAtMs(
     .plus({ days: diffDays })
     .set({ hour, minute, second: 0, millisecond: 0 })
 
-  if (candidate.toMillis() <= nowMs) {
+  if (candidate.toMillis() < nowMs) {
     candidate = candidate.plus({ days: 7 })
   }
 

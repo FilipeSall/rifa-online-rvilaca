@@ -1010,10 +1010,16 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
       startMs: cycleWindow.windowStartAtMs,
       endMs: cycleWindow.windowEndAtMs,
     }
+    if (topBuyersSchedule.skipWeekId && topBuyersSchedule.skipWeekId === cycleWindow.weekId) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Este sorteio semanal foi marcado para ser pulado. Desmarque a opcao no painel administrativo para publicar.',
+      )
+    }
     if (nowMs < cycleWindow.freezeAtMs) {
       throw new HttpsError(
         'failed-precondition',
-        'O ranking semanal ainda nao foi congelado para este sorteio. Aguarde o horario T-1h.',
+        'O ranking semanal ainda nao foi congelado para este sorteio. Aguarde o horario do sorteio.',
       )
     }
 

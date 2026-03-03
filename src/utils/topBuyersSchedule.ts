@@ -7,7 +7,20 @@ import {
 import type { TopBuyersWeeklySchedule } from '../types/campaign'
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
-const FREEZE_OFFSET_MS = 60 * 60 * 1000
+const FREEZE_OFFSET_MS = 0
+
+function sanitizeWeekId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const normalized = value.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return null
+  }
+
+  return normalized
+}
 
 function sanitizeDayOfWeek(value: unknown): TopBuyersWeeklySchedule['dayOfWeek'] {
   const parsed = Number(value)
@@ -53,6 +66,7 @@ export function normalizeTopBuyersWeeklySchedule(value: unknown): TopBuyersWeekl
     dayOfWeek: sanitizeDayOfWeek(payload.dayOfWeek),
     drawTime: sanitizeDrawTime(payload.drawTime),
     timezone: TOP_BUYERS_SCHEDULE_TIMEZONE,
+    skipWeekId: sanitizeWeekId(payload.skipWeekId),
   }
 }
 
@@ -80,11 +94,19 @@ export function resolveNextDrawAtMs(
     .plus({ days: diffDays })
     .set({ hour, minute, second: 0, millisecond: 0 })
 
-  if (candidate.toMillis() <= nowMs) {
+  if (candidate.toMillis() < nowMs) {
     candidate = candidate.plus({ days: 7 })
   }
 
   return candidate.toMillis()
+}
+
+export function resolveWeekIdFromDrawAtMs(
+  drawAtMs: number,
+  schedule: TopBuyersWeeklySchedule,
+): string {
+  const normalized = normalizeTopBuyersWeeklySchedule(schedule)
+  return DateTime.fromMillis(drawAtMs, { zone: normalized.timezone }).toFormat('yyyy-LL-dd')
 }
 
 export function resolveCurrentCycleWindow(

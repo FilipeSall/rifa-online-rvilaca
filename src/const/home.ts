@@ -133,7 +133,7 @@ export const PACK_OPTIONS: PackOption[] = [
 export const FAQ_ITEMS: FaqItem[] = [
   {
     q: 'Como funciona o ranking semanal do sorteio exclusivo?',
-    a: 'A cada semana, o sistema congela automaticamente o Top 50 exatamente 1 hora antes do sorteio semanal configurado (America/Sao_Paulo). Esse ranking congelado é a base oficial do sorteio exclusivo da semana.',
+    a: 'A cada semana, o sistema congela automaticamente o Top 50 na hora exata do sorteio semanal configurado (America/Sao_Paulo). Esse ranking congelado é a base oficial do sorteio exclusivo da semana.',
   },
   {
     q: 'Qual extração da Loteria Federal é usada?',
