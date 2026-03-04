@@ -3,6 +3,7 @@ import { toast } from 'react-toastify'
 import { useCampaignSettings } from '../../../hooks/useCampaignSettings'
 import { useMainRaffleDraw } from '../../../hooks/useMainRaffleDraw'
 import { CustomSelect } from '../../ui/CustomSelect'
+import { buildMainRafflePrizeOptions } from '../../../utils/campaignPrizes'
 
 function normalizeExtractionInput(value: string) {
   return value.replace(/\D/g, '').slice(0, 7)
@@ -29,28 +30,6 @@ function formatPublishedAt(timestampMs: number) {
   }).format(new Date(timestampMs))
 }
 
-function buildPrizeOptions(mainPrize: string, secondPrize: string, bonusPrize: string) {
-  const directPrizes = [mainPrize.trim(), secondPrize.trim()].filter(Boolean)
-  const normalizedBonus = bonusPrize.trim()
-  const pixOptions: string[] = []
-  const pixMatch = normalizedBonus.match(/^\s*(\d+)\s*pix\b/i)
-
-  if (normalizedBonus && pixMatch) {
-    const totalPix = Number(pixMatch[1])
-    if (Number.isInteger(totalPix) && totalPix > 1 && totalPix <= 100) {
-      for (let index = 1; index <= totalPix; index += 1) {
-        pixOptions.push(`${normalizedBonus} (Cota PIX ${index})`)
-      }
-    } else {
-      pixOptions.push(normalizedBonus)
-    }
-  } else if (normalizedBonus) {
-    pixOptions.push(normalizedBonus)
-  }
-
-  return Array.from(new Set([...directPrizes, ...pixOptions]))
-}
-
 export default function MainRaffleDrawTab() {
   const { campaign } = useCampaignSettings()
   const {
@@ -67,8 +46,8 @@ export default function MainRaffleDrawTab() {
   const [extractionIndexInput, setExtractionIndexInput] = useState('1')
   const [drawPrizeInput, setDrawPrizeInput] = useState('')
   const availablePrizeOptions = useMemo(
-    () => buildPrizeOptions(campaign.mainPrize, campaign.secondPrize, campaign.bonusPrize),
-    [campaign.bonusPrize, campaign.mainPrize, campaign.secondPrize],
+    () => buildMainRafflePrizeOptions(campaign),
+    [campaign],
   )
   const usedDrawPrizes = useMemo(
     () => new Set(history.map((item) => item.drawPrize).filter(Boolean)),
@@ -77,9 +56,9 @@ export default function MainRaffleDrawTab() {
   const prizeSelectOptions = useMemo(
     () =>
       availablePrizeOptions.map((item) => ({
-        value: item,
-        label: usedDrawPrizes.has(item) ? `${item} (ja sorteado)` : item,
-        disabled: usedDrawPrizes.has(item),
+        value: item.value,
+        label: usedDrawPrizes.has(item.value) ? `${item.label} (ja sorteado)` : item.label,
+        disabled: usedDrawPrizes.has(item.value),
       })),
     [availablePrizeOptions, usedDrawPrizes],
   )

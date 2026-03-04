@@ -2,21 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '../lib/firebase'
+import { DEFAULT_TOP_BUYERS_RANKING_LIMIT } from '../const/campaign'
 import type { RankingItem } from '../const/home'
+import { useCampaignSettings } from './useCampaignSettings'
 
 type GetWeeklyTopBuyersRankingOutput = {
   updatedAtMs?: number
   weekId?: string
   weekStartAtMs?: number
   weekEndAtMs?: number
-  freezeAtMs?: number
-  drawAtMs?: number
-  scheduleDayOfWeek?: number
-  scheduleDrawTime?: string
-  scheduleTimezone?: string
   items?: RankingItem[]
 }
-const RANKING_LIMIT = 20
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const MIN_REFRESH_INTERVAL_MS = 8_000
 const PUBLIC_CACHE_DOC_PATH = ['draws', '_public-weekly-top-buyers-ranking'] as const
@@ -65,16 +61,12 @@ function shouldRefreshRanking(updatedAtMs: number | null, nowMs = Date.now()) {
 }
 
 export function useWeeklyTopBuyersRanking() {
+  const { campaign } = useCampaignSettings()
   const [items, setItems] = useState<RankingItem[]>([])
   const [updatedAtMs, setUpdatedAtMs] = useState<number | null>(null)
   const [weekId, setWeekId] = useState<string | null>(null)
   const [weekStartAtMs, setWeekStartAtMs] = useState<number | null>(null)
   const [weekEndAtMs, setWeekEndAtMs] = useState<number | null>(null)
-  const [freezeAtMs, setFreezeAtMs] = useState<number | null>(null)
-  const [drawAtMs, setDrawAtMs] = useState<number | null>(null)
-  const [scheduleDayOfWeek, setScheduleDayOfWeek] = useState<number | null>(null)
-  const [scheduleDrawTime, setScheduleDrawTime] = useState<string | null>(null)
-  const [scheduleTimezone, setScheduleTimezone] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const hasCachedSnapshotRef = useRef(false)
@@ -88,6 +80,14 @@ export function useWeeklyTopBuyersRanking() {
     () => doc(db, PUBLIC_CACHE_DOC_PATH[0], PUBLIC_CACHE_DOC_PATH[1]),
     [],
   )
+  const requestedLimit = useMemo(() => {
+    const parsed = Number(campaign.topBuyersRankingLimit)
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      return DEFAULT_TOP_BUYERS_RANKING_LIMIT
+    }
+
+    return Math.min(parsed, DEFAULT_TOP_BUYERS_RANKING_LIMIT)
+  }, [campaign.topBuyersRankingLimit])
 
   const refreshRanking = useCallback(async () => {
     const nowMs = Date.now()
@@ -105,7 +105,7 @@ export function useWeeklyTopBuyersRanking() {
     setIsLoading(true)
 
     try {
-      const response = await getWeeklyRankingCallable({ limit: RANKING_LIMIT })
+      const response = await getWeeklyRankingCallable({ limit: requestedLimit })
       const payload = unwrapCallableData(response.data as CallableEnvelope<GetWeeklyTopBuyersRankingOutput>)
       const nextItems = normalizeRankingItems(payload.items)
       const nextUpdatedAtMs =
@@ -121,37 +121,12 @@ export function useWeeklyTopBuyersRanking() {
         typeof payload.weekEndAtMs === 'number' && Number.isFinite(payload.weekEndAtMs)
           ? payload.weekEndAtMs
           : null
-      const nextFreezeAtMs =
-        typeof payload.freezeAtMs === 'number' && Number.isFinite(payload.freezeAtMs)
-          ? payload.freezeAtMs
-          : null
-      const nextDrawAtMs =
-        typeof payload.drawAtMs === 'number' && Number.isFinite(payload.drawAtMs)
-          ? payload.drawAtMs
-          : null
-      const nextScheduleDayOfWeek =
-        Number.isInteger(payload.scheduleDayOfWeek) && Number(payload.scheduleDayOfWeek) >= 0 && Number(payload.scheduleDayOfWeek) <= 6
-          ? Number(payload.scheduleDayOfWeek)
-          : null
-      const nextScheduleDrawTime =
-        typeof payload.scheduleDrawTime === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(payload.scheduleDrawTime)
-          ? payload.scheduleDrawTime
-          : null
-      const nextScheduleTimezone =
-        typeof payload.scheduleTimezone === 'string' && payload.scheduleTimezone.trim()
-          ? payload.scheduleTimezone.trim()
-          : null
 
       setItems(nextItems)
       setUpdatedAtMs(nextUpdatedAtMs)
       setWeekId(nextWeekId)
       setWeekStartAtMs(nextWeekStartAtMs)
       setWeekEndAtMs(nextWeekEndAtMs)
-      setFreezeAtMs(nextFreezeAtMs)
-      setDrawAtMs(nextDrawAtMs)
-      setScheduleDayOfWeek(nextScheduleDayOfWeek)
-      setScheduleDrawTime(nextScheduleDrawTime)
-      setScheduleTimezone(nextScheduleTimezone)
       setErrorMessage(null)
     } catch {
       if (!hasCachedSnapshotRef.current) {
@@ -161,7 +136,7 @@ export function useWeeklyTopBuyersRanking() {
       isRefreshingRef.current = false
       setIsLoading(false)
     }
-  }, [getWeeklyRankingCallable])
+  }, [getWeeklyRankingCallable, requestedLimit])
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -187,26 +162,6 @@ export function useWeeklyTopBuyersRanking() {
           typeof payload.weekEndAtMs === 'number' && Number.isFinite(payload.weekEndAtMs)
             ? payload.weekEndAtMs
             : null
-        const nextFreezeAtMs =
-          typeof payload.freezeAtMs === 'number' && Number.isFinite(payload.freezeAtMs)
-            ? payload.freezeAtMs
-            : null
-        const nextDrawAtMs =
-          typeof payload.drawAtMs === 'number' && Number.isFinite(payload.drawAtMs)
-            ? payload.drawAtMs
-            : null
-        const nextScheduleDayOfWeek =
-          Number.isInteger(payload.scheduleDayOfWeek) && Number(payload.scheduleDayOfWeek) >= 0 && Number(payload.scheduleDayOfWeek) <= 6
-            ? Number(payload.scheduleDayOfWeek)
-            : null
-        const nextScheduleDrawTime =
-          typeof payload.scheduleDrawTime === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(payload.scheduleDrawTime)
-            ? payload.scheduleDrawTime
-            : null
-        const nextScheduleTimezone =
-          typeof payload.scheduleTimezone === 'string' && payload.scheduleTimezone.trim()
-            ? payload.scheduleTimezone.trim()
-            : null
 
         hasCachedSnapshotRef.current = true
         setItems(nextItems)
@@ -214,11 +169,6 @@ export function useWeeklyTopBuyersRanking() {
         setWeekId(nextWeekId)
         setWeekStartAtMs(nextWeekStartAtMs)
         setWeekEndAtMs(nextWeekEndAtMs)
-        setFreezeAtMs(nextFreezeAtMs)
-        setDrawAtMs(nextDrawAtMs)
-        setScheduleDayOfWeek(nextScheduleDayOfWeek)
-        setScheduleDrawTime(nextScheduleDrawTime)
-        setScheduleTimezone(nextScheduleTimezone)
         setErrorMessage(null)
         setIsLoading(false)
 
@@ -263,11 +213,6 @@ export function useWeeklyTopBuyersRanking() {
     weekId,
     weekStartAtMs,
     weekEndAtMs,
-    freezeAtMs,
-    drawAtMs,
-    scheduleDayOfWeek,
-    scheduleDrawTime,
-    scheduleTimezone,
     isLoading,
     errorMessage,
   }

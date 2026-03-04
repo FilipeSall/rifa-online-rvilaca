@@ -5,7 +5,7 @@ import {
   CAMPAIGN_PACK_QUANTITIES,
   CAMPAIGN_DOC_ID,
   CAMPAIGN_STATUS_VALUES,
-  DEFAULT_ADDITIONAL_PRIZES,
+  DEFAULT_BONUS_PRIZE_QUANTITY,
   DEFAULT_BONUS_PRIZE,
   DEFAULT_CAMPAIGN_STATUS,
   DEFAULT_CAMPAIGN_TITLE,
@@ -14,7 +14,9 @@ import {
   DEFAULT_SECOND_PRIZE,
   DEFAULT_SUPPORT_WHATSAPP_NUMBER,
   DEFAULT_TOTAL_NUMBERS,
+  DEFAULT_TOP_BUYERS_RANKING_LIMIT,
   MAX_PURCHASE_QUANTITY,
+  type CampaignAdditionalPrize,
   type CampaignStatus,
 } from './constants.js'
 import { readCampaignNumberRange } from './numberStateStore.js'
@@ -31,6 +33,11 @@ import {
   readTopBuyersWeeklySchedule,
   type TopBuyersWeeklySchedule,
 } from './topBuyersSchedule.js'
+import {
+  readCampaignAdditionalPrizes as readCampaignAdditionalPrizeList,
+  readCampaignBonusPrizeConfig,
+  sanitizePrizeQuantity,
+} from './campaignPrizes.js'
 
 type CampaignCouponDiscountType = 'percent' | 'fixed'
 
@@ -86,8 +93,9 @@ interface UpsertCampaignSettingsInput {
   mainPrize?: string
   secondPrize?: string
   bonusPrize?: string
+  bonusPrizeQuantity?: number
   totalNumbers?: number
-  additionalPrizes?: string[]
+  additionalPrizes?: CampaignAdditionalPrize[]
   supportWhatsappNumber?: string
   whatsappContactMessage?: string
   status?: CampaignStatus
@@ -100,6 +108,7 @@ interface UpsertCampaignSettingsInput {
   featuredPromotion?: CampaignFeaturedPromotion | null
   coupons?: CampaignCoupon[]
   midias?: CampaignMidias
+  topBuyersRankingLimit?: number
   topBuyersWeeklySchedule?: TopBuyersWeeklySchedule | null
 }
 
@@ -110,8 +119,9 @@ interface UpsertCampaignSettingsOutput {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  bonusPrizeQuantity: number
   totalNumbers: number
-  additionalPrizes: string[]
+  additionalPrizes: CampaignAdditionalPrize[]
   supportWhatsappNumber: string
   whatsappContactMessage?: string
   status: CampaignStatus
@@ -123,6 +133,7 @@ interface UpsertCampaignSettingsOutput {
   featuredPromotions: CampaignFeaturedPromotion[]
   coupons: CampaignCoupon[]
   midias: CampaignMidias
+  topBuyersRankingLimit: number
   topBuyersWeeklySchedule: TopBuyersWeeklySchedule
 }
 
@@ -226,6 +237,14 @@ function sanitizeCampaignPrize(value: unknown, fieldName: string): string | null
   return normalized.slice(0, 160)
 }
 
+function sanitizeBonusPrizeQuantity(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') {
+    return null
+  }
+
+  return sanitizePrizeQuantity(value, DEFAULT_BONUS_PRIZE_QUANTITY)
+}
+
 function sanitizeTotalNumbers(value: unknown): number | null {
   if (value === undefined || value === null) {
     return null
@@ -239,15 +258,42 @@ function sanitizeTotalNumbers(value: unknown): number | null {
   return parsed
 }
 
-function sanitizeCampaignAdditionalPrizes(value: unknown): string[] | null {
+function sanitizeCampaignAdditionalPrizes(value: unknown): CampaignAdditionalPrize[] | null {
   if (value === undefined) {
     return null
   }
 
   const items = Array.isArray(value) ? value : []
   return items
-    .map((item) => (typeof item === 'string' ? item.trim().slice(0, 160) : ''))
-    .filter((item) => item.length > 0)
+    .map((item) => {
+      if (typeof item === 'string') {
+        const label = item.trim().slice(0, 160)
+        if (!label) {
+          return null
+        }
+
+        return {
+          label,
+          quantity: 1,
+        } satisfies CampaignAdditionalPrize
+      }
+
+      if (!item || typeof item !== 'object') {
+        return null
+      }
+
+      const payload = item as Record<string, unknown>
+      const label = sanitizeString(payload.label).slice(0, 160)
+      if (!label) {
+        return null
+      }
+
+      return {
+        label,
+        quantity: sanitizePrizeQuantity(payload.quantity, 1),
+      } satisfies CampaignAdditionalPrize
+    })
+    .filter((item): item is CampaignAdditionalPrize => Boolean(item))
     .slice(0, 20)
 }
 
@@ -513,6 +559,19 @@ function sanitizeTopBuyersWeeklySchedule(
   return readTopBuyersWeeklySchedule({
     topBuyersWeeklySchedule: payload,
   } as DocumentData)
+}
+
+function sanitizeTopBuyersRankingLimit(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') {
+    return null
+  }
+
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new HttpsError('invalid-argument', 'topBuyersRankingLimit deve ser inteiro maior que zero.')
+  }
+
+  return Math.min(parsed, DEFAULT_TOP_BUYERS_RANKING_LIMIT)
 }
 
 function getDefaultCampaignMidias(): CampaignMidias {
@@ -823,21 +882,19 @@ function readCampaignSecondPrize(data: DocumentData | undefined): string {
 }
 
 function readCampaignBonusPrize(data: DocumentData | undefined): string {
-  const value = sanitizeString(data?.bonusPrize)
-  return value || DEFAULT_BONUS_PRIZE
+  return readCampaignBonusPrizeConfig(data).label || DEFAULT_BONUS_PRIZE
+}
+
+function readCampaignBonusPrizeQuantity(data: DocumentData | undefined): number {
+  return readCampaignBonusPrizeConfig(data).quantity || DEFAULT_BONUS_PRIZE_QUANTITY
 }
 
 function readCampaignTotalNumbers(data: DocumentData | undefined): number {
   return readCampaignNumberRange(data, CAMPAIGN_DOC_ID).total || DEFAULT_TOTAL_NUMBERS
 }
 
-function readCampaignAdditionalPrizes(data: DocumentData | undefined): string[] {
-  const raw = data?.additionalPrizes
-  if (!Array.isArray(raw)) return DEFAULT_ADDITIONAL_PRIZES
-  return raw
-    .map((item) => (typeof item === 'string' ? item.trim().slice(0, 160) : ''))
-    .filter((item) => item.length > 0)
-    .slice(0, 20)
+function readCampaignAdditionalPrizes(data: DocumentData | undefined): CampaignAdditionalPrize[] {
+  return readCampaignAdditionalPrizeList(data)
 }
 
 function readCampaignSupportWhatsappNumber(data: DocumentData | undefined): string {
@@ -857,6 +914,15 @@ function readCampaignStatus(data: DocumentData | undefined): CampaignStatus {
   }
 
   return DEFAULT_CAMPAIGN_STATUS
+}
+
+function readCampaignTopBuyersRankingLimit(data: DocumentData | undefined): number {
+  const parsed = Number(data?.topBuyersRankingLimit)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return DEFAULT_TOP_BUYERS_RANKING_LIMIT
+  }
+
+  return Math.min(parsed, DEFAULT_TOP_BUYERS_RANKING_LIMIT)
 }
 
 function readCampaignDate(data: DocumentData | undefined, fieldName: 'startsAt' | 'endsAt'): string | null {
@@ -915,6 +981,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       const nextMainPrize = sanitizeCampaignPrize(payload.mainPrize, 'mainPrize')
       const nextSecondPrize = sanitizeCampaignPrize(payload.secondPrize, 'secondPrize')
       const nextBonusPrize = sanitizeCampaignPrize(payload.bonusPrize, 'bonusPrize')
+      const nextBonusPrizeQuantity = sanitizeBonusPrizeQuantity(payload.bonusPrizeQuantity)
       const nextTotalNumbers = sanitizeTotalNumbers(payload.totalNumbers)
       const nextAdditionalPrizes = sanitizeCampaignAdditionalPrizes(payload.additionalPrizes)
       const nextSupportWhatsappNumber = sanitizeSupportWhatsappNumber(payload.supportWhatsappNumber)
@@ -936,6 +1003,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
       )
       const nextCoupons = sanitizeCoupons(payload.coupons)
       const nextMidias = sanitizeCampaignMidias(payload.midias)
+      const nextTopBuyersRankingLimit = sanitizeTopBuyersRankingLimit(payload.topBuyersRankingLimit)
       const nextTopBuyersWeeklySchedule = sanitizeTopBuyersWeeklySchedule(payload.topBuyersWeeklySchedule)
 
       const updateData: DocumentData = {
@@ -963,6 +1031,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
 
       if (nextBonusPrize !== null) {
         updateData.bonusPrize = nextBonusPrize
+      }
+
+      if (nextBonusPrizeQuantity !== null) {
+        updateData.bonusPrizeQuantity = nextBonusPrizeQuantity
       }
 
       if (nextTotalNumbers !== null) {
@@ -1017,6 +1089,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         updateData.midias = nextMidias
       }
 
+      if (nextTopBuyersRankingLimit !== null) {
+        updateData.topBuyersRankingLimit = nextTopBuyersRankingLimit
+      }
+
       if (nextTopBuyersWeeklySchedule !== undefined) {
         updateData.topBuyersWeeklySchedule = nextTopBuyersWeeklySchedule
       }
@@ -1057,6 +1133,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
           updateData.bonusPrize = DEFAULT_BONUS_PRIZE
         }
 
+        if (!updateData.bonusPrizeQuantity) {
+          updateData.bonusPrizeQuantity = DEFAULT_BONUS_PRIZE_QUANTITY
+        }
+
         if (!updateData.totalNumbers) {
           updateData.totalNumbers = DEFAULT_TOTAL_NUMBERS
         }
@@ -1089,6 +1169,10 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
           updateData.topBuyersWeeklySchedule = buildDefaultTopBuyersWeeklySchedule()
         }
 
+        if (!updateData.topBuyersRankingLimit) {
+          updateData.topBuyersRankingLimit = DEFAULT_TOP_BUYERS_RANKING_LIMIT
+        }
+
         updateData.createdAt = FieldValue.serverTimestamp()
       } else if (
         nextTitle === null &&
@@ -1096,6 +1180,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         nextMainPrize === null &&
         nextSecondPrize === null &&
         nextBonusPrize === null &&
+        nextBonusPrizeQuantity === null &&
         nextTotalNumbers === null &&
         nextAdditionalPrizes === null &&
         nextSupportWhatsappNumber === null &&
@@ -1108,6 +1193,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         nextFeaturedPromotions === undefined &&
         nextCoupons === null &&
         nextMidias === null &&
+        nextTopBuyersRankingLimit === null &&
         nextTopBuyersWeeklySchedule === undefined
       ) {
         throw new HttpsError('invalid-argument', 'Nenhum dado valido para atualizar campanha.')
@@ -1123,6 +1209,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         hasNewMidias: nextMidias !== null,
         nextHeroCarouselCount: nextMidias ? nextMidias.heroCarousel.length : null,
         hasFeaturedVideo: Boolean(nextMidias?.featuredVideo?.url),
+        hasTopBuyersRankingLimit: nextTopBuyersRankingLimit !== null,
         hasTopBuyersWeeklySchedule: nextTopBuyersWeeklySchedule !== undefined,
       })
 
@@ -1139,6 +1226,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         mainPrize: readCampaignMainPrize(campaignData),
         secondPrize: readCampaignSecondPrize(campaignData),
         bonusPrize: readCampaignBonusPrize(campaignData),
+        bonusPrizeQuantity: readCampaignBonusPrizeQuantity(campaignData),
         totalNumbers: readCampaignTotalNumbers(campaignData),
         additionalPrizes: readCampaignAdditionalPrizes(campaignData),
         supportWhatsappNumber: readCampaignSupportWhatsappNumber(campaignData),
@@ -1152,6 +1240,7 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
         featuredPromotions: readCampaignFeaturedPromotions(campaignData),
         coupons: readCampaignCoupons(campaignData),
         midias: readCampaignMidias(campaignData),
+        topBuyersRankingLimit: readCampaignTopBuyersRankingLimit(campaignData),
         topBuyersWeeklySchedule: readTopBuyersWeeklySchedule(campaignData),
       } satisfies UpsertCampaignSettingsOutput
 

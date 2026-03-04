@@ -20,11 +20,17 @@ export const DEFAULT_CAMPAIGN_TITLE = 'Sorteio BMW R1200 GS'
 export const DEFAULT_PRICE_PER_COTA = 0.15
 export const DEFAULT_MAIN_PRIZE = 'BMW R1200 GS 2015/2016'
 export const DEFAULT_SECOND_PRIZE = 'Honda CG Start 160 2026/2026'
-export const DEFAULT_BONUS_PRIZE = '20 PIX de R$ 1.000'
+export const DEFAULT_BONUS_PRIZE = 'PIX de R$ 1.000'
+export const DEFAULT_BONUS_PRIZE_QUANTITY = 20
 export const DEFAULT_TOTAL_NUMBERS = 3_450_000
-export const DEFAULT_ADDITIONAL_PRIZES: string[] = []
+export type CampaignAdditionalPrize = {
+  label: string
+  quantity: number
+}
+export const DEFAULT_ADDITIONAL_PRIZES: CampaignAdditionalPrize[] = []
 export const DEFAULT_SUPPORT_WHATSAPP_NUMBER = '+55 62 8507-4477'
 export const DEFAULT_CAMPAIGN_STATUS = 'active'
+export const DEFAULT_TOP_BUYERS_RANKING_LIMIT = 50
 export const CAMPAIGN_PACK_QUANTITIES = [20, 50, 100, 250, 350, 500, 750, 1000] as const
 export const CAMPAIGN_STATUS_VALUES = ['active', 'scheduled', 'paused', 'finished'] as const
 export type CampaignStatus = (typeof CAMPAIGN_STATUS_VALUES)[number]

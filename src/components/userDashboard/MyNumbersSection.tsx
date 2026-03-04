@@ -1,6 +1,7 @@
 import { TICKET_FILTERS } from '../../const/userDashboard'
 import type { TicketFilter, UserTicket } from '../../types/userDashboard'
 import { TicketStatusBadge } from './StatusBadges'
+import { formatPrizeLabelWithQuantity } from '../../utils/campaignPrizes'
 
 type MyNumbersSectionProps = {
   ticketFilter: TicketFilter
@@ -10,6 +11,7 @@ type MyNumbersSectionProps = {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  bonusPrizeQuantity: number
   hasWins: boolean
   latestWinDate: string | null
   latestWinPrize: string | null
@@ -26,6 +28,7 @@ export default function MyNumbersSection({
   mainPrize,
   secondPrize,
   bonusPrize,
+  bonusPrizeQuantity,
   hasWins,
   latestWinDate,
   latestWinPrize,
@@ -114,7 +117,7 @@ export default function MyNumbersSection({
             🏍 {secondPrize}
           </span>
           <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-medium text-emerald-400">
-            💸 {bonusPrize}
+            💸 {formatPrizeLabelWithQuantity(bonusPrize, bonusPrizeQuantity)}
           </span>
         </div>
       </div>

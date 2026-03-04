@@ -24,6 +24,11 @@ export type CampaignFeaturedPromotion = {
   label: string
 }
 
+export type CampaignAdditionalPrize = {
+  label: string
+  quantity: number
+}
+
 export type CampaignHeroCarouselMedia = {
   id: string
   url: string
@@ -61,8 +66,9 @@ export type CampaignSettings = {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  bonusPrizeQuantity: number
   totalNumbers: number
-  additionalPrizes: string[]
+  additionalPrizes: CampaignAdditionalPrize[]
   supportWhatsappNumber: string
   whatsappContactMessage?: string
   status: CampaignStatus
@@ -74,6 +80,7 @@ export type CampaignSettings = {
   featuredPromotions: CampaignFeaturedPromotion[]
   coupons: CampaignCoupon[]
   midias: CampaignMidias
+  topBuyersRankingLimit: number
   topBuyersWeeklySchedule: TopBuyersWeeklySchedule
 }
 
@@ -83,8 +90,9 @@ export type UpsertCampaignSettingsInput = {
   mainPrize?: string
   secondPrize?: string
   bonusPrize?: string
+  bonusPrizeQuantity?: number
   totalNumbers?: number
-  additionalPrizes?: string[]
+  additionalPrizes?: CampaignAdditionalPrize[]
   supportWhatsappNumber?: string
   whatsappContactMessage?: string
   status?: CampaignStatus
@@ -96,6 +104,7 @@ export type UpsertCampaignSettingsInput = {
   featuredPromotions?: CampaignFeaturedPromotion[] | null
   coupons?: CampaignCoupon[]
   midias?: CampaignMidias
+  topBuyersRankingLimit?: number
   topBuyersWeeklySchedule?: TopBuyersWeeklySchedule | null
 }
 
@@ -106,8 +115,9 @@ export type UpsertCampaignSettingsOutput = {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  bonusPrizeQuantity: number
   totalNumbers: number
-  additionalPrizes: string[]
+  additionalPrizes: CampaignAdditionalPrize[]
   supportWhatsappNumber: string
   whatsappContactMessage?: string
   status: CampaignStatus
@@ -117,7 +127,9 @@ export type UpsertCampaignSettingsOutput = {
   endsAtTime: string | null
   packPrices: CampaignPackPrice[]
   featuredPromotions: CampaignFeaturedPromotion[]
+  featuredPromotion?: CampaignFeaturedPromotion | null
   coupons: CampaignCoupon[]
   midias: CampaignMidias
+  topBuyersRankingLimit: number
   topBuyersWeeklySchedule: TopBuyersWeeklySchedule
 }

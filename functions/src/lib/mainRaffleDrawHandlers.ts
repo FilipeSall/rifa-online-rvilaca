@@ -1,8 +1,9 @@
 import { FieldValue, type DocumentData, type Firestore, type Transaction } from 'firebase-admin/firestore'
 import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
-import { CAMPAIGN_DOC_ID, DEFAULT_MAIN_PRIZE } from './constants.js'
+import { CAMPAIGN_DOC_ID } from './constants.js'
 import { getCampaignDocCached, invalidateCampaignDocCache } from './campaignDocCache.js'
+import { buildMainRaffleDrawPrizeValues } from './campaignPrizes.js'
 import {
   buildChunkBoundsForNumber,
   getChunkNumberView,
@@ -139,28 +140,7 @@ function sanitizeExtractionIndex(value: unknown): number {
 }
 
 function buildAvailableDrawPrizes(campaignData: DocumentData | undefined): string[] {
-  const mainPrize = sanitizeString(campaignData?.mainPrize) || DEFAULT_MAIN_PRIZE
-  const secondPrize = sanitizeString(campaignData?.secondPrize)
-  const bonusPrize = sanitizeString(campaignData?.bonusPrize)
-
-  const directPrizes = [mainPrize, secondPrize].filter(Boolean)
-  const expandedPixPrizes: string[] = []
-
-  const pixMatch = bonusPrize.match(/^\s*(\d+)\s*pix\b/i)
-  if (bonusPrize && pixMatch) {
-    const totalPix = Number(pixMatch[1])
-    if (Number.isInteger(totalPix) && totalPix > 1 && totalPix <= 100) {
-      for (let index = 1; index <= totalPix; index += 1) {
-        expandedPixPrizes.push(`${bonusPrize} (Cota PIX ${index})`)
-      }
-    } else {
-      expandedPixPrizes.push(bonusPrize)
-    }
-  } else if (bonusPrize) {
-    expandedPixPrizes.push(bonusPrize)
-  }
-
-  return Array.from(new Set([...directPrizes, ...expandedPixPrizes]))
+  return buildMainRaffleDrawPrizeValues(campaignData)
 }
 
 function sanitizeDrawPrize(value: unknown, allowedPrizes: string[]): string {

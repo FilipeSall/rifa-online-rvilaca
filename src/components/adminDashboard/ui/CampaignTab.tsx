@@ -4,9 +4,11 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import {
   CAMPAIGN_PACK_QUANTITIES,
+  DEFAULT_TOP_BUYERS_RANKING_LIMIT,
   TOP_BUYERS_SCHEDULE_TIMEZONE,
   TOP_BUYERS_WEEKDAY_OPTIONS,
   DEFAULT_BONUS_PRIZE,
+  DEFAULT_BONUS_PRIZE_QUANTITY,
   DEFAULT_CAMPAIGN_TITLE,
   DEFAULT_MAIN_PRIZE,
   DEFAULT_SECOND_PRIZE,
@@ -38,6 +40,7 @@ import {
   resolveNextDrawAtMs,
   resolveWeekIdFromDrawAtMs,
 } from '../../../utils/topBuyersSchedule'
+import { formatPrizeLabelWithQuantity } from '../../../utils/campaignPrizes'
 
 type RefreshWeeklyTopBuyersRankingCacheOutput = {
   updatedAtMs?: number
@@ -144,6 +147,7 @@ export default function CampaignTab() {
     mainPrize,
     secondPrize,
     bonusPrize,
+    bonusPrizeQuantityInput,
     totalNumbersInput,
     additionalPrizes,
     supportWhatsappNumber,
@@ -159,11 +163,13 @@ export default function CampaignTab() {
     topBuyersDrawDayOfWeek,
     topBuyersDrawTime,
     topBuyersSkipWeekId,
+    topBuyersRankingLimitInput,
     setTitle,
     setPricePerCotaInput,
     setMainPrize,
     setSecondPrize,
     setBonusPrize,
+    setBonusPrizeQuantityInput,
     setTotalNumbersInput,
     setAdditionalPrizes,
     setSupportWhatsappNumber,
@@ -178,6 +184,7 @@ export default function CampaignTab() {
     setTopBuyersDrawDayOfWeek,
     setTopBuyersDrawTime,
     setTopBuyersSkipWeekId,
+    setTopBuyersRankingLimitInput,
     handleSaveCampaignSettings,
     persistCoupons,
     persistMidias,
@@ -199,7 +206,7 @@ export default function CampaignTab() {
   const [isRefreshingWeeklyRanking, setIsRefreshingWeeklyRanking] = useState(false)
   const [shouldHighlightScheduleInputs, setShouldHighlightScheduleInputs] = useState(false)
   const refreshWeeklyRankingCallable = useMemo(
-    () => httpsCallable<{ allowFallbackToAnyDraw?: boolean, forceRebuild?: boolean }, unknown>(
+    () => httpsCallable<{ forceRebuild?: boolean }, unknown>(
       functions,
       'refreshWeeklyTopBuyersRankingCache',
     ),
@@ -250,6 +257,7 @@ export default function CampaignTab() {
       mainPrize,
       secondPrize,
       bonusPrize,
+      bonusPrizeQuantityInput,
       totalNumbersInput,
       additionalPrizes,
       supportWhatsappNumber,
@@ -265,10 +273,12 @@ export default function CampaignTab() {
       topBuyersDrawDayOfWeek,
       topBuyersDrawTime,
       topBuyersSkipWeekId,
+      topBuyersRankingLimitInput,
     }).payload
   ), [
     additionalPrizes,
     bonusPrize,
+    bonusPrizeQuantityInput,
     coupons,
     endsAt,
     mainPrize,
@@ -283,6 +293,7 @@ export default function CampaignTab() {
     topBuyersDrawDayOfWeek,
     topBuyersDrawTime,
     topBuyersSkipWeekId,
+    topBuyersRankingLimitInput,
     whatsappContactMessage,
     title,
     totalNumbersInput,
@@ -295,6 +306,7 @@ export default function CampaignTab() {
       mainPrize: campaign.mainPrize,
       secondPrize: campaign.secondPrize,
       bonusPrize: campaign.bonusPrize,
+      bonusPrizeQuantityInput: String(campaign.bonusPrizeQuantity),
       totalNumbersInput: String(campaign.totalNumbers),
       additionalPrizes: campaign.additionalPrizes,
       supportWhatsappNumber: campaign.supportWhatsappNumber,
@@ -310,10 +322,12 @@ export default function CampaignTab() {
       topBuyersDrawDayOfWeek: campaign.topBuyersWeeklySchedule.dayOfWeek,
       topBuyersDrawTime: campaign.topBuyersWeeklySchedule.drawTime,
       topBuyersSkipWeekId: campaign.topBuyersWeeklySchedule.skipWeekId ?? '',
+      topBuyersRankingLimitInput: String(campaign.topBuyersRankingLimit),
     }).payload
   ), [
     campaign.additionalPrizes,
     campaign.bonusPrize,
+    campaign.bonusPrizeQuantity,
     campaign.coupons,
     campaign.endsAt,
     campaign.mainPrize,
@@ -328,6 +342,7 @@ export default function CampaignTab() {
     campaign.topBuyersWeeklySchedule.dayOfWeek,
     campaign.topBuyersWeeklySchedule.drawTime,
     campaign.topBuyersWeeklySchedule.skipWeekId,
+    campaign.topBuyersRankingLimit,
     campaign.whatsappContactMessage,
     campaign.title,
     campaign.totalNumbers,
@@ -583,7 +598,10 @@ export default function CampaignTab() {
 
   const handleAddPromotion = () => {
     setFeaturedPromotions((current) => {
-      const maxTarget = current.reduce((max, item) => Math.max(max, item.targetQuantity || 0), defaultPromotionQuantity)
+      const maxTarget = current.reduce<number>(
+        (max, item) => Math.max(max, item.targetQuantity || 0),
+        Number(defaultPromotionQuantity),
+      )
       return [
         ...current,
         {
@@ -1036,7 +1054,7 @@ export default function CampaignTab() {
                 {isRefreshingWeeklyRanking ? 'Atualizando ranking...' : 'Atualizar ranking semanal (manual)'}
               </button>
               <p className="mt-2 text-xs text-cyan-100/80">
-                Forca o recalculo do Top 50 da semana atual (domingo a sexta) e atualiza o cache publico.
+                Forca o recalculo imediato do ranking Top Buyers do ciclo atual e atualiza o cache publico.
               </p>
             </div>
           </div>
@@ -1090,12 +1108,17 @@ export default function CampaignTab() {
                 </div>
                 <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 px-4 py-3">
                   <p className="text-[10px] uppercase tracking-[0.15em] text-emerald-300">Prêmio extra</p>
-                  <p className="mt-1 text-sm font-semibold text-white">{bonusPrize.trim() || DEFAULT_BONUS_PRIZE}</p>
+                  <p className="mt-1 text-sm font-semibold text-white">
+                    {formatPrizeLabelWithQuantity(
+                      bonusPrize.trim() || DEFAULT_BONUS_PRIZE,
+                      Number(bonusPrizeQuantityInput) || DEFAULT_BONUS_PRIZE_QUANTITY,
+                    )}
+                  </p>
                 </div>
                 {additionalPrizes.map((prize, index) => (
                   <div key={index} className="rounded-xl border border-purple-400/20 bg-purple-500/5 px-4 py-3">
                     <p className="text-[10px] uppercase tracking-[0.15em] text-purple-300">Prêmio adicional {index + 1}</p>
-                    <p className="mt-1 text-sm font-semibold text-white">{prize}</p>
+                    <p className="mt-1 text-sm font-semibold text-white">{formatPrizeLabelWithQuantity(prize.label, prize.quantity)}</p>
                   </div>
                 ))}
               </div>
@@ -1406,6 +1429,23 @@ export default function CampaignTab() {
 
                 <div className="rounded-xl border border-cyan-300/25 bg-cyan-500/10 px-4 py-3">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100">Agendamento do Sorteio Top (Semanal)</p>
+                  <div className="mt-3 rounded-lg border border-cyan-200/30 bg-black/25 px-3 py-3">
+                    <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-top-buyers-ranking-limit">
+                      Limite do ranking Top Buyers
+                    </label>
+                    <input
+                      id="campaign-top-buyers-ranking-limit"
+                      className="mt-2 h-11 w-full rounded-md border border-cyan-200/30 bg-black/25 px-3 text-sm font-semibold text-cyan-50 outline-none transition-colors focus:border-cyan-200/80"
+                      inputMode="numeric"
+                      placeholder={String(DEFAULT_TOP_BUYERS_RANKING_LIMIT)}
+                      type="text"
+                      value={topBuyersRankingLimitInput}
+                      onChange={(event) => setTopBuyersRankingLimitInput(event.target.value.replace(/\D/g, ''))}
+                    />
+                    <p className="mt-2 text-[11px] text-cyan-100/75">
+                      Valor padrão: {DEFAULT_TOP_BUYERS_RANKING_LIMIT}. Este limite é usado no ranking público e no sorteio TOP.
+                    </p>
+                  </div>
                   <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div>
                       <label className="text-[10px] uppercase tracking-[0.16em] text-cyan-100" htmlFor="campaign-top-buyers-weekday">
@@ -1540,13 +1580,24 @@ export default function CampaignTab() {
                   <label className="text-[10px] uppercase tracking-[0.16em] text-emerald-300" htmlFor="campaign-bonus-prize">
                     Premio extra
                   </label>
-                  <input
-                    id="campaign-bonus-prize"
-                    className="mt-2 h-11 w-full rounded-md border border-emerald-300/25 bg-black/30 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-emerald-300/60"
-                    type="text"
-                    value={bonusPrize}
-                    onChange={(event) => setBonusPrize(event.target.value)}
-                  />
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_130px]">
+                    <input
+                      id="campaign-bonus-prize"
+                      className="h-11 w-full rounded-md border border-emerald-300/25 bg-black/30 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-emerald-300/60"
+                      type="text"
+                      value={bonusPrize}
+                      onChange={(event) => setBonusPrize(event.target.value)}
+                    />
+                    <input
+                      id="campaign-bonus-prize-quantity"
+                      className="h-11 w-full rounded-md border border-emerald-300/25 bg-black/30 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-emerald-300/60"
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="Qtd."
+                      value={bonusPrizeQuantityInput}
+                      onChange={(event) => setBonusPrizeQuantityInput(event.target.value.replace(/\D/g, ''))}
+                    />
+                  </div>
                 </div>
 
                 <div className="rounded-xl border border-purple-400/20 bg-purple-500/5 px-4 py-3">
@@ -1557,7 +1608,7 @@ export default function CampaignTab() {
                     <button
                       type="button"
                       className="inline-flex h-7 items-center gap-1 rounded-md border border-purple-300/30 bg-purple-500/15 px-2.5 text-[11px] font-bold text-purple-200 transition hover:bg-purple-500/25"
-                      onClick={() => setAdditionalPrizes([...additionalPrizes, ''])}
+                      onClick={() => setAdditionalPrizes([...additionalPrizes, { label: '', quantity: 1 }])}
                     >
                       + Adicionar
                     </button>
@@ -1571,11 +1622,29 @@ export default function CampaignTab() {
                           <input
                             className="h-10 w-full rounded-md border border-purple-300/25 bg-black/30 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-purple-300/60"
                             type="text"
-                            value={prize}
+                            value={prize.label}
                             placeholder="Ex: iPhone 15 Pro, Viagem..."
                             onChange={(event) => {
                               const next = [...additionalPrizes]
-                              next[index] = event.target.value
+                              next[index] = {
+                                ...next[index],
+                                label: event.target.value,
+                              }
+                              setAdditionalPrizes(next)
+                            }}
+                          />
+                          <input
+                            className="h-10 w-24 flex-shrink-0 rounded-md border border-purple-300/25 bg-black/30 px-3 text-sm font-semibold text-white outline-none transition-colors focus:border-purple-300/60"
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="Qtd."
+                            value={String(prize.quantity || 1)}
+                            onChange={(event) => {
+                              const next = [...additionalPrizes]
+                              next[index] = {
+                                ...next[index],
+                                quantity: Number(event.target.value.replace(/\D/g, '')) || 1,
+                              }
                               setAdditionalPrizes(next)
                             }}
                           />

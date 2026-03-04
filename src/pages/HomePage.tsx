@@ -31,11 +31,13 @@ export default function HomePage() {
       mainPrize: purchaseState.campaign.mainPrize,
       secondPrize: purchaseState.campaign.secondPrize,
       bonusPrize: purchaseState.campaign.bonusPrize,
+      bonusPrizeQuantity: purchaseState.campaign.bonusPrizeQuantity,
     })
 
     applyCampaignShareMeta(shareMeta)
   }, [
     purchaseState.campaign.bonusPrize,
+    purchaseState.campaign.bonusPrizeQuantity,
     purchaseState.campaign.mainPrize,
     purchaseState.campaign.secondPrize,
     purchaseState.campaign.title,

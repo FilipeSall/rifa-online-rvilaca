@@ -1,8 +1,6 @@
 import { useMemo, useState } from 'react'
 import { FAQ_ITEMS, type RankingItem } from '../../const/home'
-import { TOP_BUYERS_SCHEDULE_TIMEZONE, TOP_BUYERS_WEEKDAY_OPTIONS } from '../../const/campaign'
-import { useCampaignSettings } from '../../hooks/useCampaignSettings'
-import { normalizeTopBuyersWeeklySchedule, resolveFreezeAtMs, resolveNextDrawAtMs } from '../../utils/topBuyersSchedule'
+import { TOP_BUYERS_SCHEDULE_TIMEZONE } from '../../const/campaign'
 
 function formatDrawDate(drawDate: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(drawDate)) return drawDate || '-'
@@ -11,6 +9,7 @@ function formatDrawDate(drawDate: string) {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }).format(parsed)
 }
 import { useChampionsRanking } from '../../hooks/useChampionsRanking'
+import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 import { useTopBuyersDraw } from '../../hooks/useTopBuyersDraw'
 import { useWeeklyTopBuyersRanking } from '../../hooks/useWeeklyTopBuyersRanking'
 
@@ -69,7 +68,7 @@ function RankingBoard({
   errorMessage,
 }: RankingBoardProps) {
   const hasItems = items.length > 0
-  const visibleItems = items.slice(0, 10)
+  const visibleItems = items
 
   return (
     <article className="bg-luxury-card border border-white/10 rounded-2xl overflow-hidden shadow-2xl relative">
@@ -135,40 +134,26 @@ function RankingBoard({
 }
 
 function RankingSection() {
+  const { campaign } = useCampaignSettings()
   const generalRanking = useChampionsRanking()
   const weeklyRanking = useWeeklyTopBuyersRanking()
   const { result: latestDrawResult } = useTopBuyersDraw()
-  const { campaign } = useCampaignSettings()
-  const topBuyersSchedule = useMemo(
-    () => normalizeTopBuyersWeeklySchedule(campaign.topBuyersWeeklySchedule),
-    [campaign.topBuyersWeeklySchedule],
-  )
-  const topBuyersNextDrawAtMs = useMemo(
-    () => resolveNextDrawAtMs(topBuyersSchedule),
-    [topBuyersSchedule],
-  )
-  const topBuyersNextFreezeAtMs = useMemo(
-    () => resolveFreezeAtMs(topBuyersNextDrawAtMs),
-    [topBuyersNextDrawAtMs],
-  )
-  const topBuyersWeekdayLabel = useMemo(
-    () => TOP_BUYERS_WEEKDAY_OPTIONS.find((item) => item.value === topBuyersSchedule.dayOfWeek)?.label || 'Sexta-feira',
-    [topBuyersSchedule.dayOfWeek],
-  )
+  const weeklyRankingLimit = useMemo(() => {
+    const parsed = Number(campaign.topBuyersRankingLimit)
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      return 50
+    }
+
+    return Math.min(parsed, 50)
+  }, [campaign.topBuyersRankingLimit])
 
   const weeklySubtitle = useMemo(() => {
     if (!weeklyRanking.weekStartAtMs || !weeklyRanking.weekEndAtMs) {
-      return `Congelamento semanal no horario do sorteio (${topBuyersWeekdayLabel} ${topBuyersSchedule.drawTime}, ${TOP_BUYERS_SCHEDULE_TIMEZONE}).`
+      return 'Ranking do ciclo atual com atualização em tempo real.'
     }
 
-    return `Semana ${formatWeekId(weeklyRanking.weekId)} | ${formatDateTime(weeklyRanking.weekStartAtMs)} ate ${formatDateTime(weeklyRanking.weekEndAtMs)}.`
-  }, [
-    topBuyersSchedule.drawTime,
-    topBuyersWeekdayLabel,
-    weeklyRanking.weekEndAtMs,
-    weeklyRanking.weekId,
-    weeklyRanking.weekStartAtMs,
-  ])
+    return `Ciclo ${formatWeekId(weeklyRanking.weekId)} | ${formatDateTime(weeklyRanking.weekStartAtMs)} ate ${formatDateTime(weeklyRanking.weekEndAtMs)}.`
+  }, [weeklyRanking.weekEndAtMs, weeklyRanking.weekId, weeklyRanking.weekStartAtMs])
 
   return (
     <section className="py-20 bg-luxury-bg relative overflow-hidden" id="ganhadores">
@@ -181,7 +166,7 @@ function RankingSection() {
             <h2 className="text-3xl lg:text-4xl font-display font-bold text-white">Ranking Geral + Ranking Semanal</h2>
           </div>
           <p className="text-gray-400 mt-4 max-w-3xl mx-auto">
-            Transparencia total com dois painéis: desempenho histórico da campanha e Top 50 da semana com regras oficiais.
+            Transparencia total com dois painéis: desempenho histórico da campanha e ranking do ciclo atual com regras oficiais.
           </p>
           {latestDrawResult ? (
             <p className="mt-3 text-xs text-amber-200">
@@ -190,10 +175,6 @@ function RankingSection() {
               {formatWinningPosition(latestDrawResult.winningPosition, latestDrawResult.participantCount)}).
             </p>
           ) : null}
-          <p className="mt-2 text-xs text-cyan-100/85">
-            Próximo sorteio Top: <span className="font-bold">{formatDateTime(topBuyersNextDrawAtMs)}</span> | congelamento do ranking:
-            <span className="font-bold"> {formatDateTime(topBuyersNextFreezeAtMs)}</span> ({TOP_BUYERS_SCHEDULE_TIMEZONE}).
-          </p>
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -212,11 +193,11 @@ function RankingSection() {
             accentClassName="bg-gradient-to-r from-emerald-400 via-cyan-300 to-blue-300"
             emptyMessage="Ainda nao ha compras pagas na janela semanal."
             errorMessage={weeklyRanking.errorMessage}
-            footer={`Regra: ranking congela no horario do sorteio semanal (${topBuyersWeekdayLabel} ${topBuyersSchedule.drawTime}), desempate por compra mais antiga.`}
+            footer="Ranking atualizado em tempo real. Desempate por compra mais antiga. O ciclo reinicia após cada publicação do Sorteio Top."
             isLoading={weeklyRanking.isLoading}
             items={weeklyRanking.items}
             subtitle={weeklySubtitle}
-            title="Ranking Semanal (Top 50)"
+            title={`Ranking Semanal (Top ${weeklyRankingLimit})`}
           />
         </div>
       </div>

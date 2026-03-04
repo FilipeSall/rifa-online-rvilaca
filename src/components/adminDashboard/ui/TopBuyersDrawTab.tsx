@@ -4,6 +4,9 @@ import { CustomSelect } from '../../ui/CustomSelect'
 import { useCampaignSettings } from '../../../hooks/useCampaignSettings'
 import { useTopBuyersDraw } from '../../../hooks/useTopBuyersDraw'
 import { pickComparableWinnerTicketNumber } from '../../../utils/topBuyersWinner'
+import { buildTopBuyersPrizeOptions } from '../../../utils/campaignPrizes'
+
+const EMPTY_EXTRACTION_INPUTS = ['', '', '', '', '']
 
 function normalizeExtractionInput(value: string) {
   return value.replace(/\D/g, '').slice(0, 6)
@@ -129,28 +132,6 @@ function formatLoteriaInputs(extractionNumbers: string[]) {
     .join(' | ')
 }
 
-function buildPrizeOptions(secondPrize: string, bonusPrize: string) {
-  const directPrizes = [secondPrize.trim()].filter(Boolean)
-  const normalizedBonus = bonusPrize.trim()
-  const pixOptions: string[] = []
-  const pixMatch = normalizedBonus.match(/^\s*(\d+)\s*pix\b/i)
-
-  if (normalizedBonus && pixMatch) {
-    const totalPix = Number(pixMatch[1])
-    if (Number.isInteger(totalPix) && totalPix > 1 && totalPix <= 100) {
-      for (let index = 1; index <= totalPix; index += 1) {
-        pixOptions.push(`${normalizedBonus} (Cota PIX ${index})`)
-      }
-    } else {
-      pixOptions.push(normalizedBonus)
-    }
-  } else if (normalizedBonus) {
-    pixOptions.push(normalizedBonus)
-  }
-
-  return Array.from(new Set([...directPrizes, ...pixOptions]))
-}
-
 function parseErrorMessage(error: unknown) {
   if (error && typeof error === 'object' && 'message' in error) {
     const message = String((error as { message?: unknown }).message || '').trim()
@@ -177,11 +158,10 @@ export default function TopBuyersDrawTab() {
     loadMoreHistory,
   } = useTopBuyersDraw(false, 'admin')
   const { campaign } = useCampaignSettings()
-  const [rankingLimitInput, setRankingLimitInput] = useState('50')
-  const [extractionInputs, setExtractionInputs] = useState<string[]>(['', '', '', '', ''])
+  const [extractionInputs, setExtractionInputs] = useState<string[]>([...EMPTY_EXTRACTION_INPUTS])
   const availablePrizeOptions = useMemo(
-    () => buildPrizeOptions(campaign.secondPrize, campaign.bonusPrize),
-    [campaign.bonusPrize, campaign.secondPrize],
+    () => buildTopBuyersPrizeOptions(campaign),
+    [campaign],
   )
   const usedDrawPrizes = useMemo(
     () => new Set(history.map((item) => item.drawPrize).filter(Boolean)),
@@ -190,12 +170,12 @@ export default function TopBuyersDrawTab() {
   const prizeSelectOptions = useMemo(
     () =>
       availablePrizeOptions.map((item) => {
-        const isUsed = usedDrawPrizes.has(item)
+        const isUsed = usedDrawPrizes.has(item.value)
         return {
-          value: item,
+          value: item.value,
           label: isUsed
-            ? `${item} (já sorteado)`
-            : item,
+            ? `${item.label} (já sorteado)`
+            : item.label,
           disabled: isUsed,
         }
       }),
@@ -204,12 +184,12 @@ export default function TopBuyersDrawTab() {
   const [drawPrizeInput, setDrawPrizeInput] = useState('')
 
   const rankingLimit = useMemo(() => {
-    const parsed = Number(rankingLimitInput)
+    const parsed = Number(campaign.topBuyersRankingLimit)
     if (!Number.isInteger(parsed) || parsed <= 0) {
       return 50
     }
-    return parsed
-  }, [rankingLimitInput])
+    return Math.min(parsed, 50)
+  }, [campaign.topBuyersRankingLimit])
 
   const ensureDrawPrizeInput = useMemo(() => {
     const selectableOptions = prizeSelectOptions.filter((option) => !option.disabled)
@@ -260,7 +240,7 @@ export default function TopBuyersDrawTab() {
 
   const handlePublish = async () => {
     if (!hasEligibleDrawPrizeOptions) {
-      toast.warning('Configure o segundo prêmio ou bônus PIX da campanha para liberar o Sorteio Top Buyers.', {
+      toast.warning('Configure o segundo prêmio, prêmio extra ou prêmios adicionais para liberar o Sorteio Top Buyers.', {
         toastId: 'top-buyers-draw-no-eligible-prize',
       })
       return
@@ -290,6 +270,7 @@ export default function TopBuyersDrawTab() {
           toastId: 'top-buyers-draw-published',
         },
       )
+      setExtractionInputs([...EMPTY_EXTRACTION_INPUTS])
     } catch (error) {
       toast.error(parseErrorMessage(error), {
         toastId: 'top-buyers-draw-publish-error',
@@ -373,7 +354,7 @@ export default function TopBuyersDrawTab() {
               />
               {!hasEligibleDrawPrizeOptions ? (
                 <p className="mt-2 text-xs text-amber-200">
-                  Configuração pendente: defina `secondPrize` ou `bonusPrize` na campanha para publicar o sorteio.
+                  Configuração pendente: defina `secondPrize`, `bonusPrize` ou `additionalPrizes` na campanha para publicar o sorteio.
                 </p>
               ) : null}
             </div>
@@ -388,9 +369,13 @@ export default function TopBuyersDrawTab() {
                 inputMode="numeric"
                 placeholder="50"
                 type="text"
-                value={rankingLimitInput}
-                onChange={(event) => setRankingLimitInput(event.target.value.replace(/\D/g, ''))}
+                value={String(rankingLimit)}
+                disabled
+                readOnly
               />
+              <p className="mt-2 text-xs text-gray-400">
+                Definido nas configurações da campanha.
+              </p>
             </div>
 
             <div className="rounded-xl border border-amber-300/20 bg-amber-500/5 px-4 py-3">

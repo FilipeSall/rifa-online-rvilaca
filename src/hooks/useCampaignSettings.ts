@@ -8,6 +8,7 @@ import {
     buildDefaultCampaignPackPrices,
     DEFAULT_ADDITIONAL_PRIZES,
     DEFAULT_BONUS_PRIZE,
+    DEFAULT_BONUS_PRIZE_QUANTITY,
     DEFAULT_CAMPAIGN_STATUS,
     DEFAULT_CAMPAIGN_TITLE,
     DEFAULT_CAMPAIGN_FEATURED_PROMOTIONS,
@@ -17,11 +18,16 @@ import {
     DEFAULT_TICKET_PRICE,
     DEFAULT_TOP_BUYERS_DRAW_DAY_OF_WEEK,
     DEFAULT_TOP_BUYERS_DRAW_TIME,
+    DEFAULT_TOP_BUYERS_RANKING_LIMIT,
     DEFAULT_TOTAL_NUMBERS,
 } from '../const/campaign'
 import { MAX_QUANTITY } from '../const/purchaseNumbers'
 import { clearPublicCampaignDeadlineCache } from './usePublicCampaignDeadline'
 import { db, functions } from '../lib/firebase'
+import {
+    normalizeAdditionalPrizesFromRaw,
+    normalizeBonusPrizeFromRaw,
+} from '../utils/campaignPrizes'
 import type {
     CampaignFeaturedVideoMedia,
     CampaignFeaturedPromotion,
@@ -148,6 +154,15 @@ function sanitizeTopBuyersWeeklySchedule(value: unknown): TopBuyersWeeklySchedul
         timezone: 'America/Sao_Paulo',
         skipWeekId,
     }
+}
+
+function sanitizeTopBuyersRankingLimit(value: unknown) {
+    const parsed = Number(value)
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+        return DEFAULT_TOP_BUYERS_RANKING_LIMIT
+    }
+
+    return Math.min(parsed, DEFAULT_TOP_BUYERS_RANKING_LIMIT)
 }
 
 function sanitizeSupportWhatsappNumber(value: unknown) {
@@ -549,6 +564,7 @@ function sanitizeCampaignMidias(value: unknown): CampaignMidias {
 function mapSnapshotToSettings(raw: unknown): CampaignSettings {
     const payload = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
     const pricePerCota = sanitizePricePerCota(payload.pricePerCota)
+    const bonusPrizeConfig = normalizeBonusPrizeFromRaw(payload.bonusPrize, payload.bonusPrizeQuantity)
 
     const packPrices = sanitizeCampaignPackPrices(payload.packPrices, pricePerCota)
     return {
@@ -557,11 +573,10 @@ function mapSnapshotToSettings(raw: unknown): CampaignSettings {
         pricePerCota,
         mainPrize: sanitizePrizeText(payload.mainPrize, DEFAULT_MAIN_PRIZE),
         secondPrize: sanitizePrizeText(payload.secondPrize, DEFAULT_SECOND_PRIZE),
-        bonusPrize: sanitizePrizeText(payload.bonusPrize, DEFAULT_BONUS_PRIZE),
+        bonusPrize: bonusPrizeConfig.label,
+        bonusPrizeQuantity: bonusPrizeConfig.quantity,
         totalNumbers: sanitizeTotalNumbers(payload.totalNumbers ?? payload.totalCotas),
-        additionalPrizes: Array.isArray(payload.additionalPrizes)
-            ? payload.additionalPrizes.map((p) => (typeof p === 'string' ? p.trim() : '')).filter(Boolean)
-            : DEFAULT_ADDITIONAL_PRIZES,
+        additionalPrizes: normalizeAdditionalPrizesFromRaw(payload.additionalPrizes),
         supportWhatsappNumber: sanitizeSupportWhatsappNumber(payload.supportWhatsappNumber),
         whatsappContactMessage: typeof payload.whatsappContactMessage === 'string' ? payload.whatsappContactMessage.trim().slice(0, 500) : undefined,
         status: sanitizeCampaignStatus(payload.status),
@@ -573,6 +588,7 @@ function mapSnapshotToSettings(raw: unknown): CampaignSettings {
         featuredPromotions: sanitizeCampaignFeaturedPromotions(payload.featuredPromotions, payload.featuredPromotion),
         coupons: sanitizeCoupons(payload.coupons),
         midias: sanitizeCampaignMidias(payload.midias ?? payload.media),
+        topBuyersRankingLimit: sanitizeTopBuyersRankingLimit(payload.topBuyersRankingLimit),
         topBuyersWeeklySchedule: sanitizeTopBuyersWeeklySchedule(payload.topBuyersWeeklySchedule),
     }
 }
@@ -585,6 +601,7 @@ function createDefaultCampaignSettings(): CampaignSettings {
         mainPrize: DEFAULT_MAIN_PRIZE,
         secondPrize: DEFAULT_SECOND_PRIZE,
         bonusPrize: DEFAULT_BONUS_PRIZE,
+        bonusPrizeQuantity: DEFAULT_BONUS_PRIZE_QUANTITY,
         totalNumbers: DEFAULT_TOTAL_NUMBERS,
         additionalPrizes: DEFAULT_ADDITIONAL_PRIZES,
         supportWhatsappNumber: DEFAULT_SUPPORT_WHATSAPP_NUMBER,
@@ -598,6 +615,7 @@ function createDefaultCampaignSettings(): CampaignSettings {
         featuredPromotions: DEFAULT_CAMPAIGN_FEATURED_PROMOTIONS.map((item) => ({ ...item })),
         coupons: [],
         midias: getDefaultCampaignMidias(),
+        topBuyersRankingLimit: DEFAULT_TOP_BUYERS_RANKING_LIMIT,
         topBuyersWeeklySchedule: sanitizeTopBuyersWeeklySchedule(undefined),
     }
 }
@@ -646,6 +664,7 @@ export function useCampaignSettings() {
                 const payload = unwrapCallableData(response.data as CallableEnvelope<UpsertCampaignSettingsOutput>)
                 const pricePerCota = sanitizePricePerCota(payload.pricePerCota)
                 const packPrices = sanitizeCampaignPackPrices(payload.packPrices, pricePerCota)
+                const bonusPrizeConfig = normalizeBonusPrizeFromRaw(payload.bonusPrize, payload.bonusPrizeQuantity)
 
                 setCampaign({
                     id: payload.campaignId,
@@ -653,11 +672,10 @@ export function useCampaignSettings() {
                     pricePerCota,
                     mainPrize: sanitizePrizeText(payload.mainPrize, DEFAULT_MAIN_PRIZE),
                     secondPrize: sanitizePrizeText(payload.secondPrize, DEFAULT_SECOND_PRIZE),
-                    bonusPrize: sanitizePrizeText(payload.bonusPrize, DEFAULT_BONUS_PRIZE),
+                    bonusPrize: bonusPrizeConfig.label,
+                    bonusPrizeQuantity: bonusPrizeConfig.quantity,
                     totalNumbers: sanitizeTotalNumbers(payload.totalNumbers),
-                    additionalPrizes: Array.isArray(payload.additionalPrizes)
-                        ? payload.additionalPrizes.map((p) => (typeof p === 'string' ? p.trim() : '')).filter(Boolean)
-                        : DEFAULT_ADDITIONAL_PRIZES,
+                    additionalPrizes: normalizeAdditionalPrizesFromRaw(payload.additionalPrizes),
                     supportWhatsappNumber: sanitizeSupportWhatsappNumber(payload.supportWhatsappNumber),
                     whatsappContactMessage: typeof payload.whatsappContactMessage === 'string'
                         ? payload.whatsappContactMessage.trim().slice(0, 500)
@@ -671,6 +689,7 @@ export function useCampaignSettings() {
                     featuredPromotions: sanitizeCampaignFeaturedPromotions(payload.featuredPromotions, payload.featuredPromotion),
                     coupons: sanitizeCoupons(payload.coupons),
                     midias: sanitizeCampaignMidias(payload.midias),
+                    topBuyersRankingLimit: sanitizeTopBuyersRankingLimit(payload.topBuyersRankingLimit),
                     topBuyersWeeklySchedule: sanitizeTopBuyersWeeklySchedule(payload.topBuyersWeeklySchedule),
                 })
                 setExists(true)
@@ -696,6 +715,7 @@ export function useCampaignSettings() {
                 mainPrize: DEFAULT_MAIN_PRIZE,
                 secondPrize: DEFAULT_SECOND_PRIZE,
                 bonusPrize: DEFAULT_BONUS_PRIZE,
+                bonusPrizeQuantity: DEFAULT_BONUS_PRIZE_QUANTITY,
                 totalNumbers: DEFAULT_TOTAL_NUMBERS,
                 additionalPrizes: DEFAULT_ADDITIONAL_PRIZES,
                 supportWhatsappNumber: DEFAULT_SUPPORT_WHATSAPP_NUMBER,
@@ -709,6 +729,7 @@ export function useCampaignSettings() {
                 featuredPromotions: DEFAULT_CAMPAIGN_FEATURED_PROMOTIONS.map((item) => ({ ...item })),
                 coupons: [],
                 midias: getDefaultCampaignMidias(),
+                topBuyersRankingLimit: DEFAULT_TOP_BUYERS_RANKING_LIMIT,
                 topBuyersWeeklySchedule: sanitizeTopBuyersWeeklySchedule(undefined),
             }),
         [saveCampaignSettings],

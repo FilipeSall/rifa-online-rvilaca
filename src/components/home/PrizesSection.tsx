@@ -1,6 +1,7 @@
 import { PRIZES, type PrizeCardData } from '../../const/home'
 import { DEFAULT_BONUS_PRIZE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../const/campaign'
 import { useCampaignSettings } from '../../hooks/useCampaignSettings'
+import { formatPrizeLabelWithQuantity } from '../../utils/campaignPrizes'
 
 function PrizeCard({ badge, badgeClassName, title, description, imageSrc, imageAlt, icon }: PrizeCardData) {
   return (
@@ -46,7 +47,10 @@ export default function PrizesSection() {
     }
 
     if (index === 2) {
-      return { ...prize, title: campaign.bonusPrize || DEFAULT_BONUS_PRIZE }
+      return {
+        ...prize,
+        title: formatPrizeLabelWithQuantity(campaign.bonusPrize || DEFAULT_BONUS_PRIZE, campaign.bonusPrizeQuantity),
+      }
     }
 
     return prize

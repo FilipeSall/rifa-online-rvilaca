@@ -1,8 +1,11 @@
+import { formatPrizeLabelWithQuantity } from './campaignPrizes'
+
 type ShareMetaInput = {
   campaignTitle?: string | null
   mainPrize?: string | null
   secondPrize?: string | null
   bonusPrize?: string | null
+  bonusPrizeQuantity?: number | null
 }
 
 type ShareMetaPayload = {
@@ -13,7 +16,7 @@ type ShareMetaPayload = {
 const FALLBACK_CAMPAIGN_TITLE = 'Sorteio JhonyBarber'
 const FALLBACK_MAIN_PRIZE = 'BMW R1200 GS 2015/2016'
 const FALLBACK_SECOND_PRIZE = 'Honda CG Start 160 2026/2026'
-const FALLBACK_BONUS_PRIZE = '20 PIX de R$ 1.000'
+const FALLBACK_BONUS_PRIZE = 'PIX de R$ 1.000'
 
 function sanitizeText(value: string | null | undefined, fallback: string) {
   if (typeof value !== 'string') {
@@ -28,7 +31,10 @@ export function buildCampaignShareMeta(input: ShareMetaInput): ShareMetaPayload 
   const campaignTitle = sanitizeText(input.campaignTitle, FALLBACK_CAMPAIGN_TITLE)
   const mainPrize = sanitizeText(input.mainPrize, FALLBACK_MAIN_PRIZE)
   const secondPrize = sanitizeText(input.secondPrize, FALLBACK_SECOND_PRIZE)
-  const bonusPrize = sanitizeText(input.bonusPrize, FALLBACK_BONUS_PRIZE)
+  const bonusPrize = formatPrizeLabelWithQuantity(
+    sanitizeText(input.bonusPrize, FALLBACK_BONUS_PRIZE),
+    Number(input.bonusPrizeQuantity) || 1,
+  )
 
   const title = `Concorra a ${mainPrize}, ${secondPrize} e ${bonusPrize} | JhonyBarber`
   const description = `Participe da ${campaignTitle} e concorra a ${mainPrize}, ${secondPrize} e ${bonusPrize}.`

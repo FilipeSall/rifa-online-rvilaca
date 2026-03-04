@@ -467,6 +467,7 @@ export function useUserDashboard() {
     mainPrize: campaign.mainPrize,
     secondPrize: campaign.secondPrize,
     bonusPrize: campaign.bonusPrize,
+    bonusPrizeQuantity: campaign.bonusPrizeQuantity,
     supportWhatsappNumber: campaign.supportWhatsappNumber,
     winningSummary,
     nextDrawDateLabel,

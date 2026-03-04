@@ -3,6 +3,7 @@ import { toast } from 'react-toastify'
 import {
   DEFAULT_ADDITIONAL_PRIZES,
   DEFAULT_BONUS_PRIZE,
+  DEFAULT_BONUS_PRIZE_QUANTITY,
   DEFAULT_CAMPAIGN_TITLE,
   DEFAULT_MAIN_PRIZE,
   DEFAULT_SECOND_PRIZE,
@@ -10,11 +11,13 @@ import {
   DEFAULT_TICKET_PRICE,
   DEFAULT_TOP_BUYERS_DRAW_DAY_OF_WEEK,
   DEFAULT_TOP_BUYERS_DRAW_TIME,
+  DEFAULT_TOP_BUYERS_RANKING_LIMIT,
   DEFAULT_TOTAL_NUMBERS,
   buildDefaultCampaignPackPrices,
 } from '../../../const/campaign'
 import { useCampaignSettings } from '../../../hooks/useCampaignSettings'
 import type {
+  CampaignAdditionalPrize,
   CampaignCoupon,
   CampaignFeaturedPromotion,
   CampaignMidias,
@@ -36,8 +39,9 @@ export function useCampaignForm() {
   const [mainPrize, setMainPrize] = useState(DEFAULT_MAIN_PRIZE)
   const [secondPrize, setSecondPrize] = useState(DEFAULT_SECOND_PRIZE)
   const [bonusPrize, setBonusPrize] = useState(DEFAULT_BONUS_PRIZE)
+  const [bonusPrizeQuantityInput, setBonusPrizeQuantityInput] = useState(String(DEFAULT_BONUS_PRIZE_QUANTITY))
   const [totalNumbersInput, setTotalNumbersInput] = useState(String(DEFAULT_TOTAL_NUMBERS))
-  const [additionalPrizes, setAdditionalPrizes] = useState<string[]>(DEFAULT_ADDITIONAL_PRIZES)
+  const [additionalPrizes, setAdditionalPrizes] = useState<CampaignAdditionalPrize[]>(DEFAULT_ADDITIONAL_PRIZES)
   const [supportWhatsappNumber, setSupportWhatsappNumber] = useState(DEFAULT_SUPPORT_WHATSAPP_NUMBER)
   const [whatsappContactMessage, setWhatsappContactMessage] = useState('')
   const [startsAt, setStartsAt] = useState('')
@@ -51,6 +55,7 @@ export function useCampaignForm() {
   const [topBuyersDrawDayOfWeek, setTopBuyersDrawDayOfWeek] = useState<number>(DEFAULT_TOP_BUYERS_DRAW_DAY_OF_WEEK)
   const [topBuyersDrawTime, setTopBuyersDrawTime] = useState<string>(DEFAULT_TOP_BUYERS_DRAW_TIME)
   const [topBuyersSkipWeekId, setTopBuyersSkipWeekId] = useState<string>('')
+  const [topBuyersRankingLimitInput, setTopBuyersRankingLimitInput] = useState<string>(String(DEFAULT_TOP_BUYERS_RANKING_LIMIT))
   const hasEnsuredCampaignRef = useRef(false)
 
   useEffect(() => {
@@ -59,6 +64,7 @@ export function useCampaignForm() {
     setMainPrize(campaign.mainPrize)
     setSecondPrize(campaign.secondPrize)
     setBonusPrize(campaign.bonusPrize)
+    setBonusPrizeQuantityInput(String(campaign.bonusPrizeQuantity))
     setTotalNumbersInput(String(campaign.totalNumbers))
     setAdditionalPrizes(campaign.additionalPrizes)
     setSupportWhatsappNumber(campaign.supportWhatsappNumber)
@@ -74,9 +80,11 @@ export function useCampaignForm() {
     setTopBuyersDrawDayOfWeek(campaign.topBuyersWeeklySchedule.dayOfWeek)
     setTopBuyersDrawTime(campaign.topBuyersWeeklySchedule.drawTime)
     setTopBuyersSkipWeekId(campaign.topBuyersWeeklySchedule.skipWeekId ?? '')
+    setTopBuyersRankingLimitInput(String(campaign.topBuyersRankingLimit))
   }, [
     campaign.additionalPrizes,
     campaign.bonusPrize,
+    campaign.bonusPrizeQuantity,
     campaign.coupons,
     campaign.midias,
     campaign.mainPrize,
@@ -94,6 +102,7 @@ export function useCampaignForm() {
     campaign.topBuyersWeeklySchedule.dayOfWeek,
     campaign.topBuyersWeeklySchedule.drawTime,
     campaign.topBuyersWeeklySchedule.skipWeekId,
+    campaign.topBuyersRankingLimit,
     campaign.title,
   ])
 
@@ -117,6 +126,7 @@ export function useCampaignForm() {
       mainPrize,
       secondPrize,
       bonusPrize,
+      bonusPrizeQuantityInput,
       totalNumbersInput,
       additionalPrizes,
       supportWhatsappNumber,
@@ -132,6 +142,7 @@ export function useCampaignForm() {
       topBuyersDrawDayOfWeek,
       topBuyersDrawTime,
       topBuyersSkipWeekId,
+      topBuyersRankingLimitInput,
     })
 
     if (errorMessage || !payload) {
@@ -154,6 +165,7 @@ export function useCampaignForm() {
   }, [
     additionalPrizes,
     bonusPrize,
+    bonusPrizeQuantityInput,
     coupons,
     endsAt,
     mainPrize,
@@ -173,6 +185,7 @@ export function useCampaignForm() {
     topBuyersDrawDayOfWeek,
     topBuyersDrawTime,
     topBuyersSkipWeekId,
+    topBuyersRankingLimitInput,
   ])
 
   const persistCoupons = useCallback(
@@ -183,6 +196,7 @@ export function useCampaignForm() {
         mainPrize,
         secondPrize,
         bonusPrize,
+        bonusPrizeQuantityInput,
         totalNumbersInput,
         additionalPrizes,
         supportWhatsappNumber,
@@ -198,6 +212,7 @@ export function useCampaignForm() {
         topBuyersDrawDayOfWeek,
         topBuyersDrawTime,
         topBuyersSkipWeekId,
+        topBuyersRankingLimitInput,
       })
 
       if (errorMessage || !payload) {
@@ -223,6 +238,7 @@ export function useCampaignForm() {
     [
       additionalPrizes,
       bonusPrize,
+      bonusPrizeQuantityInput,
       endsAt,
       mainPrize,
       pricePerCotaInput,
@@ -241,6 +257,7 @@ export function useCampaignForm() {
       topBuyersDrawDayOfWeek,
       topBuyersDrawTime,
       topBuyersSkipWeekId,
+      topBuyersRankingLimitInput,
     ],
   )
 
@@ -252,6 +269,7 @@ export function useCampaignForm() {
         mainPrize,
         secondPrize,
         bonusPrize,
+        bonusPrizeQuantityInput,
         totalNumbersInput,
         additionalPrizes,
         supportWhatsappNumber,
@@ -267,6 +285,7 @@ export function useCampaignForm() {
         topBuyersDrawDayOfWeek,
         topBuyersDrawTime,
         topBuyersSkipWeekId,
+        topBuyersRankingLimitInput,
       })
 
       if (errorMessage || !payload) {
@@ -292,6 +311,7 @@ export function useCampaignForm() {
     [
       additionalPrizes,
       bonusPrize,
+      bonusPrizeQuantityInput,
       coupons,
       endsAt,
       mainPrize,
@@ -310,6 +330,7 @@ export function useCampaignForm() {
       topBuyersDrawDayOfWeek,
       topBuyersDrawTime,
       topBuyersSkipWeekId,
+      topBuyersRankingLimitInput,
     ],
   )
 
@@ -322,6 +343,7 @@ export function useCampaignForm() {
     mainPrize,
     secondPrize,
     bonusPrize,
+    bonusPrizeQuantityInput,
     totalNumbersInput,
     additionalPrizes,
     supportWhatsappNumber,
@@ -339,6 +361,7 @@ export function useCampaignForm() {
     setMainPrize,
     setSecondPrize,
     setBonusPrize,
+    setBonusPrizeQuantityInput,
     setTotalNumbersInput,
     setAdditionalPrizes,
     setSupportWhatsappNumber,
@@ -354,9 +377,11 @@ export function useCampaignForm() {
     topBuyersDrawDayOfWeek,
     topBuyersDrawTime,
     topBuyersSkipWeekId,
+    topBuyersRankingLimitInput,
     setTopBuyersDrawDayOfWeek,
     setTopBuyersDrawTime,
     setTopBuyersSkipWeekId,
+    setTopBuyersRankingLimitInput,
     handleSaveCampaignSettings,
     persistCoupons,
     persistMidias,

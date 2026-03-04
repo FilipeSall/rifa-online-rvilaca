@@ -1,19 +1,21 @@
 import { FieldPath, FieldValue, Timestamp, type DocumentData, type Firestore } from 'firebase-admin/firestore'
 import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
-import { CAMPAIGN_DOC_ID, DEFAULT_BONUS_PRIZE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from './constants.js'
+import { CAMPAIGN_DOC_ID, DEFAULT_MAIN_PRIZE, DEFAULT_TOP_BUYERS_RANKING_LIMIT } from './constants.js'
 import { getCampaignDocCached, invalidateCampaignDocCache } from './campaignDocCache.js'
 import { asRecord, readString, readTimestampMillis, requireActiveUid, sanitizeString } from './shared.js'
 import { pickTopBuyersWinningTicketNumber } from './topBuyersWinner.js'
-import { readTopBuyersWeeklySchedule, resolveCurrentCycleWindow } from './topBuyersSchedule.js'
+import { buildTopBuyersDrawPrizeValues } from './campaignPrizes.js'
+import {
+  resolveCurrentTopBuyersRankingWindow,
+  syncWeeklyTopBuyersRankingFromLatestDraw,
+} from './rankingHandlers.js'
 
 const TOP_BUYERS_DRAW_HISTORY_COLLECTION = 'topBuyersDrawResults'
-const DEFAULT_RANKING_LIMIT = 50
 const DEFAULT_PUBLIC_HISTORY_LIMIT = 30
 const DEFAULT_ADMIN_HISTORY_LIMIT = 50
 const MAX_PUBLIC_HISTORY_LIMIT = 50
 const MAX_ADMIN_HISTORY_LIMIT = 100
-const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
 const EXTRACTION_COUNT = 5
 const EXTRACTION_DIGITS = 6
 const MAX_EXTRACTION_VALUE = 999999
@@ -158,14 +160,13 @@ type RankingBuildOutput = {
   winnerTicketNumbersByUser: Map<string, string[]>
 }
 
-function sanitizeRankingLimit(value: unknown): number {
-  const parsed = Number(value)
-
+function readTopBuyersRankingLimitFromCampaign(campaignData: DocumentData | undefined): number {
+  const parsed = Number(campaignData?.topBuyersRankingLimit)
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    return DEFAULT_RANKING_LIMIT
+    return DEFAULT_TOP_BUYERS_RANKING_LIMIT
   }
 
-  return parsed
+  return Math.min(parsed, DEFAULT_TOP_BUYERS_RANKING_LIMIT)
 }
 
 function sanitizeHistoryLimit(value: unknown, max: number, fallback: number): number {
@@ -570,44 +571,6 @@ async function readWinnerTicketNumbersFromOrders(
     .slice(0, 300)
 }
 
-function toBrazilLocalDate(sourceMs: number) {
-  return new Date(sourceMs + BRAZIL_OFFSET_MS)
-}
-
-function toUtcFromBrazilLocal(sourceMs: number) {
-  return sourceMs - BRAZIL_OFFSET_MS
-}
-
-function formatBrazilDateId(sourceMs: number) {
-  const localDate = toBrazilLocalDate(sourceMs)
-  const year = localDate.getUTCFullYear()
-  const month = String(localDate.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(localDate.getUTCDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function getWeeklyRankingWindow(nowMs = Date.now()): RankingWindow {
-  const localNow = toBrazilLocalDate(nowMs)
-  const localDayOfWeek = localNow.getUTCDay()
-  const localStartOfDayMs = Date.UTC(
-    localNow.getUTCFullYear(),
-    localNow.getUTCMonth(),
-    localNow.getUTCDate(),
-    0,
-    0,
-    0,
-    0,
-  )
-  const localWeekStartMs = localStartOfDayMs - (localDayOfWeek * 24 * 60 * 60 * 1000)
-  const localWeekEndMs = localWeekStartMs + (5 * 24 * 60 * 60 * 1000) + (24 * 60 * 60 * 1000 - 1)
-
-  return {
-    weekId: formatBrazilDateId(toUtcFromBrazilLocal(localWeekStartMs)),
-    startMs: toUtcFromBrazilLocal(localWeekStartMs),
-    endMs: toUtcFromBrazilLocal(localWeekEndMs),
-  }
-}
-
 function getComparisonDigits(participantCount: number) {
   if (participantCount <= 1000) {
     return 3
@@ -625,29 +588,7 @@ function getComparisonDigits(participantCount: number) {
 }
 
 function buildAvailableDrawPrizes(campaignData: DocumentData | undefined): string[] {
-  // Mantem consistencia com o front/campaignHandlers: se faltarem campos na campanha,
-  // usamos os defaults para evitar divergencia de validacao no sorteio Top Buyers.
-  const secondPrize = sanitizeString(campaignData?.secondPrize) || DEFAULT_SECOND_PRIZE
-  const bonusPrize = sanitizeString(campaignData?.bonusPrize) || DEFAULT_BONUS_PRIZE
-
-  const directPrizes = [secondPrize].filter(Boolean)
-  const expandedPixPrizes: string[] = []
-
-  const pixMatch = bonusPrize.match(/^\s*(\d+)\s*pix\b/i)
-  if (bonusPrize && pixMatch) {
-    const totalPix = Number(pixMatch[1])
-    if (Number.isInteger(totalPix) && totalPix > 1 && totalPix <= 100) {
-      for (let index = 1; index <= totalPix; index += 1) {
-        expandedPixPrizes.push(`${bonusPrize} (Cota PIX ${index})`)
-      }
-    } else {
-      expandedPixPrizes.push(bonusPrize)
-    }
-  } else if (bonusPrize) {
-    expandedPixPrizes.push(bonusPrize)
-  }
-
-  return Array.from(new Set([...directPrizes, ...expandedPixPrizes]))
+  return buildTopBuyersDrawPrizeValues(campaignData)
 }
 
 function sanitizeDrawPrize(value: unknown, allowedPrizes: string[], blockedPrizes: string[] = []): string {
@@ -997,39 +938,24 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
 
     const payload = asRecord(request.data) as PublishTopBuyersDrawInput
     const extractionNumbers = sanitizeExtractionNumbers(payload.extractionNumbers)
-    const rankingLimit = sanitizeRankingLimit(payload.rankingLimit)
     const requestedDrawPrize = sanitizeString(payload.drawPrize)
     const requestedDrawPrizeKey = normalizeDrawPrizeKey(requestedDrawPrize)
 
     const campaignData = await getCampaignDocCached(db, CAMPAIGN_DOC_ID, { forceRefresh: true })
+    const configuredRankingLimit = readTopBuyersRankingLimitFromCampaign(campaignData)
+    const rankingLimit = configuredRankingLimit
     const nowMs = Date.now()
-    const topBuyersSchedule = readTopBuyersWeeklySchedule(campaignData)
-    const cycleWindow = resolveCurrentCycleWindow(topBuyersSchedule, nowMs)
-    const rankingWindow = {
-      weekId: cycleWindow.weekId,
-      startMs: cycleWindow.windowStartAtMs,
-      endMs: cycleWindow.windowEndAtMs,
-    }
-    if (topBuyersSchedule.skipWeekId && topBuyersSchedule.skipWeekId === cycleWindow.weekId) {
-      throw new HttpsError(
-        'failed-precondition',
-        'Este sorteio semanal foi marcado para ser pulado. Desmarque a opcao no painel administrativo para publicar.',
-      )
-    }
-    if (nowMs < cycleWindow.freezeAtMs) {
-      throw new HttpsError(
-        'failed-precondition',
-        'O ranking semanal ainda nao foi congelado para este sorteio. Aguarde o horario do sorteio.',
-      )
-    }
+    const rankingWindow = await resolveCurrentTopBuyersRankingWindow(db, nowMs)
+    const drawDate = rankingWindow.weekId
 
     logger.info('publishTopBuyersDraw:start', {
       campaignId: CAMPAIGN_DOC_ID,
       uid,
       rankingLimit,
       weekId: rankingWindow.weekId,
-      freezeAtMs: cycleWindow.freezeAtMs,
-      drawAtMs: cycleWindow.drawAtMs,
+      rankingWindowStartAtMs: rankingWindow.startMs,
+      rankingWindowEndAtMs: rankingWindow.endMs,
+      previousCycleEndAtMs: rankingWindow.previousCycleEndAtMs,
       extractionNumbersCount: extractionNumbers.length,
       requestedDrawPrize: requestedDrawPrize || null,
       requestedDrawPrizeKey: requestedDrawPrizeKey || null,
@@ -1103,7 +1029,6 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
         'Este premio ja foi sorteado em uma rodada anterior e nao pode ser reutilizado.',
       )
     }
-    const drawDate = formatBrazilDateId(cycleWindow.drawAtMs)
 
     try {
       const rankingBuild = await buildRankingSnapshot(db, rankingLimit, rankingWindow)
@@ -1196,6 +1121,19 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
 
       await batch.commit()
       invalidateCampaignDocCache(CAMPAIGN_DOC_ID)
+      try {
+        await syncWeeklyTopBuyersRankingFromLatestDraw(db, {
+          targetWeekId: result.weekId,
+        })
+      } catch (syncError) {
+        logger.warn('publishTopBuyersDraw:weekly-ranking-sync-failed', {
+          campaignId: CAMPAIGN_DOC_ID,
+          uid,
+          drawId: result.drawId,
+          weekId: result.weekId,
+          error: String(syncError),
+        })
+      }
 
       return result
     } catch (error) {

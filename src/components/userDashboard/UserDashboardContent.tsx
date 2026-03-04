@@ -51,6 +51,7 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
     mainPrize,
     secondPrize,
     bonusPrize,
+    bonusPrizeQuantity,
     winningSummary,
     nextDrawDateLabel,
     displayName,
@@ -145,6 +146,7 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
                 mainPrize={mainPrize}
                 secondPrize={secondPrize}
                 bonusPrize={bonusPrize}
+                bonusPrizeQuantity={bonusPrizeQuantity}
                 hasWins={winningSummary.hasWins}
                 latestWinDate={winningSummary.latestWin?.drawDate || null}
                 latestWinPrize={winningSummary.latestWin?.drawPrize || null}

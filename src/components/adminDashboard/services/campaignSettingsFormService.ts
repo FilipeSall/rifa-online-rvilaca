@@ -2,8 +2,10 @@ import {
   CAMPAIGN_PACK_QUANTITIES,
   DEFAULT_TOP_BUYERS_DRAW_DAY_OF_WEEK,
   DEFAULT_TOP_BUYERS_DRAW_TIME,
+  DEFAULT_TOP_BUYERS_RANKING_LIMIT,
   DEFAULT_ADDITIONAL_PRIZES,
   DEFAULT_BONUS_PRIZE,
+  DEFAULT_BONUS_PRIZE_QUANTITY,
   DEFAULT_CAMPAIGN_TITLE,
   DEFAULT_MAIN_PRIZE,
   DEFAULT_SECOND_PRIZE,
@@ -13,6 +15,7 @@ import {
 } from '../../../const/campaign'
 import { MAX_QUANTITY } from '../../../const/purchaseNumbers'
 import type {
+  CampaignAdditionalPrize,
   CampaignFeaturedPromotion,
   CampaignFeaturedVideoMedia,
   CampaignCoupon,
@@ -24,6 +27,7 @@ import type {
   UpsertCampaignSettingsInput,
 } from '../../../types/campaign'
 import { parseCampaignDateTime, resolveCampaignScheduleStatus } from '../../../utils/campaignSchedule'
+import { sanitizePrizeQuantity } from '../../../utils/campaignPrizes'
 
 export type CampaignFormState = {
   title: string
@@ -31,8 +35,9 @@ export type CampaignFormState = {
   mainPrize: string
   secondPrize: string
   bonusPrize: string
+  bonusPrizeQuantityInput: string
   totalNumbersInput: string
-  additionalPrizes: string[]
+  additionalPrizes: CampaignAdditionalPrize[]
   supportWhatsappNumber: string
   whatsappContactMessage: string
   startsAt: string
@@ -46,6 +51,7 @@ export type CampaignFormState = {
   topBuyersDrawDayOfWeek: number
   topBuyersDrawTime: string
   topBuyersSkipWeekId: string
+  topBuyersRankingLimitInput: string
 }
 
 type CampaignValidationResult = {
@@ -272,15 +278,33 @@ function sanitizeTopBuyersWeeklySchedule(params: {
   }
 }
 
+function sanitizeTopBuyersRankingLimit(value: unknown): number {
+  const parsed = Number(
+    typeof value === 'string'
+      ? value.replace(/\D/g, '')
+      : value,
+  )
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return DEFAULT_TOP_BUYERS_RANKING_LIMIT
+  }
+
+  return Math.min(parsed, DEFAULT_TOP_BUYERS_RANKING_LIMIT)
+}
+
 export function buildCampaignSettingsInput(formState: CampaignFormState): CampaignValidationResult {
   const normalizedTitle = formState.title.trim() || DEFAULT_CAMPAIGN_TITLE
   const normalizedMainPrize = formState.mainPrize.trim() || DEFAULT_MAIN_PRIZE
   const normalizedSecondPrize = formState.secondPrize.trim() || DEFAULT_SECOND_PRIZE
   const normalizedBonusPrize = formState.bonusPrize.trim() || DEFAULT_BONUS_PRIZE
+  const normalizedBonusPrizeQuantity = sanitizePrizeQuantity(formState.bonusPrizeQuantityInput, DEFAULT_BONUS_PRIZE_QUANTITY)
   const normalizedTotalNumbers = Number(formState.totalNumbersInput.replace(/[^0-9]/g, ''))
   const normalizedAdditionalPrizes = formState.additionalPrizes
-    .map((p) => p.trim())
-    .filter(Boolean)
+    .map((item) => ({
+      label: item.label.trim().slice(0, 160),
+      quantity: sanitizePrizeQuantity(item.quantity, 1),
+    }))
+    .filter((item) => item.label.length > 0)
     .slice(0, 20) ?? DEFAULT_ADDITIONAL_PRIZES
   const normalizedSupportWhatsappNumber = formState.supportWhatsappNumber.trim() || DEFAULT_SUPPORT_WHATSAPP_NUMBER
   const normalizedWhatsappContactMessage = formState.whatsappContactMessage.trim().slice(0, 500) || undefined
@@ -353,6 +377,7 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
   }
 
   const normalizedFeaturedPromotions = sanitizeFeaturedPromotions(formState.featuredPromotions)
+  const normalizedTopBuyersRankingLimit = sanitizeTopBuyersRankingLimit(formState.topBuyersRankingLimitInput)
   const normalizedTopBuyersWeeklySchedule = sanitizeTopBuyersWeeklySchedule({
     dayOfWeek: formState.topBuyersDrawDayOfWeek,
     drawTime: formState.topBuyersDrawTime,
@@ -368,6 +393,7 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
       mainPrize: normalizedMainPrize,
       secondPrize: normalizedSecondPrize,
       bonusPrize: normalizedBonusPrize,
+      bonusPrizeQuantity: normalizedBonusPrizeQuantity,
       totalNumbers: Math.max(1, normalizedTotalNumbers || DEFAULT_TOTAL_NUMBERS),
       additionalPrizes: normalizedAdditionalPrizes,
       supportWhatsappNumber: normalizedSupportWhatsappNumber,
@@ -383,6 +409,7 @@ export function buildCampaignSettingsInput(formState: CampaignFormState): Campai
       featuredPromotions: normalizedFeaturedPromotions,
       coupons: formState.coupons,
       midias: sanitizeCampaignMidias(formState.midias),
+      topBuyersRankingLimit: normalizedTopBuyersRankingLimit,
       topBuyersWeeklySchedule: normalizedTopBuyersWeeklySchedule,
     },
   }

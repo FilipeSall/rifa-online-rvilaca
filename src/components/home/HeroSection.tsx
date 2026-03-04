@@ -4,6 +4,7 @@ import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 import { DEFAULT_BONUS_PRIZE, DEFAULT_CAMPAIGN_TITLE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../const/campaign'
 import { calculateCampaignPricing } from '../../utils/campaignPricing'
 import { formatCurrency } from '../../utils/purchaseNumbers'
+import { formatPrizeLabelWithQuantity } from '../../utils/campaignPrizes'
 import type { CampaignFeaturedPromotion } from '../../types/campaign'
 import Skeleton from 'react-loading-skeleton'
 import { Swiper, SwiperSlide } from 'swiper/react'
@@ -38,7 +39,7 @@ export default function HeroSection({
   const campaignTitle = campaign.title || DEFAULT_CAMPAIGN_TITLE
   const mainPrize = campaign.mainPrize || DEFAULT_MAIN_PRIZE
   const secondPrize = campaign.secondPrize || DEFAULT_SECOND_PRIZE
-  const bonusPrize = campaign.bonusPrize || DEFAULT_BONUS_PRIZE
+  const bonusPrize = formatPrizeLabelWithQuantity(campaign.bonusPrize || DEFAULT_BONUS_PRIZE, campaign.bonusPrizeQuantity)
 
   const campaignTitleParts = campaignTitle.trim().split(/\s+/).filter(Boolean)
 
