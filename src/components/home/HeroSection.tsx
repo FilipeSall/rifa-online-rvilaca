@@ -93,35 +93,26 @@ export default function HeroSection({
       .map((pack) => pack.quantity),
     [campaign.packPrices],
   )
-  const discountPackQuantities = useMemo(() => {
-    if (activeFeaturedPromotions.length === 0) {
-      return []
-    }
-
-    return campaign.packPrices
-      .filter((pack) => pack.active)
-      .filter((pack) => {
-        const pricing = calculateCampaignPricing(pack.quantity, {
-          pricePerCota: campaign.pricePerCota,
-          packPrices: campaign.packPrices,
-          featuredPromotions: activeFeaturedPromotions,
-        })
-        return pricing.promotionDiscount > 0
-      })
-      .map((pack) => pack.quantity)
-  }, [activeFeaturedPromotions, campaign.packPrices, campaign.pricePerCota])
-  const discountTooltipByPack = useMemo(() => {
-    if (activeFeaturedPromotions.length === 0) {
-      return {} as Record<number, string>
-    }
-
-    return heroQuickQuantityPacks.reduce<Record<number, string>>((accumulator, pack) => {
-      const pricing = calculateCampaignPricing(pack, {
+  const heroPackPricingByQuantity = useMemo(
+    () => heroQuickQuantityPacks.reduce<Record<number, ReturnType<typeof calculateCampaignPricing>>>((accumulator, pack) => {
+      accumulator[pack] = calculateCampaignPricing(pack, {
         pricePerCota: campaign.pricePerCota,
         packPrices: campaign.packPrices,
         featuredPromotions: activeFeaturedPromotions,
       })
-      if (pricing.promotionDiscount <= 0) {
+      return accumulator
+    }, {}),
+    [
+      activeFeaturedPromotions,
+      campaign.packPrices,
+      campaign.pricePerCota,
+      heroQuickQuantityPacks,
+    ],
+  )
+  const discountTooltipByPack = useMemo(() => {
+    return heroQuickQuantityPacks.reduce<Record<number, string>>((accumulator, pack) => {
+      const pricing = heroPackPricingByQuantity[pack]
+      if (!pricing || pricing.promotionDiscount <= 0) {
         return accumulator
       }
 
@@ -137,10 +128,8 @@ export default function HeroSection({
       return accumulator
     }, {})
   }, [
-    activeFeaturedPromotions,
-    campaign.packPrices,
-    campaign.pricePerCota,
     heroQuickQuantityPacks,
+    heroPackPricingByQuantity,
   ])
   const promotionCallout = useMemo(() => {
     if (activeFeaturedPromotions.length === 0) {
@@ -260,8 +249,11 @@ export default function HeroSection({
 
                 <div className="mt-8 grid grid-cols-2 gap-x-3 gap-y-6 md:grid-cols-4 md:gap-x-4 md:gap-y-7">
                   {heroQuickQuantityPacks.map((pack) => {
+                    const packPricing = heroPackPricingByQuantity[pack]
+                    const hasPricing = Boolean(packPricing)
+                    const hasPromotionDiscount = (packPricing?.promotionDiscount ?? 0) > 0
                     const isMostPurchasedPack = mostPurchasedPackQuantities.includes(pack)
-                    const isDiscountPack = discountPackQuantities.includes(pack)
+                    const isDiscountPack = hasPromotionDiscount
                     const shouldShowBadge = isMostPurchasedPack || isDiscountPack
                     const discountTooltip = discountTooltipByPack[pack]
 
@@ -313,10 +305,26 @@ export default function HeroSection({
                           ) : null}
                           <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgba(255,255,255,0.1),transparent_45%)]" />
                           <div className="relative z-10">
-                            <p className="text-xl font-black tracking-tight">+{pack}</p>
-                            <p className={`mt-0.5 text-[10px] uppercase tracking-[0.18em] ${quantity === pack ? 'text-neon-pink/85' : 'text-gray-400'}`}>
-                              Numeros
-                            </p>
+                            {hasPricing ? (
+                              <>
+                                {hasPromotionDiscount ? (
+                                  <p className={`text-[11px] font-semibold tracking-tight line-through decoration-1 ${quantity === pack ? 'text-neon-pink/70' : 'text-gray-500'}`}>
+                                    {formatCurrency(packPricing.subtotalBase)}
+                                  </p>
+                                ) : null}
+                                <p className="text-xl font-black tracking-tight">{formatCurrency(packPricing.subtotalAfterPromotion)}</p>
+                                <p className={`mt-0.5 text-[10px] tracking-[0.12em] ${quantity === pack ? 'text-neon-pink/85' : 'text-gray-400'}`}>
+                                  {pack} numeros
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-xl font-black tracking-tight">+{pack}</p>
+                                <p className={`mt-0.5 text-[10px] uppercase tracking-[0.18em] ${quantity === pack ? 'text-neon-pink/85' : 'text-gray-400'}`}>
+                                  Numeros
+                                </p>
+                              </>
+                            )}
                           </div>
                         </button>
                       </div>

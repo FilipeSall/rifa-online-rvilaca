@@ -1,8 +1,17 @@
+import { formatCurrency } from '../../utils/purchaseNumbers'
+
+export type PackPricingByQuantity = Record<number, {
+  subtotalBase: number
+  subtotalAfterPromotion: number
+  promotionDiscount: number
+}>
+
 type QuantitySelectionCardProps = {
   quantity: number
   packQuantities: number[]
   mostPurchasedPackQuantities: number[]
   discountPackQuantities: number[]
+  packPricingByQuantity: PackPricingByQuantity
   minQuantity: number
   maxSelectable: number
   onSetQuantity: (value: number) => void
@@ -13,6 +22,7 @@ export default function QuantitySelectionCard({
   packQuantities,
   mostPurchasedPackQuantities,
   discountPackQuantities,
+  packPricingByQuantity,
   minQuantity,
   maxSelectable,
   onSetQuantity,
@@ -45,6 +55,9 @@ export default function QuantitySelectionCard({
             const isMostPurchasedPack = mostPurchasedPackQuantities.includes(pack)
             const isDiscountPack = discountPackQuantities.includes(pack)
             const shouldShowBadge = isMostPurchasedPack || isDiscountPack
+            const packPricing = packPricingByQuantity[pack]
+            const hasPricing = Boolean(packPricing)
+            const hasPromotionDiscount = (packPricing?.promotionDiscount ?? 0) > 0
 
             return (
               <div key={pack} className="group relative">
@@ -82,10 +95,26 @@ export default function QuantitySelectionCard({
                   ) : null}
                   <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgba(255,255,255,0.1),transparent_45%)]" />
                   <div className="relative z-10">
-                    <p className="text-xl font-black tracking-tight">+{pack}</p>
-                    <p className={`mt-0.5 text-[10px] uppercase tracking-[0.18em] ${quantity === pack ? 'text-neon-pink/85' : 'text-gray-400'}`}>
-                      Numeros
-                    </p>
+                    {hasPricing ? (
+                      <>
+                        {hasPromotionDiscount ? (
+                          <p className={`text-[11px] font-semibold tracking-tight line-through decoration-1 ${quantity === pack ? 'text-neon-pink/70' : 'text-gray-500'}`}>
+                            {formatCurrency(packPricing.subtotalBase)}
+                          </p>
+                        ) : null}
+                        <p className="text-xl font-black tracking-tight">{formatCurrency(packPricing.subtotalAfterPromotion)}</p>
+                        <p className={`mt-0.5 text-[10px] tracking-[0.12em] ${quantity === pack ? 'text-neon-pink/85' : 'text-gray-400'}`}>
+                          {pack} numeros
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xl font-black tracking-tight">+{pack}</p>
+                        <p className={`mt-0.5 text-[10px] uppercase tracking-[0.18em] ${quantity === pack ? 'text-neon-pink/85' : 'text-gray-400'}`}>
+                          Numeros
+                        </p>
+                      </>
+                    )}
                   </div>
                 </button>
               </div>

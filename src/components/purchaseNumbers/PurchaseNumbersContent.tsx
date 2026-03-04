@@ -6,7 +6,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { calculateCampaignPricing } from '../../utils/campaignPricing'
 import MobileAuthCard from './MobileAuthCard'
 import NumberSelectionCard from './NumberSelectionCard'
-import QuantitySelectionCard from './QuantitySelectionCard'
+import QuantitySelectionCard, { type PackPricingByQuantity } from './QuantitySelectionCard'
 import PurchaseSummaryCard from './PurchaseSummaryCard'
 
 type PurchaseNumbersContentProps = {
@@ -241,29 +241,36 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
       .map((pack) => pack.quantity),
     [purchaseState.campaign.packPrices],
   )
-  const discountPackQuantities = useMemo(() => {
-    const activePromotions = purchaseState.campaign.featuredPromotions
-      .filter((promotion) => promotion.active && promotion.discountValue > 0)
-    if (activePromotions.length === 0) {
-      return []
-    }
-
-    return purchaseState.campaign.packPrices
-      .filter((pack) => pack.active)
-      .filter((pack) => {
-        const pricing = calculateCampaignPricing(pack.quantity, {
-          pricePerCota: purchaseState.campaign.pricePerCota,
-          packPrices: purchaseState.campaign.packPrices,
-          featuredPromotions: activePromotions,
-        })
-        return pricing.promotionDiscount > 0
+  const activeFeaturedPromotions = useMemo(
+    () => purchaseState.campaign.featuredPromotions
+      .filter((promotion) => promotion.active && promotion.discountValue > 0),
+    [purchaseState.campaign.featuredPromotions],
+  )
+  const packPricingByQuantity = useMemo<PackPricingByQuantity>(
+    () => availablePackQuantities.reduce<PackPricingByQuantity>((accumulator, pack) => {
+      const pricing = calculateCampaignPricing(pack, {
+        pricePerCota: purchaseState.campaign.pricePerCota,
+        packPrices: purchaseState.campaign.packPrices,
+        featuredPromotions: activeFeaturedPromotions,
       })
-      .map((pack) => pack.quantity)
-  }, [
-    purchaseState.campaign.featuredPromotions,
-    purchaseState.campaign.packPrices,
-    purchaseState.campaign.pricePerCota,
-  ])
+
+      accumulator[pack] = {
+        subtotalBase: pricing.subtotalBase,
+        subtotalAfterPromotion: pricing.subtotalAfterPromotion,
+        promotionDiscount: pricing.promotionDiscount,
+      }
+      return accumulator
+    }, {}),
+    [
+      activeFeaturedPromotions,
+      availablePackQuantities,
+      purchaseState.campaign.packPrices,
+      purchaseState.campaign.pricePerCota,
+    ],
+  )
+  const discountPackQuantities = useMemo(() => {
+    return availablePackQuantities.filter((pack) => (packPricingByQuantity[pack]?.promotionDiscount ?? 0) > 0)
+  }, [availablePackQuantities, packPricingByQuantity])
 
   return (
     <>
@@ -276,6 +283,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
               packQuantities={availablePackQuantities}
               mostPurchasedPackQuantities={mostPurchasedPackQuantities}
               discountPackQuantities={discountPackQuantities}
+              packPricingByQuantity={packPricingByQuantity}
               maxSelectable={maxSelectable}
               onSetQuantity={handleSetQuantity}
             />
