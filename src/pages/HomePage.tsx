@@ -5,6 +5,7 @@ import AnnouncementBar from '../components/home/AnnouncementBar'
 import Footer from '../components/home/Footer'
 import Header from '../components/home/Header'
 import HeroSection from '../components/home/HeroSection'
+import QuickCheckoutAuthModal from '../components/purchaseNumbers/QuickCheckoutAuthModal'
 import PurchaseSummaryCard from '../components/purchaseNumbers/PurchaseSummaryCard'
 import TrustBadgesSection from '../components/home/TrustBadgesSection'
 import WinnersFaqSection from '../components/home/WinnersFaqSection'
@@ -16,7 +17,11 @@ export default function HomePage() {
   useScrollToHash()
   const purchaseState = usePurchaseNumbers()
   const [isCartModalOpen, setIsCartModalOpen] = useState(false)
+  const [isQuickCheckoutAuthModalOpen, setIsQuickCheckoutAuthModalOpen] = useState(false)
   const isProceedingToCheckout = purchaseState.isReserving || purchaseState.isAutoSelecting
+  const shouldOpenQuickCheckoutAuthModal = purchaseState.shouldOpenQuickCheckoutAuthModal
+  const consumeQuickCheckoutAuthModalRequest = purchaseState.consumeQuickCheckoutAuthModalRequest
+  const cancelPendingCheckoutAfterAuth = purchaseState.cancelPendingCheckoutAfterAuth
   const closeCartModal = useCallback(() => {
     if (isProceedingToCheckout) {
       return
@@ -64,6 +69,23 @@ export default function HomePage() {
       document.body.style.overflow = ''
     }
   }, [isCartModalOpen])
+
+  useEffect(() => {
+    if (!shouldOpenQuickCheckoutAuthModal) {
+      return
+    }
+
+    setIsCartModalOpen(false)
+    setIsQuickCheckoutAuthModalOpen(true)
+    consumeQuickCheckoutAuthModalRequest()
+  }, [consumeQuickCheckoutAuthModalRequest, shouldOpenQuickCheckoutAuthModal])
+
+  const handleQuickCheckoutAuthModalClose = useCallback((reason: 'dismiss' | 'login-success' | 'signup-success') => {
+    setIsQuickCheckoutAuthModalOpen(false)
+    if (reason !== 'login-success') {
+      cancelPendingCheckoutAfterAuth()
+    }
+  }, [cancelPendingCheckoutAfterAuth])
 
   const handleHomeSummaryProceed = useCallback(() => {
     void purchaseState.handleProceed()
@@ -151,6 +173,11 @@ export default function HomePage() {
           </div>
         </div>
       ) : null}
+
+      <QuickCheckoutAuthModal
+        isOpen={isQuickCheckoutAuthModalOpen}
+        onClose={handleQuickCheckoutAuthModalClose}
+      />
     </div>
   )
 }

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { toast } from 'react-toastify'
 import { useNavigate } from 'react-router-dom'
-import { OPEN_AUTH_MODAL_EVENT } from '../const/auth'
 import {
   CAMPAIGN_PACK_QUANTITIES,
 } from '../const/campaign'
@@ -364,6 +363,8 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   const [isAutoSelecting, setIsAutoSelecting] = useState(false)
   const [isManualAdding, setIsManualAdding] = useState(false)
   const [isQuickCheckoutPending, setIsQuickCheckoutPending] = useState(false)
+  const [hasPendingCheckoutAfterAuth, setHasPendingCheckoutAfterAuth] = useState(false)
+  const [shouldOpenQuickCheckoutAuthModal, setShouldOpenQuickCheckoutAuthModal] = useState(false)
   const [shouldHighlightSelectedNumbers, setShouldHighlightSelectedNumbers] = useState(false)
   const [shouldHighlightAutoButton, setShouldHighlightAutoButton] = useState(false)
   const [conflictResolution, setConflictResolution] = useState<ConflictResolutionState | null>(null)
@@ -373,7 +374,6 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   const selectedNumbersRef = useRef<number[]>(selectedNumbers)
   selectedNumbersRef.current = selectedNumbers
   const lastReserveAttemptRef = useRef<{ fingerprint: string; atMs: number } | null>(null)
-  const hasPromptedAuthForQuickCheckoutRef = useRef(false)
   const numberWindowRequestRef = useRef(0)
   const numberWindowCacheRef = useRef(new Map<number, { payload: GetNumberChunkWindowResponse; fetchedAt: number }>())
   const numberWindowInFlightRef = useRef(new Map<number, Promise<GetNumberChunkWindowResponse | null>>())
@@ -1447,18 +1447,29 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     setAppliedCouponDiscountValue(validation.discountValue)
   }, [campaign.coupons, couponCode, subtotalAfterPromotion])
 
+  const requestQuickCheckoutAuth = useCallback(() => {
+    setIsQuickCheckoutPending(false)
+    setHasPendingCheckoutAfterAuth(true)
+    setShouldOpenQuickCheckoutAuthModal(true)
+  }, [])
+
+  const consumeQuickCheckoutAuthModalRequest = useCallback(() => {
+    setShouldOpenQuickCheckoutAuthModal(false)
+  }, [])
+
+  const cancelPendingCheckoutAfterAuth = useCallback(() => {
+    setHasPendingCheckoutAfterAuth(false)
+    setIsQuickCheckoutPending(false)
+    setShouldOpenQuickCheckoutAuthModal(false)
+  }, [])
+
   const handleProceed = useCallback(async () => {
     if (!canProceed) {
       return
     }
 
     if (!isLoggedIn) {
-      toast.warning('Voce precisa estar logado para comprar numeros.', {
-        position: 'bottom-right',
-        toastId: 'purchase-login-required',
-      })
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      window.dispatchEvent(new Event(OPEN_AUTH_MODAL_EVENT))
+      requestQuickCheckoutAuth()
       return
     }
 
@@ -1633,6 +1644,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     quantity,
     rangeEnd,
     rangeStart,
+    requestQuickCheckoutAuth,
     requestAvailableNumbers,
     selectionMode,
     selectedNumbers,
@@ -1644,29 +1656,18 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
       setSelectionMode('automatico')
     }
 
+    if (!isLoggedIn) {
+      requestQuickCheckoutAuth()
+      return
+    }
+
     setIsQuickCheckoutPending(true)
-  }, [selectionMode])
+  }, [isLoggedIn, requestQuickCheckoutAuth, selectionMode])
 
   useEffect(() => {
-    if (!isQuickCheckoutPending) {
-      hasPromptedAuthForQuickCheckoutRef.current = false
+    if (!isQuickCheckoutPending || !isLoggedIn) {
       return
     }
-
-    if (!isLoggedIn) {
-      if (!hasPromptedAuthForQuickCheckoutRef.current) {
-        hasPromptedAuthForQuickCheckoutRef.current = true
-        toast.info('Entre na conta para continuar sua compra no checkout.', {
-          position: 'bottom-right',
-          toastId: 'quick-checkout-login-required',
-        })
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-        window.dispatchEvent(new Event(OPEN_AUTH_MODAL_EVENT))
-      }
-      return
-    }
-
-    hasPromptedAuthForQuickCheckoutRef.current = false
 
     if (!canProceed || isReserving || isAutoSelecting) {
       return
@@ -1675,6 +1676,20 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     setIsQuickCheckoutPending(false)
     void handleProceed()
   }, [canProceed, handleProceed, isAutoSelecting, isLoggedIn, isQuickCheckoutPending, isReserving])
+
+  useEffect(() => {
+    if (!hasPendingCheckoutAfterAuth || !isLoggedIn) {
+      return
+    }
+
+    if (!canProceed || isReserving || isAutoSelecting) {
+      return
+    }
+
+    setHasPendingCheckoutAfterAuth(false)
+    setIsQuickCheckoutPending(false)
+    void handleProceed()
+  }, [canProceed, handleProceed, hasPendingCheckoutAfterAuth, isAutoSelecting, isLoggedIn, isReserving])
 
   const closeConflictResolutionModal = useCallback(() => {
     setConflictResolution(null)
@@ -1793,6 +1808,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     canProceed,
     isReserving,
     isQuickCheckoutPending,
+    shouldOpenQuickCheckoutAuthModal,
     shouldHighlightSelectedNumbers,
     shouldHighlightAutoButton,
     conflictResolution,
@@ -1804,6 +1820,8 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     handleAddManualNumber,
     handleApplyCoupon,
     handleQuickCheckout,
+    consumeQuickCheckoutAuthModalRequest,
+    cancelPendingCheckoutAfterAuth,
     handleLoadPreviousPage,
     handleLoadNextPage,
     handleProceed,

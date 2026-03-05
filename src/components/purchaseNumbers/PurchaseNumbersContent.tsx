@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { OPEN_PURCHASE_CART_EVENT } from '../../const/purchaseNumbers'
 import type { usePurchaseNumbers } from '../../hooks/usePurchaseNumbers'
-import { useAuthStore } from '../../stores/authStore'
 import { calculateCampaignPricing } from '../../utils/campaignPricing'
-import MobileAuthCard from './MobileAuthCard'
 import NumberSelectionCard from './NumberSelectionCard'
+import QuickCheckoutAuthModal from './QuickCheckoutAuthModal'
 import QuantitySelectionCard, { type PackPricingByQuantity } from './QuantitySelectionCard'
 import PurchaseSummaryCard from './PurchaseSummaryCard'
 
@@ -17,9 +16,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
   const location = useLocation()
   const navigate = useNavigate()
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false)
-  const [mobileModalView, setMobileModalView] = useState<'cart' | 'auth'>('cart')
-  const [shouldProceedAfterMobileAuth, setShouldProceedAfterMobileAuth] = useState(false)
-  const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
+  const [isQuickCheckoutAuthModalOpen, setIsQuickCheckoutAuthModalOpen] = useState(false)
   const {
     numberPool,
     selectionMode,
@@ -57,6 +54,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     isAutoSelecting,
     shouldHighlightSelectedNumbers,
     shouldHighlightAutoButton,
+    shouldOpenQuickCheckoutAuthModal,
     conflictResolution,
     handleSetQuantity,
     handleClearSelectedNumbers,
@@ -65,6 +63,8 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     handleGoToPage,
     handleAddManualNumber,
     handleApplyCoupon,
+    consumeQuickCheckoutAuthModalRequest,
+    cancelPendingCheckoutAfterAuth,
     handleLoadPreviousPage,
     handleLoadNextPage,
     handleProceed,
@@ -80,21 +80,10 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
     }
 
     setIsMobileCartOpen(false)
-    setMobileModalView('cart')
-    setShouldProceedAfterMobileAuth(false)
   }, [isProceedingToCheckout])
   const openCartOverlay = useCallback(() => {
-    setMobileModalView('cart')
     setIsMobileCartOpen(true)
   }, [])
-
-  const isSmallViewport = () => {
-    if (typeof window === 'undefined') {
-      return false
-    }
-
-    return window.matchMedia('(max-width: 1023px)').matches
-  }
 
   useEffect(() => {
     if (!isMobileCartOpen) {
@@ -166,24 +155,25 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
   }, [handleClearSelectedNumbers, location.pathname, location.search, navigate])
 
   useEffect(() => {
-    if (!isMobileCartOpen || mobileModalView !== 'auth' || !shouldProceedAfterMobileAuth || !isLoggedIn) {
+    if (!shouldOpenQuickCheckoutAuthModal) {
       return
     }
 
-    setShouldProceedAfterMobileAuth(false)
-    setMobileModalView('cart')
-    void handleProceed()
-  }, [handleProceed, isLoggedIn, isMobileCartOpen, mobileModalView, shouldProceedAfterMobileAuth])
+    setIsMobileCartOpen(false)
+    setIsQuickCheckoutAuthModalOpen(true)
+    consumeQuickCheckoutAuthModalRequest()
+  }, [consumeQuickCheckoutAuthModalRequest, shouldOpenQuickCheckoutAuthModal])
+
+  const handleQuickCheckoutAuthModalClose = useCallback((reason: 'dismiss' | 'login-success' | 'signup-success') => {
+    setIsQuickCheckoutAuthModalOpen(false)
+    if (reason !== 'login-success') {
+      cancelPendingCheckoutAfterAuth()
+    }
+  }, [cancelPendingCheckoutAfterAuth])
 
   const handleSummaryProceed = useCallback(() => {
-    if (!isLoggedIn && isSmallViewport()) {
-      setMobileModalView('auth')
-      setShouldProceedAfterMobileAuth(true)
-      return
-    }
-
     void handleProceed()
-  }, [handleProceed, isLoggedIn])
+  }, [handleProceed])
 
   const summaryCardProps = useMemo(
     () => ({
@@ -333,25 +323,24 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
             className="relative w-full max-h-[92vh] overflow-y-auto rounded-2xl border border-white/15 bg-luxury-bg p-1 shadow-2xl sm:max-w-xl"
             onClick={(event) => event.stopPropagation()}
           >
-            {mobileModalView !== 'auth' ? (
-              <button
-                aria-label="Fechar carrinho"
-                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white disabled:cursor-not-allowed disabled:opacity-50"
-                type="button"
-                onClick={closeMobileOverlay}
-                disabled={isProceedingToCheckout}
-              >
-                <span className="material-symbols-outlined text-lg">close</span>
-              </button>
-            ) : null}
-            {mobileModalView === 'auth' ? (
-              <MobileAuthCard onBackToCart={() => setMobileModalView('cart')} />
-            ) : (
-              <PurchaseSummaryCard {...summaryCardProps} isSticky={false} />
-            )}
+            <button
+              aria-label="Fechar carrinho"
+              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+              onClick={closeMobileOverlay}
+              disabled={isProceedingToCheckout}
+            >
+              <span className="material-symbols-outlined text-lg">close</span>
+            </button>
+            <PurchaseSummaryCard {...summaryCardProps} isSticky={false} />
           </div>
         </div>
       ) : null}
+
+      <QuickCheckoutAuthModal
+        isOpen={isQuickCheckoutAuthModalOpen}
+        onClose={handleQuickCheckoutAuthModalClose}
+      />
 
       {conflictResolution ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true">
