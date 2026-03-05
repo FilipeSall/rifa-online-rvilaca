@@ -3,31 +3,43 @@ import { type MouseEvent, type ReactNode, useEffect, useMemo, useState } from 'r
 import { FaWhatsapp } from 'react-icons/fa'
 import { useCampaignSettings } from '../../hooks/useCampaignSettings'
 import { storage } from '../../lib/firebase'
+import {
+  getLocalStorage,
+  safeStorageGetItem,
+  safeStorageKeys,
+  safeStorageRemoveItem,
+  safeStorageSetItem,
+} from '../../utils/webStorage'
 
 const BADGE_DISMISSED_STORAGE_KEY = 'rifa-online:featured-video-badge-dismissed'
 const VIDEO_URL_CACHE_PREFIX = 'rifa-online:video-url:'
 
 function getCachedVideoUrl(storagePath: string): string | null {
-  try {
-    return window.localStorage.getItem(VIDEO_URL_CACHE_PREFIX + storagePath)
-  } catch {
-    return null
-  }
+  return safeStorageGetItem(getLocalStorage(), VIDEO_URL_CACHE_PREFIX + storagePath)
 }
 
 function setCachedVideoUrl(storagePath: string, url: string): void {
-  try {
-    // Remove entradas antigas de outros storagePaths
-    for (let i = window.localStorage.length - 1; i >= 0; i--) {
-      const key = window.localStorage.key(i)
-      if (key?.startsWith(VIDEO_URL_CACHE_PREFIX) && key !== VIDEO_URL_CACHE_PREFIX + storagePath) {
-        window.localStorage.removeItem(key)
-      }
-    }
-    window.localStorage.setItem(VIDEO_URL_CACHE_PREFIX + storagePath, url)
-  } catch {
-    // localStorage indisponível ou cheio — ignora
+  const localStorageApi = getLocalStorage()
+  if (!localStorageApi) {
+    return
   }
+
+  // Remove entradas antigas de outros storagePaths
+  for (const key of safeStorageKeys(localStorageApi)) {
+    if (key.startsWith(VIDEO_URL_CACHE_PREFIX) && key !== VIDEO_URL_CACHE_PREFIX + storagePath) {
+      safeStorageRemoveItem(localStorageApi, key)
+    }
+  }
+
+  safeStorageSetItem(localStorageApi, VIDEO_URL_CACHE_PREFIX + storagePath, url)
+}
+
+function isBadgeDismissed() {
+  return safeStorageGetItem(getLocalStorage(), BADGE_DISMISSED_STORAGE_KEY) === '1'
+}
+
+function markBadgeAsDismissed() {
+  safeStorageSetItem(getLocalStorage(), BADGE_DISMISSED_STORAGE_KEY, '1')
 }
 
 type FeaturedVideoFloatingButtonProps = {
@@ -117,7 +129,7 @@ export default function FeaturedVideoFloatingButton({
       return
     }
 
-    const wasDismissed = window.localStorage.getItem(BADGE_DISMISSED_STORAGE_KEY) === '1'
+    const wasDismissed = isBadgeDismissed()
     setShowNotificationBadge(!wasDismissed)
   }, [resolvedVideoUrl])
 
@@ -125,7 +137,7 @@ export default function FeaturedVideoFloatingButton({
     setIsModalOpen(true)
     if (showNotificationBadge) {
       setShowNotificationBadge(false)
-      window.localStorage.setItem(BADGE_DISMISSED_STORAGE_KEY, '1')
+      markBadgeAsDismissed()
     }
   }
 

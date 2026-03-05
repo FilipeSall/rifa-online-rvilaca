@@ -26,6 +26,13 @@ import type { CouponFeedback, NumberSlot, SelectionMode } from '../types/purchas
 import { calculateCampaignPricing } from '../utils/campaignPricing'
 import { getSafeQuantity } from '../utils/purchaseNumbers'
 import { formatTicketNumber } from '../utils/ticketNumber'
+import {
+  getLocalStorage,
+  getSessionStorage,
+  safeStorageGetItem,
+  safeStorageRemoveItem,
+  safeStorageSetItem,
+} from '../utils/webStorage'
 
 type ReserveNumbersInput = {
   numbers: number[]
@@ -412,7 +419,8 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   }, [pageStart, pageStartState])
 
   const persistWindowCache = useCallback(() => {
-    if (typeof window === 'undefined') {
+    const sessionStorageApi = getSessionStorage()
+    if (!sessionStorageApi) {
       return
     }
 
@@ -428,15 +436,16 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
       }))
 
     if (serializable.length === 0) {
-      window.sessionStorage.removeItem(numberWindowCacheStorageKey)
+      safeStorageRemoveItem(sessionStorageApi, numberWindowCacheStorageKey)
       return
     }
 
-    window.sessionStorage.setItem(numberWindowCacheStorageKey, JSON.stringify(serializable))
+    safeStorageSetItem(sessionStorageApi, numberWindowCacheStorageKey, JSON.stringify(serializable))
   }, [numberWindowCacheStorageKey])
 
   const persistPaidNumbersCache = useCallback(() => {
-    if (typeof window === 'undefined') {
+    const localStorageApi = getLocalStorage()
+    if (!localStorageApi) {
       return
     }
 
@@ -455,11 +464,12 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
       .filter((entry) => entry.numbers.length > 0)
 
     if (serializable.length === 0) {
-      window.localStorage.removeItem(paidNumbersCacheStorageKey)
+      safeStorageRemoveItem(localStorageApi, paidNumbersCacheStorageKey)
       return
     }
 
-    window.localStorage.setItem(
+    safeStorageSetItem(
+      localStorageApi,
       paidNumbersCacheStorageKey,
       JSON.stringify({
         chunks: serializable,
@@ -543,7 +553,8 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
       })
     }
 
-    const rawPaidNumbers = window.localStorage.getItem(paidNumbersCacheStorageKey)
+    const localStorageApi = getLocalStorage()
+    const rawPaidNumbers = safeStorageGetItem(localStorageApi, paidNumbersCacheStorageKey)
     if (rawPaidNumbers) {
       try {
         const parsed = JSON.parse(rawPaidNumbers) as {
@@ -607,11 +618,12 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
           }
         }
       } catch {
-        window.localStorage.removeItem(paidNumbersCacheStorageKey)
+        safeStorageRemoveItem(localStorageApi, paidNumbersCacheStorageKey)
       }
     }
 
-    const raw = window.sessionStorage.getItem(numberWindowCacheStorageKey)
+    const sessionStorageApi = getSessionStorage()
+    const raw = safeStorageGetItem(sessionStorageApi, numberWindowCacheStorageKey)
     if (!raw) {
       paidNumbersChunkCacheRef.current = nextPaidNumbersByChunk
       persistPaidNumbersCache()
@@ -658,7 +670,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
         }
       }
     } catch {
-      window.sessionStorage.removeItem(numberWindowCacheStorageKey)
+      safeStorageRemoveItem(sessionStorageApi, numberWindowCacheStorageKey)
     } finally {
       paidNumbersChunkCacheRef.current = nextPaidNumbersByChunk
       persistPaidNumbersCache()

@@ -1,15 +1,18 @@
 import { httpsCallable } from 'firebase/functions'
 import { functions, useFirebaseEmulators } from '../lib/firebase'
+import {
+  getLocalStorage,
+  safeStorageGetItem,
+  safeStorageKeys,
+  safeStorageRemoveItem,
+  safeStorageSetItem,
+} from './webStorage'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const DEV_FUNCTIONS_RUNTIME_KEY = 'rifa-online:dev:functions-runtime-started-at'
 const CACHE_KEY_PREFIXES = ['rifa-online:', 'purchase-numbers-window-cache:', 'purchase-numbers-paid-cache:'] as const
 const RUNTIME_SYNC_TIMEOUT_MS = 2500
 let emulatorRuntimeSyncPromise: Promise<void> | null = null
-
-function canUseStorage() {
-  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
-}
 
 function isLocalHost() {
   if (typeof window === 'undefined') {
@@ -24,29 +27,30 @@ function isAppCacheKey(key: string) {
 }
 
 function clearAppCacheKeys() {
-  if (!canUseStorage()) {
+  const localStorageApi = getLocalStorage()
+  if (!localStorageApi) {
     return
   }
 
-  for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
-    const key = window.localStorage.key(index)
+  for (const key of safeStorageKeys(localStorageApi)) {
     if (!key || key === DEV_FUNCTIONS_RUNTIME_KEY) {
       continue
     }
     if (!isAppCacheKey(key)) {
       continue
     }
-    window.localStorage.removeItem(key)
+    safeStorageRemoveItem(localStorageApi, key)
   }
 }
 
 export function readCachedJson<T>(key: string): T | null {
-  if (!canUseStorage()) {
+  const localStorageApi = getLocalStorage()
+  if (!localStorageApi) {
     return null
   }
 
   try {
-    const raw = window.localStorage.getItem(key)
+    const raw = safeStorageGetItem(localStorageApi, key)
     if (!raw) {
       return null
     }
@@ -58,24 +62,26 @@ export function readCachedJson<T>(key: string): T | null {
 }
 
 export function writeCachedJson(key: string, value: unknown) {
-  if (!canUseStorage()) {
+  const localStorageApi = getLocalStorage()
+  if (!localStorageApi) {
     return
   }
 
   try {
-    window.localStorage.setItem(key, JSON.stringify(value))
+    safeStorageSetItem(localStorageApi, key, JSON.stringify(value))
   } catch {
     // Ignora falhas de storage para não interromper o fluxo.
   }
 }
 
 export function shouldFetchAfterDays(lastFetchKey: string, days: number) {
-  if (!canUseStorage() || days <= 0) {
+  const localStorageApi = getLocalStorage()
+  if (!localStorageApi || days <= 0) {
     return true
   }
 
   try {
-    const raw = window.localStorage.getItem(lastFetchKey)
+    const raw = safeStorageGetItem(localStorageApi, lastFetchKey)
     if (!raw) {
       return true
     }
@@ -93,19 +99,21 @@ export function shouldFetchAfterDays(lastFetchKey: string, days: number) {
 }
 
 export function markFetchedNow(lastFetchKey: string) {
-  if (!canUseStorage()) {
+  const localStorageApi = getLocalStorage()
+  if (!localStorageApi) {
     return
   }
 
   try {
-    window.localStorage.setItem(lastFetchKey, String(Date.now()))
+    safeStorageSetItem(localStorageApi, lastFetchKey, String(Date.now()))
   } catch {
     // Ignora falhas de storage para não interromper o fluxo.
   }
 }
 
 export async function syncCachesWithEmulatorRuntime() {
-  if (!canUseStorage() || !useFirebaseEmulators || !isLocalHost()) {
+  const localStorageApi = getLocalStorage()
+  if (!localStorageApi || !useFirebaseEmulators || !isLocalHost()) {
     return
   }
 
@@ -138,12 +146,12 @@ export async function syncCachesWithEmulatorRuntime() {
         return
       }
 
-      const previousRuntime = Number(window.localStorage.getItem(DEV_FUNCTIONS_RUNTIME_KEY))
+      const previousRuntime = Number(safeStorageGetItem(localStorageApi, DEV_FUNCTIONS_RUNTIME_KEY))
       if (Number.isFinite(previousRuntime) && previousRuntime > 0 && previousRuntime !== runtimeStartedAtMs) {
         clearAppCacheKeys()
       }
 
-      window.localStorage.setItem(DEV_FUNCTIONS_RUNTIME_KEY, String(runtimeStartedAtMs))
+      safeStorageSetItem(localStorageApi, DEV_FUNCTIONS_RUNTIME_KEY, String(runtimeStartedAtMs))
     } catch {
       // Emulador offline/iniciando: ignora.
     } finally {
