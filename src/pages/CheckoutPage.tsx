@@ -420,41 +420,41 @@ export default function CheckoutPage() {
             </div>
           </section>
 
-          <section className="container mx-auto px-4 py-10 lg:px-8 lg:py-14">
+          <section className="container mx-auto px-4 py-10 max-[470px]:px-3 lg:px-8 lg:py-14">
             <div className="grid gap-6 lg:grid-cols-5 lg:gap-8">
-              <aside className="lg:col-span-2 space-y-4">
-                <div className="rounded-2xl border border-neon-pink/25 bg-luxury-card p-6 shadow-2xl">
+              <aside className="min-w-0 space-y-4 lg:col-span-2">
+                <div className="overflow-hidden rounded-2xl border border-neon-pink/25 bg-luxury-card p-4 shadow-2xl sm:p-6">
                   <p className="text-[10px] uppercase tracking-[0.22em] text-neon-pink">Resumo do pedido</p>
                   <div className="mt-4 space-y-3 text-sm">
-                    <div className="flex items-center justify-between text-gray-300">
-                      <span>Quantidade selecionada</span>
-                      <span className="font-black text-white">{selectedCount || '-'}</span>
+                    <div className="flex flex-col gap-1 text-gray-300 min-[470px]:flex-row min-[470px]:items-center min-[470px]:justify-between">
+                      <span className="min-w-0 break-words">Quantidade selecionada</span>
+                      <span className="font-black text-white min-[470px]:shrink-0">{selectedCount || '-'}</span>
                     </div>
-                    <div className="flex items-center justify-between text-gray-300">
-                      <span>Subtotal base</span>
-                      <span className="font-black text-white">{formatCurrency(pricing.subtotalBase)}</span>
+                    <div className="flex flex-col gap-1 text-gray-300 min-[470px]:flex-row min-[470px]:items-center min-[470px]:justify-between">
+                      <span className="min-w-0 break-words">Subtotal base</span>
+                      <span className="font-black text-white min-[470px]:shrink-0">{formatCurrency(pricing.subtotalBase)}</span>
                     </div>
-                    <div className="flex items-center justify-between text-gray-300">
-                      <span>
+                    <div className="flex flex-col gap-1 text-gray-300 min-[470px]:flex-row min-[470px]:items-center min-[470px]:justify-between">
+                      <span className="min-w-0 break-words">
                         {pricing.appliedPromotion?.discountType === 'percent'
                           ? `Desconto por quantidade (${pricing.appliedPromotion.discountValue.toFixed(2).replace(/\.00$/, '')}%)`
                           : 'Desconto por quantidade'}
                       </span>
-                      <span className="font-black text-emerald-300">- {formatCurrency(pricing.promotionDiscount)}</span>
+                      <span className="font-black text-emerald-300 min-[470px]:shrink-0">- {formatCurrency(pricing.promotionDiscount)}</span>
                     </div>
-                    <div className="flex items-center justify-between text-gray-300">
-                      <span>Subtotal apos desconto por quantidade</span>
-                      <span className="font-black text-white">{formatCurrency(pricing.subtotalAfterPromotion)}</span>
+                    <div className="flex flex-col gap-1 text-gray-300 min-[470px]:flex-row min-[470px]:items-center min-[470px]:justify-between">
+                      <span className="min-w-0 break-words">Subtotal apos desconto por quantidade</span>
+                      <span className="font-black text-white min-[470px]:shrink-0">{formatCurrency(pricing.subtotalAfterPromotion)}</span>
                     </div>
-                    <div className="flex items-center justify-between text-gray-300">
-                      <span>Desconto cupom</span>
-                      <span className="font-black text-cyan-200">- {formatCurrency(pricing.couponDiscount)}</span>
+                    <div className="flex flex-col gap-1 text-gray-300 min-[470px]:flex-row min-[470px]:items-center min-[470px]:justify-between">
+                      <span className="min-w-0 break-words">Desconto cupom</span>
+                      <span className="font-black text-cyan-200 min-[470px]:shrink-0">- {formatCurrency(pricing.couponDiscount)}</span>
                     </div>
                   </div>
 
                   <div className="mt-4 rounded-xl border border-neon-pink/35 bg-neon-pink/10 p-4">
                     <p className="text-[10px] uppercase tracking-[0.16em] text-neon-pink">Total para pagar</p>
-                    <p className="mt-1 text-4xl font-black text-white">
+                    <p className="mt-1 text-3xl font-black text-white sm:text-4xl">
                       {amount > 0 ? formatCurrency(amount) : 'Informar valor'}
                     </p>
                     {pricing.appliedPromotion?.targetQuantity ? (
@@ -468,17 +468,17 @@ export default function CheckoutPage() {
                     <label className="text-[10px] uppercase tracking-[0.18em] text-gray-500" htmlFor="checkout-coupon">
                       Cupom de desconto
                     </label>
-                    <div className="mt-2 flex gap-2 max-[419px]:flex-col">
+                    <div className="mt-2 flex gap-2 max-[470px]:flex-col">
                       <input
                         id="checkout-coupon"
-                        className="h-10 flex-1 rounded border border-white/15 bg-luxury-card px-3 text-sm text-white outline-none focus:border-neon-pink max-[639px]:h-14 max-[639px]:px-4 max-[639px]:text-lg"
+                        className="h-10 min-w-0 flex-1 rounded border border-white/15 bg-luxury-card px-3 text-sm text-white outline-none focus:border-neon-pink max-[639px]:h-14 max-[639px]:px-4 max-[639px]:text-lg"
                         type="text"
                         placeholder="Ex: PIX10"
                         value={couponInput}
                         onChange={(event) => setCouponInput(event.target.value)}
                       />
                       <button
-                        className="h-10 rounded bg-neon-pink px-4 text-xs font-black uppercase tracking-widest text-black hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
+                        className="h-10 shrink-0 rounded bg-neon-pink px-4 text-xs font-black uppercase tracking-widest text-black hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40 max-[470px]:w-full"
                         type="button"
                         onClick={handleApplyCheckoutCoupon}
                         disabled={!couponInput.trim() || !hasSelection}
@@ -574,9 +574,9 @@ export default function CheckoutPage() {
                     </div>
                   )}
 
-                  <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+                  <div className="mt-6 flex flex-wrap items-center justify-between gap-3 max-[470px]:flex-col max-[470px]:items-stretch">
                     <button
-                      className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-neon-pink hover:text-neon-pink-light disabled:cursor-not-allowed disabled:opacity-70"
+                      className="inline-flex items-center justify-center gap-2 text-center text-xs font-bold uppercase tracking-widest text-neon-pink hover:text-neon-pink-light disabled:cursor-not-allowed disabled:opacity-70 max-[470px]:w-full"
                       type="button"
                       onClick={handleBackToSelection}
                       disabled={isReturningToSelection}
@@ -591,7 +591,7 @@ export default function CheckoutPage() {
 
                     {cameFromAutomaticSelection ? (
                       <button
-                        className="inline-flex items-center gap-2 rounded-lg border border-cyan-300/35 bg-cyan-500/10 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-cyan-100 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-300/35 bg-cyan-500/10 px-3 py-2 text-center text-[11px] font-bold uppercase tracking-[0.12em] text-cyan-100 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-70 max-[470px]:w-full"
                         type="button"
                         onClick={handleGoToManualSelection}
                         disabled={isGoingToManualSelection}
@@ -608,7 +608,7 @@ export default function CheckoutPage() {
                 </div>
               </aside>
 
-              <div className="lg:col-span-3">
+              <div className="min-w-0 lg:col-span-3">
                 {!isAuthReady ? (
                   <div className="rounded-2xl border border-white/10 bg-luxury-card p-6 text-sm text-gray-300">
                     Carregando autenticacao...
