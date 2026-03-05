@@ -1,13 +1,19 @@
+import { useEffect, useMemo, useState } from 'react'
 import { TICKET_FILTERS } from '../../const/userDashboard'
 import type { TicketFilter, UserTicket } from '../../types/userDashboard'
 import { TicketStatusBadge } from './StatusBadges'
 import { formatPrizeLabelWithQuantity } from '../../utils/campaignPrizes'
+
+const TICKETS_PER_PAGE = 12
 
 type MyNumbersSectionProps = {
   ticketFilter: TicketFilter
   ticketSearch: string
   filteredTickets: UserTicket[]
   totalTickets: number
+  isLoadingTickets: boolean
+  isLoadingMoreTickets: boolean
+  hasMoreTickets: boolean
   mainPrize: string
   secondPrize: string
   bonusPrize: string
@@ -17,6 +23,7 @@ type MyNumbersSectionProps = {
   latestWinPrize: string | null
   onTicketFilterChange: (filter: TicketFilter) => void
   onTicketSearchChange: (value: string) => void
+  onLoadMoreTickets: () => void
   onCheckIfWon: () => void
 }
 
@@ -25,6 +32,9 @@ export default function MyNumbersSection({
   ticketSearch,
   filteredTickets,
   totalTickets,
+  isLoadingTickets,
+  isLoadingMoreTickets,
+  hasMoreTickets,
   mainPrize,
   secondPrize,
   bonusPrize,
@@ -34,8 +44,28 @@ export default function MyNumbersSection({
   latestWinPrize,
   onTicketFilterChange,
   onTicketSearchChange,
+  onLoadMoreTickets,
   onCheckIfWon,
 }: MyNumbersSectionProps) {
+  const [activePage, setActivePage] = useState(1)
+  const totalPages = Math.max(1, Math.ceil(filteredTickets.length / TICKETS_PER_PAGE))
+  const pagedTickets = useMemo(() => {
+    const start = (activePage - 1) * TICKETS_PER_PAGE
+    return filteredTickets.slice(start, start + TICKETS_PER_PAGE)
+  }, [activePage, filteredTickets])
+  const isLastPage = activePage >= totalPages
+  const canLoadMoreRemote = hasMoreTickets && isLastPage
+
+  useEffect(() => {
+    setActivePage(1)
+  }, [ticketFilter, ticketSearch])
+
+  useEffect(() => {
+    if (activePage > totalPages) {
+      setActivePage(totalPages)
+    }
+  }, [activePage, totalPages])
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -142,16 +172,33 @@ export default function MyNumbersSection({
               </tr>
             </thead>
             <tbody className="divide-y divide-luxury-border">
-              {filteredTickets.length === 0 ? (
+              {isLoadingTickets ? (
+                Array.from({ length: 8 }).map((_, index) => (
+                  <tr key={`ticket-loading-${index}`} className="animate-pulse">
+                    <td className="px-5 py-4">
+                      <div className="h-10 w-24 rounded-lg bg-white/10" />
+                    </td>
+                    <td className="hidden px-5 py-4 sm:table-cell">
+                      <div className="h-4 w-56 rounded bg-white/10" />
+                    </td>
+                    <td className="hidden px-5 py-4 sm:table-cell">
+                      <div className="h-4 w-28 rounded bg-white/10" />
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="h-7 w-16 rounded-full bg-white/10" />
+                    </td>
+                  </tr>
+                ))
+              ) : pagedTickets.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-5 py-10 text-center text-text-muted">
                     Nenhum numero encontrado.
                   </td>
                 </tr>
               ) : (
-                filteredTickets.map((ticket) => (
+                pagedTickets.map((ticket) => (
                   <tr
-                    key={ticket.number}
+                    key={`${ticket.orderId}-${ticket.number}`}
                     className={`transition-colors hover:bg-white/5 ${ticket.status === 'cancelado' ? 'opacity-50' : ''}`}
                   >
                     <td className="px-5 py-4">
@@ -175,11 +222,48 @@ export default function MyNumbersSection({
           </table>
         </div>
 
-        <div className="flex items-center justify-between border-t border-luxury-border bg-white/5 px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-luxury-border bg-white/5 px-5 py-3">
           <p className="text-xs text-text-muted">
-            Mostrando <span className="font-medium text-white">{filteredTickets.length}</span> de{' '}
-            <span className="font-medium text-white">{totalTickets}</span> resultados
+            Mostrando <span className="font-medium text-white">{pagedTickets.length}</span> de{' '}
+            <span className="font-medium text-white">{filteredTickets.length}</span> resultados filtrados
+            {' · '}carregados no total: <span className="font-medium text-white">{totalTickets}</span>
+            {hasMoreTickets ? (
+              <span className="text-text-muted"> (há mais para carregar)</span>
+            ) : null}
           </p>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActivePage((current) => Math.max(1, current - 1))}
+              disabled={activePage <= 1}
+              className="inline-flex h-8 items-center justify-center rounded-md border border-white/15 bg-white/5 px-3 text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Anterior
+            </button>
+            <span className="text-[11px] font-semibold text-text-muted">
+              Página {activePage} de {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setActivePage((current) => Math.min(totalPages, current + 1))}
+              disabled={activePage >= totalPages}
+              className="inline-flex h-8 items-center justify-center rounded-md border border-white/15 bg-white/5 px-3 text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Próxima
+            </button>
+          </div>
+
+          {canLoadMoreRemote ? (
+            <button
+              type="button"
+              onClick={onLoadMoreTickets}
+              disabled={isLoadingMoreTickets}
+              className="inline-flex h-8 items-center justify-center rounded-md border border-neon-pink/40 bg-neon-pink/10 px-3 text-[11px] font-bold uppercase tracking-[0.08em] text-neon-pink transition-colors hover:bg-neon-pink/20 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isLoadingMoreTickets ? 'Carregando...' : 'Carregar mais'}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

@@ -78,6 +78,8 @@ const callableOptions = {
   ],
 }
 
+const functionsRuntimeStartedAtMs = Date.now()
+
 const securedCallableOptions = {
   ...callableOptions,
   secrets: [HORSEPAY_CLIENT_KEY, HORSEPAY_CLIENT_SECRET, HORSEPAY_WEBHOOK_TOKEN],
@@ -161,6 +163,9 @@ export const getAdminUserDetails = onCall(callableOptions, createGetAdminUserDet
 export const updateAdminUserRole = onCall(callableOptions, createUpdateAdminUserRoleHandler(db))
 export const cleanupLegacyUserOrdersField = onCall(callableOptions, createCleanupLegacyUserOrdersFieldHandler(db))
 export const clearOrderHistoryAdmin = onCall(callableOptions, createClearOrderHistoryAdminHandler(db))
+export const getFunctionsRuntimeInfo = onCall(callableOptions, () => ({
+  startedAtMs: functionsRuntimeStartedAtMs,
+}))
 
 export const pixWebhook = onRequest(
   { region: REGION, secrets: [HORSEPAY_WEBHOOK_TOKEN] },

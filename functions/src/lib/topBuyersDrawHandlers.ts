@@ -7,6 +7,14 @@ import { asRecord, readString, readTimestampMillis, requireActiveUid, sanitizeSt
 import { pickTopBuyersWinningTicketNumber } from './topBuyersWinner.js'
 import { buildTopBuyersDrawPrizeValues } from './campaignPrizes.js'
 import {
+  resolveWinnerByPrefixCycleV2,
+  type DrawComparisonMode,
+  type DrawComparisonSide,
+  type DrawRuleVersion,
+  type RankedParticipant,
+  type V2ResolutionAttempt,
+} from './drawV2Engine.js'
+import {
   resolveCurrentTopBuyersRankingWindow,
   syncWeeklyTopBuyersRankingFromLatestDraw,
 } from './rankingHandlers.js'
@@ -45,13 +53,18 @@ interface TopBuyersDrawWinner {
 
 interface ExtractionAttempt {
   extractionIndex: number
+  attemptIndex?: number
+  sourceExtractionIndex?: number | null
   extractionNumber: string
   comparisonDigits: number
+  phase?: 'exact' | 'nearest' | 'contingency'
   rawCandidateCode: string
   candidateCode: string
   nearestDirection: 'none' | 'below' | 'above'
   nearestDistance: number | null
   matchedPosition: number | null
+  matchedUserId?: string | null
+  matchedTicketNumber?: string | null
 }
 
 interface TopBuyersDrawResult {
@@ -59,6 +72,9 @@ interface TopBuyersDrawResult {
   drawId: string
   drawDate: string
   drawPrize: string
+  ruleVersion: DrawRuleVersion
+  comparisonMode: DrawComparisonMode
+  comparisonSide: DrawComparisonSide
   weekId: string
   weekStartAtMs: number
   weekEndAtMs: number
@@ -105,6 +121,7 @@ interface ExactCalculationComparisonItem {
 interface ExactCalculationAttemptOutput {
   extractionIndex: number
   extractionNumber: string
+  comparisonDigits?: number
   rawCode: string
   resolvedCode: string
   nearestDirection: 'none' | 'below' | 'above'
@@ -115,6 +132,7 @@ interface ExactCalculationAttemptOutput {
 type ExactCalculationSnapshot = {
   drawId: string
   comparisonDigits: number
+  comparisonSide: DrawComparisonSide
   winningPosition: number
   attempts: ExactCalculationAttemptOutput[]
 }
@@ -212,6 +230,16 @@ function decodeHistoryCursor(value: unknown): { publishedAtMs: number, docId: st
   } catch {
     return null
   }
+}
+
+function parseAttemptPhase(value: unknown): ExtractionAttempt['phase'] {
+  if (value === 'nearest') {
+    return 'nearest'
+  }
+  if (value === 'contingency') {
+    return 'contingency'
+  }
+  return 'exact'
 }
 
 function sanitizeExtractionNumber(value: unknown, index: number): string {
@@ -324,6 +352,7 @@ function normalizeExactCalculationAttempts(value: unknown): ExactCalculationAtte
           ? extractionIndex
           : index + 1,
         extractionNumber: extractionNumber || '-',
+        comparisonDigits: Number.isInteger(Number(raw.comparisonDigits)) ? Number(raw.comparisonDigits) : undefined,
         rawCode: sanitizeString(raw.rawCode) || sanitizeString(raw.rawCandidateCode),
         resolvedCode: sanitizeString(raw.resolvedCode) || sanitizeString(raw.candidateCode),
         nearestDirection: raw.nearestDirection === 'below'
@@ -348,6 +377,11 @@ function parseExactCalculationSnapshot(rawResult: Record<string, unknown>, fallb
 
   const drawId = sanitizeString(exactCalculationRaw.drawId) || sanitizeString(rawResult.drawId) || sanitizeString(fallbackDrawId)
   const comparisonDigits = Number(exactCalculationRaw.comparisonDigits)
+  const comparisonSide = exactCalculationRaw.comparisonSide === 'left_prefix'
+    ? 'left_prefix'
+    : rawResult.comparisonSide === 'left_prefix'
+      ? 'left_prefix'
+      : 'right_suffix'
   const winningPosition = Number(exactCalculationRaw.winningPosition)
   const attempts = normalizeExactCalculationAttempts(exactCalculationRaw.attempts)
 
@@ -363,18 +397,22 @@ function parseExactCalculationSnapshot(rawResult: Record<string, unknown>, fallb
   }
 
   const persistedWinningTicket = sanitizeString(rawResult.winningTicketNumber) || null
-  const persistedWinningTicketFinal = persistedWinningTicket
-    ? persistedWinningTicket.slice(-comparisonDigits).padStart(comparisonDigits, '0')
-    : null
 
   return {
     drawId,
     comparisonDigits,
+    comparisonSide,
     winningPosition,
     attempts: attempts.map((attempt) => {
-      const rawCode = (attempt.rawCode || attempt.extractionNumber.slice(-comparisonDigits))
-        .padStart(comparisonDigits, '0')
-      const resolvedCode = (attempt.resolvedCode || rawCode).padStart(comparisonDigits, '0')
+      const attemptDigits = Number.isInteger(attempt.comparisonDigits) && Number(attempt.comparisonDigits) > 0
+        ? Number(attempt.comparisonDigits)
+        : comparisonDigits
+      const rawCode = (attempt.rawCode || extractComparableDigits(attempt.extractionNumber, attemptDigits, comparisonSide))
+        .padStart(attemptDigits, '0')
+      const resolvedCode = (attempt.resolvedCode || rawCode).padStart(attemptDigits, '0')
+      const persistedWinningTicketFinal = persistedWinningTicket
+        ? extractComparableDigits(persistedWinningTicket, attemptDigits, comparisonSide)
+        : null
       const comparisons = attempt.comparisons.map((comparison) => {
         if (!comparison.isWinner || !persistedWinningTicket || !persistedWinningTicketFinal) {
           return comparison
@@ -389,6 +427,7 @@ function parseExactCalculationSnapshot(rawResult: Record<string, unknown>, fallb
 
       return {
         ...attempt,
+        comparisonDigits: attemptDigits,
         rawCode,
         resolvedCode,
         comparisons,
@@ -397,11 +436,25 @@ function parseExactCalculationSnapshot(rawResult: Record<string, unknown>, fallb
   }
 }
 
+function extractComparableDigits(value: string, comparisonDigits: number, comparisonSide: DrawComparisonSide) {
+  const normalized = sanitizeString(value).replace(/\D/g, '')
+  if (!normalized) {
+    return ''.padStart(comparisonDigits, '0')
+  }
+
+  if (comparisonSide === 'left_prefix') {
+    return normalized.slice(0, comparisonDigits).padEnd(comparisonDigits, '0')
+  }
+
+  return normalized.slice(-comparisonDigits).padStart(comparisonDigits, '0')
+}
+
 function pickComparableTicketForAttempt(
   tickets: string[],
   rawCode: string,
   resolvedCode: string,
   comparisonDigits: number,
+  comparisonSide: DrawComparisonSide,
   isWinner: boolean,
   winningTicketNumber: string | null,
 ): string | null {
@@ -414,13 +467,13 @@ function pickComparableTicketForAttempt(
   }
 
   if (isWinner) {
-    const byResolved = tickets.find((ticket) => ticket.endsWith(resolvedCode))
+    const byResolved = tickets.find((ticket) => extractComparableDigits(ticket, comparisonDigits, comparisonSide) === resolvedCode)
     if (byResolved) {
       return byResolved
     }
   }
 
-  const byRaw = tickets.find((ticket) => ticket.endsWith(rawCode))
+  const byRaw = tickets.find((ticket) => extractComparableDigits(ticket, comparisonDigits, comparisonSide) === rawCode)
   if (byRaw) {
     return byRaw
   }
@@ -433,7 +486,7 @@ function pickComparableTicketForAttempt(
   let selectedTicket = Number(selected)
 
   for (const ticket of tickets) {
-    const suffix = ticket.slice(-comparisonDigits).padStart(comparisonDigits, '0')
+    const suffix = extractComparableDigits(ticket, comparisonDigits, comparisonSide)
     const suffixNumber = Number(suffix)
     const distance = Math.abs(suffixNumber - safeTarget)
     const ticketNumber = Number(ticket)
@@ -471,22 +524,36 @@ function pickComparableTicketForAttempt(
 function buildExactCalculationSnapshot(params: {
   drawId: string
   comparisonDigits: number
+  comparisonSide: DrawComparisonSide
   winningPosition: number
   attempts: ExtractionAttempt[]
   rankingSnapshot: TopBuyersRankingItem[]
   ticketNumbersByUser: Map<string, string[]>
   winningTicketNumber: string | null
 }): ExactCalculationSnapshot {
-  const { drawId, comparisonDigits, winningPosition, attempts, rankingSnapshot, ticketNumbersByUser, winningTicketNumber } = params
+  const {
+    drawId,
+    comparisonDigits,
+    comparisonSide,
+    winningPosition,
+    attempts,
+    rankingSnapshot,
+    ticketNumbersByUser,
+    winningTicketNumber,
+  } = params
 
   return {
     drawId,
     comparisonDigits,
+    comparisonSide,
     winningPosition,
     attempts: attempts.map((attempt) => {
-      const rawCode = (attempt.rawCandidateCode || attempt.extractionNumber.slice(-comparisonDigits))
-        .padStart(comparisonDigits, '0')
-      const resolvedCode = attempt.candidateCode.padStart(comparisonDigits, '0')
+      const attemptDigits = Number.isInteger(attempt.comparisonDigits) && attempt.comparisonDigits > 0
+        ? attempt.comparisonDigits
+        : comparisonDigits
+      const rawCode = (attempt.rawCandidateCode || extractComparableDigits(attempt.extractionNumber, attemptDigits, comparisonSide))
+        .padStart(attemptDigits, '0')
+      const resolvedCode = attempt.candidateCode.padStart(attemptDigits, '0')
 
       const comparisons: ExactCalculationComparisonItem[] = rankingSnapshot.map((entry) => {
         const userTickets = ticketNumbersByUser.get(entry.userId) || []
@@ -495,7 +562,8 @@ function buildExactCalculationSnapshot(params: {
           userTickets,
           rawCode,
           resolvedCode,
-          comparisonDigits,
+          attemptDigits,
+          comparisonSide,
           isWinner,
           winningTicketNumber,
         )
@@ -506,7 +574,7 @@ function buildExactCalculationSnapshot(params: {
           name: entry.name,
           ticketNumber: selectedTicket,
           ticketFinal: selectedTicket
-            ? selectedTicket.slice(-comparisonDigits).padStart(comparisonDigits, '0')
+            ? extractComparableDigits(selectedTicket, attemptDigits, comparisonSide)
             : null,
           isWinner,
         }
@@ -515,6 +583,7 @@ function buildExactCalculationSnapshot(params: {
       return {
         extractionIndex: attempt.extractionIndex,
         extractionNumber: attempt.extractionNumber,
+        comparisonDigits: attempt.comparisonDigits,
         rawCode,
         resolvedCode,
         nearestDirection: attempt.nearestDirection,
@@ -569,22 +638,6 @@ async function readWinnerTicketNumbersFromOrders(
     .sort((left, right) => left - right)
     .map((number) => String(number).padStart(7, '0'))
     .slice(0, 300)
-}
-
-function getComparisonDigits(participantCount: number) {
-  if (participantCount <= 1000) {
-    return 3
-  }
-
-  if (participantCount <= 10000) {
-    return 4
-  }
-
-  if (participantCount <= 100000) {
-    return 5
-  }
-
-  return 6
 }
 
 function buildAvailableDrawPrizes(campaignData: DocumentData | undefined): string[] {
@@ -774,159 +827,48 @@ async function buildRankingSnapshot(
 export function resolveWinnerByFederalRule(
   extractionNumbers: string[],
   rankingSnapshot: TopBuyersRankingItem[],
+  winnerTicketNumbersByUser: Map<string, string[]>,
 ): {
   comparisonDigits: number
   attempts: ExtractionAttempt[]
   winningPosition: number
   winningCode: string
+  winningTicketNumber: string | null
   resolvedBy: 'federal_extraction' | 'redundancy'
-} {
-  const participantCount = rankingSnapshot.length
-  const comparisonDigits = getComparisonDigits(participantCount)
-  const positionByCode = new Map<string, number>()
-  const availableCodes = new Set<number>()
-  const rankingCodesInOrder: string[] = []
-
-  for (const item of rankingSnapshot) {
-    const code = String(item.pos).padStart(comparisonDigits, '0')
-    positionByCode.set(code, item.pos)
-    availableCodes.add(Number(code))
-    rankingCodesInOrder.push(code)
-  }
-
-  function findMatchByHouseComparison(targetCode: string): {
-    resolvedCode: string
-    nearestDirection: 'none' | 'below' | 'above'
-    nearestDistance: number
-  } | null {
-    const targetNumber = Number(targetCode)
-    const maxCode = (10 ** comparisonDigits) - 1
-
-    if (availableCodes.has(targetNumber)) {
-      return {
-        resolvedCode: targetCode,
-        nearestDirection: 'none',
-        nearestDistance: 0,
-      }
-    }
-
-    for (let distance = 1; distance <= maxCode; distance += 1) {
-      const below = targetNumber - distance
-      const above = targetNumber + distance
-
-      const belowCode = below >= 0 ? String(below).padStart(comparisonDigits, '0') : null
-      const aboveCode = above <= maxCode ? String(above).padStart(comparisonDigits, '0') : null
-      const hasBelow = Boolean(belowCode && availableCodes.has(below))
-      const hasAbove = Boolean(aboveCode && availableCodes.has(above))
-
-      if (!hasBelow && !hasAbove) {
-        continue
-      }
-
-      // Regra de casas: para cada distancia, percorre jogadores em ordem de ranking.
-      for (const rankingCode of rankingCodesInOrder) {
-        if (hasBelow && belowCode && rankingCode === belowCode) {
-          return {
-            resolvedCode: belowCode,
-            nearestDirection: 'below',
-            nearestDistance: distance,
-          }
-        }
-        if (hasAbove && aboveCode && rankingCode === aboveCode) {
-          return {
-            resolvedCode: aboveCode,
-            nearestDirection: 'above',
-            nearestDistance: distance,
-          }
-        }
-      }
-    }
-
+} | null {
+  const rankingEntries: RankedParticipant[] = rankingSnapshot.map((item) => ({
+    pos: item.pos,
+    userId: item.userId,
+    tickets: winnerTicketNumbersByUser.get(item.userId) || [],
+  }))
+  const resolved = resolveWinnerByPrefixCycleV2(extractionNumbers, rankingEntries)
+  if (!resolved) {
     return null
   }
 
-  const attempts: ExtractionAttempt[] = []
-
-  // Fase 1: match exato apenas — sem aproximacao.
-  for (let index = 0; index < extractionNumbers.length; index += 1) {
-    const extractionNumber = extractionNumbers[index]
-    const rawCandidateCode = extractionNumber.slice(-comparisonDigits).padStart(comparisonDigits, '0')
-    const isExactMatch = availableCodes.has(Number(rawCandidateCode))
-    const matchedPosition = isExactMatch ? (positionByCode.get(rawCandidateCode) ?? null) : null
-
-    attempts.push({
-      extractionIndex: index + 1,
-      extractionNumber,
-      comparisonDigits,
-      rawCandidateCode,
-      candidateCode: rawCandidateCode,
-      nearestDirection: 'none',
-      nearestDistance: null,
-      matchedPosition,
-    })
-
-    if (matchedPosition !== null) {
-      return {
-        comparisonDigits,
-        attempts,
-        winningPosition: matchedPosition,
-        winningCode: rawCandidateCode,
-        resolvedBy: 'federal_extraction',
-      }
-    }
-  }
-
-  // Fase 2: match por proximidade — volta para extracao 1 e compara casa por casa.
-  for (let index = 0; index < extractionNumbers.length; index += 1) {
-    const extractionNumber = extractionNumbers[index]
-    const rawCandidateCode = extractionNumber.slice(-comparisonDigits).padStart(comparisonDigits, '0')
-    const nearestResolution = findMatchByHouseComparison(rawCandidateCode)
-    const resolvedCandidateCode = nearestResolution?.resolvedCode ?? rawCandidateCode
-    const matchedPosition = positionByCode.get(resolvedCandidateCode) ?? null
-
-    attempts.push({
-      extractionIndex: extractionNumbers.length + index + 1,
-      extractionNumber,
-      comparisonDigits,
-      rawCandidateCode,
-      candidateCode: resolvedCandidateCode,
-      nearestDirection: (nearestResolution?.nearestDirection ?? 'none') as ExtractionAttempt['nearestDirection'],
-      nearestDistance: nearestResolution?.nearestDistance ?? null,
-      matchedPosition,
-    })
-
-    if (matchedPosition !== null) {
-      return {
-        comparisonDigits,
-        attempts,
-        winningPosition: matchedPosition,
-        winningCode: resolvedCandidateCode,
-        resolvedBy: 'federal_extraction',
-      }
-    }
-  }
-
-  // Fallback de seguranca: garante ganhador mesmo em dados inconsistentes.
-  const fallbackPosition = 1
-  const fallbackCode = String(fallbackPosition).padStart(comparisonDigits, '0')
-
-  attempts.push({
-    extractionIndex: extractionNumbers.length * 2 + 1,
-    extractionNumber: extractionNumbers.join('-'),
-    comparisonDigits,
-    rawCandidateCode: '',
-    candidateCode: fallbackCode,
-    nearestDirection: 'none',
-    nearestDistance: null,
-    matchedPosition: fallbackPosition,
-  })
+  const attempts: ExtractionAttempt[] = resolved.attempts.map((attempt: V2ResolutionAttempt) => ({
+    extractionIndex: attempt.extractionIndex,
+    attemptIndex: attempt.attemptIndex,
+    sourceExtractionIndex: attempt.sourceExtractionIndex,
+    extractionNumber: attempt.extractionNumber,
+    comparisonDigits: attempt.comparisonDigits,
+    phase: attempt.phase,
+    rawCandidateCode: attempt.rawCandidateCode,
+    candidateCode: attempt.candidateCode,
+    nearestDirection: attempt.nearestDirection,
+    nearestDistance: attempt.nearestDistance,
+    matchedPosition: attempt.matchedPosition,
+    matchedUserId: attempt.matchedUserId,
+    matchedTicketNumber: attempt.matchedTicketNumber,
+  }))
 
   return {
-    comparisonDigits,
+    comparisonDigits: resolved.comparisonDigits,
     attempts,
-    winningPosition: fallbackPosition,
-    winningCode: fallbackCode,
-    resolvedBy: 'redundancy',
+    winningPosition: resolved.winningPosition,
+    winningCode: resolved.winningCode,
+    winningTicketNumber: resolved.winningTicketNumber,
+    resolvedBy: resolved.resolvedBy,
   }
 }
 
@@ -1037,7 +979,14 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
         throw new HttpsError('failed-precondition', 'Ainda nao ha participantes elegiveis para sorteio.')
       }
 
-      const winnerResolution = resolveWinnerByFederalRule(extractionNumbers, rankingSnapshot)
+      const winnerResolution = resolveWinnerByFederalRule(
+        extractionNumbers,
+        rankingSnapshot,
+        rankingBuild.winnerTicketNumbersByUser,
+      )
+      if (!winnerResolution) {
+        throw new HttpsError('failed-precondition', 'Nao foi possivel resolver vencedor com os dados elegiveis do ranking.')
+      }
       const winner = rankingSnapshot[winnerResolution.winningPosition - 1]
 
       if (!winner) {
@@ -1047,12 +996,13 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
       const drawRef = db.collection(TOP_BUYERS_DRAW_HISTORY_COLLECTION).doc()
       const publishedAtMs = Date.now()
       const winnerTicketNumbers = rankingBuild.winnerTicketNumbersByUser.get(winner.userId) || []
-      const winningTicketNumber = pickTopBuyersWinningTicketNumber({
+      const winningTicketNumber = winnerResolution.winningTicketNumber || pickTopBuyersWinningTicketNumber({
         winnerTicketNumbers,
         attempts: winnerResolution.attempts,
         winningPosition: winnerResolution.winningPosition,
         comparisonDigits: winnerResolution.comparisonDigits,
         winningCode: winnerResolution.winningCode,
+        comparisonSide: 'right_suffix',
       })
       const exactCalculation = buildExactCalculationSnapshot({
         drawId: drawRef.id,
@@ -1062,6 +1012,7 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
         rankingSnapshot,
         ticketNumbersByUser: rankingBuild.winnerTicketNumbersByUser,
         winningTicketNumber,
+        comparisonSide: 'right_suffix',
       })
 
       const result: TopBuyersDrawResult = {
@@ -1069,6 +1020,9 @@ export function createPublishTopBuyersDrawHandler(db: Firestore) {
         drawId: drawRef.id,
         drawDate,
         drawPrize,
+        ruleVersion: 'v2_prefix_cycle',
+        comparisonMode: 'ticket_suffix',
+        comparisonSide: 'right_suffix',
         weekId: rankingWindow.weekId,
         weekStartAtMs: rankingWindow.startMs,
         weekEndAtMs: rankingWindow.endMs,
@@ -1168,6 +1122,13 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
       const drawId = sanitizeString(rawResult.drawId)
       const drawDate = sanitizeString(rawResult.drawDate)
       const drawPrize = sanitizeString(rawResult.drawPrize) || sanitizeString(campaignData?.mainPrize) || DEFAULT_MAIN_PRIZE
+      const ruleVersion = rawResult.ruleVersion === 'v2_prefix_cycle' ? 'v2_prefix_cycle' : 'legacy_modulo'
+      const comparisonMode = rawResult.comparisonMode === 'ticket_suffix'
+        ? 'ticket_suffix'
+        : rawResult.comparisonMode === 'ticket_prefix'
+          ? 'ticket_prefix'
+          : 'legacy_modulo'
+      const comparisonSide = rawResult.comparisonSide === 'left_prefix' ? 'left_prefix' : 'right_suffix'
       const weekId = sanitizeString(rawResult.weekId)
       const weekStartAtMs = Number(rawResult.weekStartAtMs)
       const weekEndAtMs = Number(rawResult.weekEndAtMs)
@@ -1182,8 +1143,15 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
           .map((item) => asRecord(item))
           .map((item) => ({
             extractionIndex: Number(item.extractionIndex),
+            attemptIndex: Number.isInteger(Number(item.attemptIndex))
+              ? Number(item.attemptIndex)
+              : Number(item.extractionIndex),
+            sourceExtractionIndex: Number.isInteger(Number(item.sourceExtractionIndex))
+              ? Number(item.sourceExtractionIndex)
+              : null,
             extractionNumber: sanitizeString(item.extractionNumber),
             comparisonDigits: Number(item.comparisonDigits),
+            phase: parseAttemptPhase(item.phase),
             rawCandidateCode: sanitizeString(item.rawCandidateCode),
             candidateCode: sanitizeString(item.candidateCode),
             nearestDirection: (item.nearestDirection === 'below'
@@ -1197,6 +1165,8 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
             matchedPosition: Number.isInteger(Number(item.matchedPosition))
               ? Number(item.matchedPosition)
               : null,
+            matchedUserId: sanitizeString(item.matchedUserId) || null,
+            matchedTicketNumber: sanitizeString(item.matchedTicketNumber) || null,
           }))
           .filter((item) => Number.isInteger(item.extractionIndex) && item.extractionIndex > 0 && item.extractionNumber)
         : []
@@ -1260,6 +1230,7 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
           winningPosition,
           comparisonDigits,
           winningCode,
+          comparisonSide,
         })
       }
 
@@ -1284,6 +1255,9 @@ export function createGetLatestTopBuyersDrawHandler(db: Firestore) {
           drawId,
           drawDate,
           drawPrize,
+          ruleVersion,
+          comparisonMode,
+          comparisonSide,
           weekId,
           weekStartAtMs,
           weekEndAtMs,
@@ -1397,8 +1371,15 @@ function parseAttempts(value: unknown): ExtractionAttempt[] {
     .map((item) => asRecord(item))
     .map((item) => ({
       extractionIndex: Number(item.extractionIndex),
+      attemptIndex: Number.isInteger(Number(item.attemptIndex))
+        ? Number(item.attemptIndex)
+        : Number(item.extractionIndex),
+      sourceExtractionIndex: Number.isInteger(Number(item.sourceExtractionIndex))
+        ? Number(item.sourceExtractionIndex)
+        : null,
       extractionNumber: sanitizeString(item.extractionNumber),
       comparisonDigits: Number(item.comparisonDigits),
+      phase: parseAttemptPhase(item.phase),
       rawCandidateCode: sanitizeString(item.rawCandidateCode),
       candidateCode: sanitizeString(item.candidateCode),
       nearestDirection: (item.nearestDirection === 'below'
@@ -1412,6 +1393,8 @@ function parseAttempts(value: unknown): ExtractionAttempt[] {
       matchedPosition: Number.isInteger(Number(item.matchedPosition))
         ? Number(item.matchedPosition)
         : null,
+      matchedUserId: sanitizeString(item.matchedUserId) || null,
+      matchedTicketNumber: sanitizeString(item.matchedTicketNumber) || null,
     }))
     .filter((item) => Number.isInteger(item.extractionIndex) && item.extractionIndex > 0 && item.extractionNumber)
 }
@@ -1442,6 +1425,13 @@ function parseHistoryResultSummary(
   const drawId = sanitizeString(raw.drawId) || documentId
   const drawDate = sanitizeString(raw.drawDate)
   const drawPrize = sanitizeString(raw.drawPrize) || fallbackMainPrize
+  const ruleVersion = raw.ruleVersion === 'v2_prefix_cycle' ? 'v2_prefix_cycle' : 'legacy_modulo'
+  const comparisonMode = raw.comparisonMode === 'ticket_suffix'
+    ? 'ticket_suffix'
+    : raw.comparisonMode === 'ticket_prefix'
+      ? 'ticket_prefix'
+      : 'legacy_modulo'
+  const comparisonSide = raw.comparisonSide === 'left_prefix' ? 'left_prefix' : 'right_suffix'
   const weekId = sanitizeString(raw.weekId)
   const weekStartAtMs = Number(raw.weekStartAtMs)
   const weekEndAtMs = Number(raw.weekEndAtMs)
@@ -1481,6 +1471,7 @@ function parseHistoryResultSummary(
       winningPosition,
       comparisonDigits,
       winningCode,
+      comparisonSide,
     })
   }
 
@@ -1490,13 +1481,18 @@ function parseHistoryResultSummary(
   const normalizedAttempts = resolvedExtractionNumber && attempts.length === 0
     ? [{
       extractionIndex: 1,
+      attemptIndex: 1,
+      sourceExtractionIndex: 1,
       extractionNumber: resolvedExtractionNumber,
       comparisonDigits,
+      phase: 'exact' as const,
       rawCandidateCode: winningCode,
       candidateCode: winningCode,
       nearestDirection: 'none' as const,
       nearestDistance: null,
       matchedPosition: winningPosition || null,
+      matchedUserId: winnerUid || null,
+      matchedTicketNumber: winningTicketNumber || null,
     }]
     : attempts
 
@@ -1526,6 +1522,9 @@ function parseHistoryResultSummary(
     drawId,
     drawDate,
     drawPrize,
+    ruleVersion,
+    comparisonMode,
+    comparisonSide,
     weekId,
     weekStartAtMs,
     weekEndAtMs,

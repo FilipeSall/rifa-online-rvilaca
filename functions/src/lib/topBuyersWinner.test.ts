@@ -68,3 +68,22 @@ test('pickTopBuyersWinningTicketNumber respeita winningTicketNumber persistido',
 
   assert.equal(ticket, '0907200')
 })
+
+test('pickTopBuyersWinningTicketNumber suporta comparacao por prefixo na regra v2', () => {
+  const ticket = pickTopBuyersWinningTicketNumber({
+    winnerTicketNumbers: ['1234567', '9999999'],
+    attempts: [
+      {
+        matchedPosition: 1,
+        rawCandidateCode: '123456',
+        candidateCode: '123456',
+      },
+    ],
+    winningPosition: 1,
+    comparisonDigits: 6,
+    winningCode: '123456',
+    comparisonSide: 'left_prefix',
+  })
+
+  assert.equal(ticket, '1234567')
+})

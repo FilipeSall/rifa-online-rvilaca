@@ -10,12 +10,12 @@ const federalRules = [
     description: 'Apuração vinculada às extrações da Loteria Federal.',
   },
   {
-    title: 'Data de referência',
-    description: 'Sorteios oficiais considerados nas datas definidas em regulamento.',
+    title: 'Ordem do cálculo',
+    description: 'Ciclo oficial por sufixo (últimas casas): 6→5→4→3, respeitando ordem de extrações e ranking.',
   },
   {
     title: 'Garantia de rodada',
-    description: 'Regra de redundância aplicada para garantir ganhador em toda rodada.',
+    description: 'Se não houver match em 3 dígitos, aplica fallback por proximidade até encontrar ganhador elegível.',
   },
 ]
 

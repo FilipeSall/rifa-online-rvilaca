@@ -15,7 +15,18 @@ type RawMainRaffleResult = {
   drawId?: unknown
   drawDate?: unknown
   drawPrize?: unknown
+  ruleVersion?: unknown
+  comparisonMode?: unknown
+  comparisonSide?: unknown
   extractionNumbers?: unknown
+  participantCount?: unknown
+  comparisonDigits?: unknown
+  attempts?: unknown
+  winningPosition?: unknown
+  winningCode?: unknown
+  winningTicketNumber?: unknown
+  resolvedBy?: unknown
+  rankingSnapshot?: unknown
   selectedExtractionIndex?: unknown
   selectedExtractionNumber?: unknown
   raffleRangeStart?: unknown
@@ -48,7 +59,6 @@ const HISTORY_LAST_FETCH_KEY = 'rifa-online:last-fetch:main-raffle:history:v2'
 
 type PublishMainRaffleDrawInput = {
   extractionNumbers: string[]
-  extractionIndex: number
   drawPrize: string
 }
 
@@ -61,7 +71,39 @@ export type MainRaffleDrawResult = {
   drawId: string
   drawDate: string
   drawPrize: string
+  ruleVersion: 'v2_prefix_cycle' | 'legacy_modulo'
+  comparisonMode: 'ticket_suffix' | 'ticket_prefix' | 'legacy_modulo'
+  comparisonSide: 'left_prefix' | 'right_suffix'
   extractionNumbers: string[]
+  participantCount: number
+  comparisonDigits: number
+  attempts: Array<{
+    extractionIndex: number
+    attemptIndex: number
+    sourceExtractionIndex: number | null
+    extractionNumber: string
+    comparisonDigits: number
+    phase: 'exact' | 'nearest' | 'contingency'
+    rawCandidateCode: string
+    candidateCode: string
+    nearestDirection: 'none' | 'below' | 'above'
+    nearestDistance: number | null
+    matchedPosition: number | null
+    matchedUserId: string | null
+    matchedTicketNumber: string | null
+  }>
+  winningPosition: number
+  winningCode: string
+  winningTicketNumber: string | null
+  resolvedBy: 'federal_extraction' | 'redundancy'
+  rankingSnapshot: Array<{
+    pos: number
+    userId: string
+    name: string
+    cotas: number
+    firstPurchaseAtMs: number
+    photoURL: string
+  }>
   selectedExtractionIndex: number
   selectedExtractionNumber: string
   raffleRangeStart: number
@@ -131,6 +173,30 @@ function sanitizeNumber(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+function parseAttemptPhase(
+  value: unknown,
+): MainRaffleDrawResult['attempts'][number]['phase'] {
+  if (value === 'nearest') {
+    return 'nearest'
+  }
+  if (value === 'contingency') {
+    return 'contingency'
+  }
+  return 'exact'
+}
+
+function parseNearestDirection(
+  value: unknown,
+): MainRaffleDrawResult['attempts'][number]['nearestDirection'] {
+  if (value === 'below') {
+    return 'below'
+  }
+  if (value === 'above') {
+    return 'above'
+  }
+  return 'none'
+}
+
 function normalizeResult(raw: RawMainRaffleResult | null | undefined): MainRaffleDrawResult | null {
   if (!raw || typeof raw !== 'object') {
     return null
@@ -139,19 +205,79 @@ function normalizeResult(raw: RawMainRaffleResult | null | undefined): MainRaffl
   const extractionNumbers = Array.isArray(raw.extractionNumbers)
     ? raw.extractionNumbers.map((item) => sanitizeString(item))
     : []
+  const attempts = Array.isArray(raw.attempts)
+    ? raw.attempts
+      .map((item) => (item && typeof item === 'object' ? item as Record<string, unknown> : null))
+      .filter((item): item is Record<string, unknown> => Boolean(item))
+      .map((item) => ({
+        extractionIndex: sanitizeInteger(item.extractionIndex),
+        attemptIndex: sanitizeInteger(item.attemptIndex, sanitizeInteger(item.extractionIndex)),
+        sourceExtractionIndex: Number.isInteger(Number(item.sourceExtractionIndex))
+          ? Number(item.sourceExtractionIndex)
+          : null,
+        extractionNumber: sanitizeString(item.extractionNumber),
+        comparisonDigits: sanitizeInteger(item.comparisonDigits),
+        phase: parseAttemptPhase(item.phase),
+        rawCandidateCode: sanitizeString(item.rawCandidateCode),
+        candidateCode: sanitizeString(item.candidateCode),
+        nearestDirection: parseNearestDirection(item.nearestDirection),
+        nearestDistance: Number.isFinite(Number(item.nearestDistance))
+          ? Number(item.nearestDistance)
+          : null,
+        matchedPosition: Number.isInteger(Number(item.matchedPosition))
+          ? Number(item.matchedPosition)
+          : null,
+        matchedUserId: sanitizeString(item.matchedUserId) || null,
+        matchedTicketNumber: sanitizeString(item.matchedTicketNumber) || null,
+      }))
+      .filter((item) => item.extractionIndex > 0 && item.extractionNumber.length > 0)
+    : []
+  const rankingSnapshot = Array.isArray(raw.rankingSnapshot)
+    ? raw.rankingSnapshot
+      .map((item) => (item && typeof item === 'object' ? item as Record<string, unknown> : null))
+      .filter((item): item is Record<string, unknown> => Boolean(item))
+      .map((item) => ({
+        pos: sanitizeInteger(item.pos),
+        userId: sanitizeString(item.userId),
+        name: sanitizeString(item.name, 'Participante'),
+        cotas: sanitizeInteger(item.cotas),
+        firstPurchaseAtMs: sanitizeNumber(item.firstPurchaseAtMs),
+        photoURL: sanitizeString(item.photoURL),
+      }))
+      .filter((item) => item.pos > 0 && item.userId.length > 0)
+    : []
   const winnerRaw = raw.winner || {}
   const fallbackDirection = raw.fallbackDirection === 'above'
     ? 'above'
     : raw.fallbackDirection === 'below'
       ? 'below'
       : 'none'
+  const ruleVersion = raw.ruleVersion === 'v2_prefix_cycle' ? 'v2_prefix_cycle' : 'legacy_modulo'
+  const comparisonMode = raw.comparisonMode === 'ticket_suffix'
+    ? 'ticket_suffix'
+    : raw.comparisonMode === 'ticket_prefix'
+      ? 'ticket_prefix'
+      : 'legacy_modulo'
+  const comparisonSide = raw.comparisonSide === 'left_prefix' ? 'left_prefix' : 'right_suffix'
+  const resolvedBy = raw.resolvedBy === 'federal_extraction' ? 'federal_extraction' : 'redundancy'
 
   const result: MainRaffleDrawResult = {
     campaignId: sanitizeString(raw.campaignId),
     drawId: sanitizeString(raw.drawId),
     drawDate: sanitizeString(raw.drawDate),
     drawPrize: sanitizeString(raw.drawPrize),
+    ruleVersion,
+    comparisonMode,
+    comparisonSide,
     extractionNumbers,
+    participantCount: sanitizeInteger(raw.participantCount, rankingSnapshot.length),
+    comparisonDigits: sanitizeInteger(raw.comparisonDigits),
+    attempts,
+    winningPosition: sanitizeInteger(raw.winningPosition),
+    winningCode: sanitizeString(raw.winningCode),
+    winningTicketNumber: sanitizeString(raw.winningTicketNumber) || null,
+    resolvedBy,
+    rankingSnapshot,
     selectedExtractionIndex: sanitizeInteger(raw.selectedExtractionIndex),
     selectedExtractionNumber: sanitizeString(raw.selectedExtractionNumber),
     raffleRangeStart: sanitizeInteger(raw.raffleRangeStart),
@@ -175,7 +301,8 @@ function normalizeResult(raw: RawMainRaffleResult | null | undefined): MainRaffl
     !result.drawId ||
     !result.drawDate ||
     !result.drawPrize ||
-    result.extractionNumbers.length !== 5 ||
+    result.extractionNumbers.length < 1 ||
+    result.extractionNumbers.length > 5 ||
     result.selectedExtractionIndex < 1 ||
     result.selectedExtractionIndex > 5 ||
     !result.selectedExtractionNumber ||

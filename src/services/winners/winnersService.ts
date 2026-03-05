@@ -27,6 +27,7 @@ type RawTopBuyersDrawResult = {
   winningPosition?: unknown
   comparisonDigits?: unknown
   winningCode?: unknown
+  comparisonSide?: unknown
   winningTicketNumber?: unknown
   publishedAtMs?: unknown
 }
@@ -37,7 +38,10 @@ type RawMainRaffleResult = {
   drawPrize?: unknown
   winner?: RawWinner
   selectedExtractionNumber?: unknown
+  winningTicketNumber?: unknown
   winningNumberFormatted?: unknown
+  attempts?: unknown
+  winningPosition?: unknown
   publishedAtMs?: unknown
 }
 
@@ -130,6 +134,7 @@ function pickTopBuyerWinningNumber(raw: RawTopBuyersDrawResult) {
   return pickComparableWinnerTicketNumber({
     winningTicketNumber: sanitizeString(raw.winningTicketNumber) || null,
     winningCode: sanitizeString(raw.winningCode),
+    comparisonSide: raw.comparisonSide === 'left_prefix' ? 'left_prefix' : 'right_suffix',
     winningPosition: sanitizeInteger(raw.winningPosition),
     comparisonDigits: sanitizeInteger(raw.comparisonDigits),
     attempts: Array.isArray(raw.attempts)
@@ -195,8 +200,15 @@ function normalizeMainRaffleResult(raw: RawMainRaffleResult): WinnerFeedItem | n
   const drawId = sanitizeString(raw.drawId)
   const drawDate = sanitizeString(raw.drawDate)
   const prizeLabel = sanitizeString(raw.drawPrize)
-  const winningNumber = sanitizeString(raw.winningNumberFormatted, '-')
-  const lotteryNumber = sanitizeString(raw.selectedExtractionNumber, '-')
+  const winningNumber = sanitizeString(raw.winningTicketNumber) || sanitizeString(raw.winningNumberFormatted, '-')
+  const attempts = Array.isArray(raw.attempts)
+    ? raw.attempts.map((item) => (item && typeof item === 'object' ? item as RawTopAttempt : null)).filter((item): item is RawTopAttempt => Boolean(item))
+    : []
+  const winningPosition = sanitizeInteger(raw.winningPosition)
+  const winnerAttempt = winningPosition > 0
+    ? attempts.find((attempt) => sanitizeInteger(attempt.matchedPosition) === winningPosition)
+    : null
+  const lotteryNumber = sanitizeString(winnerAttempt?.extractionNumber || raw.selectedExtractionNumber, '-')
   const publishedAtMs = sanitizeNumber(raw.publishedAtMs)
   const winner = raw.winner || {}
   const winnerName = sanitizeString(winner.name, 'Participante')

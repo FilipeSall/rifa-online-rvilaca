@@ -22,13 +22,18 @@ type RawTopBuyersDrawItem = {
 
 type RawAttempt = {
   extractionIndex?: unknown
+  attemptIndex?: unknown
+  sourceExtractionIndex?: unknown
   extractionNumber?: unknown
   comparisonDigits?: unknown
+  phase?: unknown
   rawCandidateCode?: unknown
   candidateCode?: unknown
   nearestDirection?: unknown
   nearestDistance?: unknown
   matchedPosition?: unknown
+  matchedUserId?: unknown
+  matchedTicketNumber?: unknown
 }
 
 type RawTopBuyersDrawResult = {
@@ -36,6 +41,9 @@ type RawTopBuyersDrawResult = {
   drawId?: unknown
   drawDate?: unknown
   drawPrize?: unknown
+  ruleVersion?: unknown
+  comparisonMode?: unknown
+  comparisonSide?: unknown
   weekId?: unknown
   weekStartAtMs?: unknown
   weekEndAtMs?: unknown
@@ -102,13 +110,18 @@ export type TopBuyersDrawItem = {
 
 export type TopBuyersDrawAttempt = {
   extractionIndex: number
+  attemptIndex: number
+  sourceExtractionIndex: number | null
   extractionNumber: string
   comparisonDigits: number
+  phase: 'exact' | 'nearest' | 'contingency'
   rawCandidateCode: string
   candidateCode: string
   nearestDirection: 'none' | 'below' | 'above'
   nearestDistance: number | null
   matchedPosition: number | null
+  matchedUserId: string | null
+  matchedTicketNumber: string | null
 }
 
 export type TopBuyersDrawResult = {
@@ -116,6 +129,9 @@ export type TopBuyersDrawResult = {
   drawId: string
   drawDate: string
   drawPrize: string
+  ruleVersion: 'v2_prefix_cycle' | 'legacy_modulo'
+  comparisonMode: 'ticket_suffix' | 'ticket_prefix' | 'legacy_modulo'
+  comparisonSide: 'left_prefix' | 'right_suffix'
   weekId: string
   weekStartAtMs: number
   weekEndAtMs: number
@@ -197,6 +213,16 @@ function sanitizeString(value: unknown, fallback = '') {
   return normalized || fallback
 }
 
+function parseAttemptPhase(value: unknown): TopBuyersDrawAttempt['phase'] {
+  if (value === 'nearest') {
+    return 'nearest'
+  }
+  if (value === 'contingency') {
+    return 'contingency'
+  }
+  return 'exact'
+}
+
 function normalizeRankingSnapshot(value: unknown): TopBuyersDrawItem[] {
   if (!Array.isArray(value)) {
     return []
@@ -225,8 +251,13 @@ function normalizeAttempts(value: unknown): TopBuyersDrawAttempt[] {
     .filter((item): item is RawAttempt => Boolean(item))
     .map((item) => ({
       extractionIndex: sanitizeInteger(item.extractionIndex),
+      attemptIndex: sanitizeInteger(item.attemptIndex, sanitizeInteger(item.extractionIndex)),
+      sourceExtractionIndex: Number.isInteger(Number(item.sourceExtractionIndex))
+        ? Number(item.sourceExtractionIndex)
+        : null,
       extractionNumber: sanitizeString(item.extractionNumber),
       comparisonDigits: sanitizeInteger(item.comparisonDigits),
+      phase: parseAttemptPhase(item.phase),
       rawCandidateCode: sanitizeString(item.rawCandidateCode),
       candidateCode: sanitizeString(item.candidateCode),
       nearestDirection: (item.nearestDirection === 'below'
@@ -240,6 +271,8 @@ function normalizeAttempts(value: unknown): TopBuyersDrawAttempt[] {
       matchedPosition: Number.isInteger(Number(item.matchedPosition))
         ? Number(item.matchedPosition)
         : null,
+      matchedUserId: sanitizeString(item.matchedUserId) || null,
+      matchedTicketNumber: sanitizeString(item.matchedTicketNumber) || null,
     }))
     .filter((item) => item.extractionIndex > 0 && item.extractionNumber.length > 0)
 }
@@ -262,12 +295,22 @@ function normalizeResult(raw: RawTopBuyersDrawResult | null | undefined): TopBuy
     : []
 
   const resolvedBy = raw.resolvedBy === 'federal_extraction' ? 'federal_extraction' : 'redundancy'
+  const ruleVersion = raw.ruleVersion === 'v2_prefix_cycle' ? 'v2_prefix_cycle' : 'legacy_modulo'
+  const comparisonMode = raw.comparisonMode === 'ticket_suffix'
+    ? 'ticket_suffix'
+    : raw.comparisonMode === 'ticket_prefix'
+      ? 'ticket_prefix'
+      : 'legacy_modulo'
+  const comparisonSide = raw.comparisonSide === 'left_prefix' ? 'left_prefix' : 'right_suffix'
 
   const result: TopBuyersDrawResult = {
     campaignId: sanitizeString(raw.campaignId),
     drawId: sanitizeString(raw.drawId),
     drawDate: sanitizeString(raw.drawDate),
     drawPrize: sanitizeString(raw.drawPrize),
+    ruleVersion,
+    comparisonMode,
+    comparisonSide,
     weekId: sanitizeString(raw.weekId),
     weekStartAtMs: sanitizeNumber(raw.weekStartAtMs),
     weekEndAtMs: sanitizeNumber(raw.weekEndAtMs),

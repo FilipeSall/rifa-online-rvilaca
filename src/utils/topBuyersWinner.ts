@@ -11,6 +11,7 @@ type ComparableWinnerTicketInput = {
   attempts?: ComparableWinnerAttempt[]
   winningPosition?: number | null
   comparisonDigits?: number
+  comparisonSide?: 'left_prefix' | 'right_suffix'
 }
 
 function sanitizeDigits(value: string) {
@@ -34,6 +35,19 @@ function normalizeCode(value: string, digits: number) {
 
   if (digits <= 0) {
     return raw
+  }
+
+  return raw.slice(-digits).padStart(digits, '0')
+}
+
+function extractComparableCode(value: string, digits: number, side: 'left_prefix' | 'right_suffix') {
+  const raw = sanitizeDigits(value)
+  if (!raw) {
+    return ''
+  }
+
+  if (side === 'left_prefix') {
+    return raw.slice(0, digits).padEnd(digits, '0')
   }
 
   return raw.slice(-digits).padStart(digits, '0')
@@ -90,27 +104,28 @@ export function pickComparableWinnerTicketNumber(input: ComparableWinnerTicketIn
   const winnerAttempt = Number.isInteger(winningPosition) && winningPosition > 0
     ? (input.attempts || []).find((attempt) => Number(attempt.matchedPosition) === winningPosition) || null
     : null
+  const comparisonSide = input.comparisonSide === 'left_prefix' ? 'left_prefix' : 'right_suffix'
   const comparisonDigits = resolveComparisonDigits(input, winnerAttempt)
   const rawCode = normalizeCode(String(winnerAttempt?.rawCandidateCode || winnerAttempt?.candidateCode || ''), comparisonDigits)
   const resolvedCode = normalizeCode(String(winnerAttempt?.candidateCode || ''), comparisonDigits)
   const fallbackWinningCode = normalizeCode(String(input.winningCode || ''), comparisonDigits)
 
   const byRawCode = rawCode
-    ? normalizedTickets.find((ticket) => ticket.endsWith(rawCode))
+    ? normalizedTickets.find((ticket) => extractComparableCode(ticket, comparisonDigits, comparisonSide) === rawCode)
     : null
   if (byRawCode) {
     return byRawCode
   }
 
   const byResolvedCode = resolvedCode && resolvedCode !== rawCode
-    ? normalizedTickets.find((ticket) => ticket.endsWith(resolvedCode))
+    ? normalizedTickets.find((ticket) => extractComparableCode(ticket, comparisonDigits, comparisonSide) === resolvedCode)
     : null
   if (byResolvedCode) {
     return byResolvedCode
   }
 
   const byWinningCode = fallbackWinningCode && fallbackWinningCode !== rawCode && fallbackWinningCode !== resolvedCode
-    ? normalizedTickets.find((ticket) => ticket.endsWith(fallbackWinningCode))
+    ? normalizedTickets.find((ticket) => extractComparableCode(ticket, comparisonDigits, comparisonSide) === fallbackWinningCode)
     : null
   if (byWinningCode) {
     return byWinningCode

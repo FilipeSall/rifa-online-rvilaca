@@ -102,4 +102,4 @@ const analyticsPromise = useFirebaseEmulators
     .then((supported) => (supported ? getAnalytics(app) : null))
     .catch(() => null)
 
-export { app, auth, db, storage, functions, analyticsPromise, firebaseConfig, appCheck }
+export { app, auth, db, storage, functions, analyticsPromise, firebaseConfig, appCheck, useFirebaseEmulators }

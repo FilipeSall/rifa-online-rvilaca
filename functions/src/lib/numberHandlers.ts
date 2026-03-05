@@ -518,6 +518,7 @@ export function parseComparableWinnerTicket(raw: Record<string, unknown>): numbe
     winningPosition: Number(raw.winningPosition),
     comparisonDigits: Number(raw.comparisonDigits),
     winningCode: sanitizeString(raw.winningCode),
+    comparisonSide: raw.comparisonSide === 'left_prefix' ? 'left_prefix' : 'right_suffix',
   })
 
   return toComparableTicketNumber(comparableTicket)
@@ -642,6 +643,7 @@ async function resolveComparableWinnerTicket(
     winningPosition: Number(raw.winningPosition),
     comparisonDigits: Number(raw.comparisonDigits),
     winningCode: sanitizeString(raw.winningCode),
+    comparisonSide: raw.comparisonSide === 'left_prefix' ? 'left_prefix' : 'right_suffix',
   })
   return toComparableTicketNumber(comparableTicket)
 }

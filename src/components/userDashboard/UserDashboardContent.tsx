@@ -43,6 +43,10 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
     setReceiptSearch,
     filteredTickets,
     filteredOrders,
+    isTicketsLoading,
+    isLoadingMoreTickets,
+    hasMoreTickets,
+    loadMoreTickets,
     paidCount,
     totalOrders,
     totalTickets,
@@ -143,6 +147,9 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
                 ticketSearch={ticketSearch}
                 filteredTickets={filteredTickets}
                 totalTickets={totalTickets}
+                isLoadingTickets={isTicketsLoading}
+                isLoadingMoreTickets={isLoadingMoreTickets}
+                hasMoreTickets={hasMoreTickets}
                 mainPrize={mainPrize}
                 secondPrize={secondPrize}
                 bonusPrize={bonusPrize}
@@ -152,6 +159,7 @@ export default function UserDashboardContent({ dashboardState }: UserDashboardCo
                 latestWinPrize={winningSummary.latestWin?.drawPrize || null}
                 onTicketFilterChange={setTicketFilter}
                 onTicketSearchChange={setTicketSearch}
+                onLoadMoreTickets={loadMoreTickets}
                 onCheckIfWon={() => setActiveSection('ganhadores')}
               />
             )}

@@ -141,11 +141,11 @@ export const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: 'Como o número sorteado vira posição no ranking?',
-    a: 'O número da Loteria Federal é convertido matematicamente para código/posição do ranking. A plataforma aplica os critérios previstos no regulamento e identifica automaticamente o ganhador válido.',
+    a: 'A plataforma aplica a Regra V2 por sufixo (últimas casas): compara 6→5→4→3 dígitos finais das extrações com os dígitos finais dos bilhetes dos participantes, sempre respeitando a ordem do ranking.',
   },
   {
     q: 'Se não houver correspondência direta na primeira tentativa, o que acontece?',
-    a: 'É aplicada a regra de redundância: a apuração avança pelas extrações seguintes e, se necessário, utiliza o critério de fallback previsto no regulamento para garantir ganhador na rodada.',
+    a: 'A apuração segue as extrações em ordem e repete os ciclos 6→5→4→3. Se ainda não houver match em 3 dígitos, entra fallback por proximidade numérica até encontrar um bilhete elegível.',
   },
   {
     q: 'Como funciona a reserva dos meus números?',

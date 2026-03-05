@@ -42,37 +42,41 @@ export default function RegulationPage() {
     [topBuyersSchedule.dayOfWeek],
   )
   const weeklyRankingText = useMemo(
-    () => `A cada semana da campanha será apurado o ranking dos 50 participantes que adquirirem a maior quantidade de números no período semanal definido.
-Estes participantes concorrerão a um sorteio exclusivo realizado com base na extração da Loteria Federal correspondente.
-O número do prêmio da Loteria Federal será convertido matematicamente em posição do ranking, determinando o ganhador.
-O ranking semanal é encerrado e congelado na hora exata do sorteio semanal configurado (${topBuyersWeekdayLabel} às ${topBuyersSchedule.drawTime}, ${TOP_BUYERS_SCHEDULE_TIMEZONE}).`,
+    () => `Regra V2 ativa: a apuração usa comparação por sufixo (últimas casas) em ciclos 6→5→4→3.
+Em cada ciclo, as extrações informadas são avaliadas na ordem e cada extração percorre o ranking do 1º ao último elegível.
+No Sorteio TOP, a base é o ranking semanal; no Sorteio Geral, a base é o ranking acumulado da campanha.
+Sem ganhador após o ciclo de 3 dígitos, aplica-se fallback por proximidade numérica (abaixo/acima) até encontrar bilhete elegível.
+O ranking semanal TOP é encerrado no horário configurado (${topBuyersWeekdayLabel} às ${topBuyersSchedule.drawTime}, ${TOP_BUYERS_SCHEDULE_TIMEZONE}).`,
     [topBuyersSchedule.drawTime, topBuyersWeekdayLabel],
   )
   const ruleBlocks = useMemo(
     () => [
       {
-        title: 'Janela semanal e elegibilidade',
+        title: 'Ranking e elegibilidade',
         items: [
           `A janela semanal é definida por ciclos de congelamento: do congelamento anterior até o congelamento atual (no horário do sorteio).`,
           `Somente compras com status pago dentro da janela entram no ranking semanal.`,
-          'O ranking semanal considera os 50 maiores compradores do período.',
+          'No Sorteio TOP, o ranking considera os maiores compradores do ciclo semanal (até o limite configurado).',
+          'No Sorteio Geral, o ranking considera todos os participantes elegíveis da campanha.',
           'Empates são resolvidos por ordem de primeira compra paga mais antiga na semana.',
         ],
       },
       {
-        title: 'Apuração pela Loteria Federal',
+        title: 'Ordem da apuração V2',
         items: [
-          'A apuração usa a extração oficial da Loteria Federal na data prevista no calendário da campanha.',
-          'São consideradas as 5 extrações oficiais do concurso para a etapa de validação.',
-          'A conversão do número sorteado em posição do ranking segue a regra matemática configurada no sistema.',
+          'A apuração usa as extrações da Loteria Federal informadas para a rodada (1 a 5).',
+          'Cada extração é normalizada em 6 dígitos e comparada pelos dígitos finais com os bilhetes dos participantes.',
+          'Os ciclos seguem a ordem fixa: 6 dígitos, depois 5, depois 4, depois 3.',
+          'Em cada extração, a varredura sempre começa do 1º lugar do ranking.',
         ],
       },
       {
-        title: 'Regra de redundância e garantia de ganhador',
+        title: 'Fallback e garantia de ganhador',
         items: [
-          'Se não houver correspondência na primeira tentativa, a apuração avança pelas extrações subsequentes.',
-          'Se necessário, é aplicado o critério de fallback previsto em regulamento para garantir ganhador na rodada.',
-          'Cada resultado publicado registra trilha de tentativas, posição vencedora, código vencedor e participante contemplado.',
+          'Se o ciclo de 3 dígitos terminar sem match, entra fallback por proximidade numérica do código de 3 dígitos.',
+          'A busca de proximidade respeita ordem do ranking e direção abaixo/acima.',
+          'Persistindo ausência de match elegível, o sistema aplica contingência final para garantir ganhador.',
+          'Cada resultado registra trilha de tentativas, fase aplicada e bilhete vencedor para auditoria.',
         ],
       },
       {

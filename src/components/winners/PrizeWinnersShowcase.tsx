@@ -24,6 +24,7 @@ type ExactCalculationComparison = {
 type ExactCalculationAttempt = {
   extractionIndex: number
   extractionNumber: string
+  comparisonDigits?: number
   rawCode: string
   resolvedCode: string
   nearestDirection: 'none' | 'below' | 'above'
@@ -50,6 +51,7 @@ type RawExactCalculationComparison = {
 type RawExactCalculationAttempt = {
   extractionIndex?: unknown
   extractionNumber?: unknown
+  comparisonDigits?: unknown
   rawCode?: unknown
   resolvedCode?: unknown
   nearestDirection?: unknown
@@ -147,6 +149,7 @@ function normalizeExactCalculationAttempts(value: unknown): ExactCalculationAtte
     .map((item, index) => ({
       extractionIndex: sanitizeInteger(item.extractionIndex, index + 1),
       extractionNumber: sanitizeString(item.extractionNumber),
+      comparisonDigits: Number.isInteger(Number(item.comparisonDigits)) ? Number(item.comparisonDigits) : undefined,
       rawCode: sanitizeString(item.rawCode) || sanitizeString((item as { rawCandidateCode?: unknown }).rawCandidateCode),
       resolvedCode: sanitizeString(item.resolvedCode) || sanitizeString((item as { candidateCode?: unknown }).candidateCode),
       nearestDirection: (item.nearestDirection === 'below'
@@ -226,8 +229,15 @@ function formatDateLabel(dateValue: string) {
   }).format(parsed)
 }
 
-function formatAttemptLabel(extractionNumber: string, comparisonDigits: number) {
+function formatAttemptLabel(
+  extractionNumber: string,
+  comparisonDigits: number,
+  comparisonSide: 'left_prefix' | 'right_suffix' = 'right_suffix',
+) {
   const normalized = extractionNumber.padStart(6, '0')
+  if (comparisonSide === 'left_prefix') {
+    return normalized.slice(0, comparisonDigits).padEnd(comparisonDigits, '0')
+  }
   return normalized.slice(-comparisonDigits).padStart(comparisonDigits, '0')
 }
 
@@ -247,7 +257,9 @@ function buildWinnerCalculationLabel(result: NonNullable<ReturnType<typeof useTo
     const resolvedPositionCode = winnerAttempt.candidateCode.padStart(result.comparisonDigits, '0')
     const winningTicket = pickComparableWinnerTicket(result)
     const winningTicketFinal = winningTicket
-      ? winningTicket.slice(-result.comparisonDigits).padStart(result.comparisonDigits, '0')
+      ? (result.comparisonSide === 'left_prefix'
+        ? winningTicket.slice(0, result.comparisonDigits).padEnd(result.comparisonDigits, '0')
+        : winningTicket.slice(-result.comparisonDigits).padStart(result.comparisonDigits, '0'))
       : '---'
     const hasPath = rawCode !== resolvedPositionCode
 
@@ -279,6 +291,7 @@ function pickComparableWinnerTicket(result: NonNullable<ReturnType<typeof useTop
   return pickComparableWinnerTicketNumber({
     winningTicketNumber: result.winningTicketNumber,
     winningCode: result.winningCode,
+    comparisonSide: result.comparisonSide,
     winningPosition: result.winningPosition,
     comparisonDigits: result.comparisonDigits,
     attempts: result.attempts,
@@ -303,12 +316,34 @@ function formatMainFallbackDirectionLabel(direction: 'none' | 'above' | 'below')
 }
 
 function buildMainWinnerCalculationLabel(result: NonNullable<ReturnType<typeof useMainRaffleDraw>['result']>) {
+  if (result.ruleVersion === 'v2_prefix_cycle') {
+    const winnerAttempt = result.attempts.find((attempt) => attempt.matchedPosition === result.winningPosition)
+    const extractionNumber = winnerAttempt?.extractionNumber || result.selectedExtractionNumber
+    const extractionIndex = winnerAttempt?.sourceExtractionIndex || result.selectedExtractionIndex
+    const direction = winnerAttempt?.nearestDirection === 'below'
+      ? 'abaixo'
+      : winnerAttempt?.nearestDirection === 'above'
+        ? 'acima'
+        : 'match direto'
+    return `Ciclo V2 ${result.comparisonDigits} dígitos -> extração ${extractionIndex} (${extractionNumber}) -> código ${result.winningCode} -> bilhete ${result.winningNumberFormatted} (${direction}).`
+  }
+
   const total = Math.max(1, Number(result.raffleTotalNumbers) || 1)
   const direction = formatMainFallbackDirectionLabel(result.fallbackDirection)
   return `Extração ${result.selectedExtractionIndex} (${result.selectedExtractionNumber}) MOD ${total} = ${result.moduloTargetOffset} -> alvo ${result.targetNumberFormatted} -> vencedor ${result.winningNumberFormatted} (${direction}).`
 }
 
 function buildMainFallbackPath(result: NonNullable<ReturnType<typeof useMainRaffleDraw>['result']>) {
+  if (result.ruleVersion === 'v2_prefix_cycle') {
+    const winnerAttempt = result.attempts.find((attempt) => attempt.matchedPosition === result.winningPosition)
+    if (!winnerAttempt || winnerAttempt.nearestDirection === 'none') {
+      return null
+    }
+
+    const direction = formatMainFallbackDirectionLabel(winnerAttempt.nearestDirection)
+    return `${winnerAttempt.rawCandidateCode || '---'} -> ${winnerAttempt.candidateCode || '---'} (${direction})`
+  }
+
   if (result.fallbackDirection === 'none') {
     return null
   }
@@ -358,6 +393,7 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
         ticketNumber: pickComparableWinnerTicketNumber({
           winningTicketNumber: item.winningTicketNumber,
           winningCode: item.winningCode,
+          comparisonSide: item.comparisonSide,
           winningPosition: item.winningPosition,
           comparisonDigits: item.comparisonDigits,
           attempts: item.attempts,
@@ -516,7 +552,18 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                       <div key={winner.drawId} className="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-sm font-black text-white">{winner.name}</p>
-                          <span className="shrink-0 text-[10px] text-gray-500">{formatDateLabel(winner.drawDate)}</span>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] ${
+                                winner.type === 'top'
+                                  ? 'border-amber-300/35 bg-amber-400/15 text-amber-100'
+                                  : 'border-cyan-300/35 bg-cyan-400/15 text-cyan-100'
+                              }`}
+                            >
+                              {winner.type === 'top' ? 'Top buyers' : 'Sorteio geral'}
+                            </span>
+                            <span className="text-[10px] text-gray-500">{formatDateLabel(winner.drawDate)}</span>
+                          </div>
                         </div>
                         <p className="mt-0.5 text-xs font-semibold text-amber-100">{winner.prize}</p>
                         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
@@ -578,7 +625,14 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                             Códigos da Loteria informados: <span className="font-mono text-white">{formatLoteriaInputs(topResult.extractionNumbers)}</span>
                           </p>
                           <p className="mt-1 text-xs text-gray-300">
-                            Extração premiada: <span className="font-semibold text-white">1ª extração ({topResult.extractionNumbers[0] || '-'})</span>
+                            Extração premiada:{' '}
+                            <span className="font-semibold text-white">
+                              {(() => {
+                                const winnerAttempt = topResult.attempts.find((attempt) => attempt.matchedPosition === topResult.winningPosition)
+                                const sourceIndex = winnerAttempt?.sourceExtractionIndex || 1
+                                return `${sourceIndex}ª extração (${winnerAttempt?.extractionNumber || topResult.extractionNumbers[0] || '-'})`
+                              })()}
+                            </span>
                           </p>
                         </div>
                         <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-right">
@@ -591,7 +645,7 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                     </div>
 
                     <div className="rounded-xl border border-white/10 bg-black/25 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Rastro de apuração (regra de redundância)</p>
+                      <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Rastro de apuração (ciclo 6→5→4→3)</p>
                       <div className="mt-3 space-y-2">
                         {topResult.attempts.map((attempt) => {
                           const isFinalFallback = attempt.extractionNumber.includes('-')
@@ -606,8 +660,8 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                                 {isFinalFallback
                                   ? `Tentativa ${attempt.extractionIndex}: fallback de segurança ➜ posição ${attempt.candidateCode}`
                                   : isNearestAttempt
-                                    ? `Tentativa ${attempt.extractionIndex}: extração ${attempt.extractionNumber} (aprox.) ➜ base ${formatAttemptLabel(attempt.extractionNumber, attempt.comparisonDigits)}${formatNearestPath(attempt) ? ` | posição ${formatNearestPath(attempt)}` : ''}`
-                                    : `Tentativa ${attempt.extractionIndex}: extração ${attempt.extractionNumber} ➜ base ${formatAttemptLabel(attempt.extractionNumber, attempt.comparisonDigits)}`}
+                                    ? `Tentativa ${attempt.extractionIndex}: extração ${attempt.extractionNumber} (aprox.) ➜ base ${formatAttemptLabel(attempt.extractionNumber, attempt.comparisonDigits, topResult.comparisonSide)}${formatNearestPath(attempt) ? ` | posição ${formatNearestPath(attempt)}` : ''}`
+                                    : `Tentativa ${attempt.extractionIndex}: extração ${attempt.extractionNumber} ➜ base ${formatAttemptLabel(attempt.extractionNumber, attempt.comparisonDigits, topResult.comparisonSide)}`}
                               </span>
                               <span className="font-bold text-neon-pink">
                                 {attempt.matchedPosition ? `Match na posição ${formatWinningPosition(attempt.matchedPosition, topResult.participantCount)}` : 'Sem match'}
@@ -709,7 +763,7 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                           <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-200">Ganhador</p>
                           <p className="mt-1 text-2xl font-black text-white">{mainResult.winner.name}</p>
                           <p className="mt-1 text-xs text-gray-200">
-                            Sorteio principal por número da rifa.
+                            Sorteio geral com ranking acumulado e comparação por sufixo (últimas casas).
                           </p>
                           <p className="mt-2 text-xs font-semibold text-emerald-100">
                             Prêmio vigente: {mainResult.drawPrize || campaign.mainPrize}
@@ -729,21 +783,23 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
                           <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Data</p>
                           <p className="mt-1 text-xs font-bold text-white">{formatDateLabel(mainResult.drawDate)}</p>
                           <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-gray-500">Tipo</p>
-                          <p className="mt-1 text-sm font-black text-emerald-200">Sorteio principal</p>
+                          <p className="mt-1 text-sm font-black text-emerald-200">
+                            {mainResult.ruleVersion === 'v2_prefix_cycle' ? 'Sorteio geral V2' : 'Sorteio principal'}
+                          </p>
                         </div>
                       </div>
                     </div>
 
                     <div className="rounded-xl border border-white/10 bg-black/25 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Rastro de apuração (número da rifa)</p>
+                      <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Rastro de apuração (ordem extrações + ranking)</p>
                       <div className="mt-3 space-y-2">
                         <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs">
                           <span className="text-gray-300">
-                            Extração usada: {mainResult.selectedExtractionIndex} ({mainResult.selectedExtractionNumber}) ➜ alvo {mainResult.targetNumberFormatted}
+                            Extração usada: {mainResult.selectedExtractionIndex} ({mainResult.selectedExtractionNumber}) ➜ código {mainResult.winningCode}
                             {buildMainFallbackPath(mainResult) ? ` | caminho ${buildMainFallbackPath(mainResult)}` : ''}
                           </span>
                           <span className="font-bold text-neon-pink">
-                            {mainResult.fallbackDirection === 'none' ? 'Match exato' : 'Fallback por aproximação'}
+                            {buildMainFallbackPath(mainResult) ? 'Fallback por aproximação' : 'Match exato'}
                           </span>
                         </div>
                       </div>
@@ -751,19 +807,19 @@ export default function PrizeWinnersShowcase({ mode = 'public' }: PrizeWinnersSh
 
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Faixa da rifa</p>
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Participantes elegíveis</p>
                         <p className="mt-1 text-sm font-bold text-white">
-                          {String(mainResult.raffleRangeStart).padStart(7, '0')} - {String(mainResult.raffleRangeEnd).padStart(7, '0')}
+                          {mainResult.participantCount}
                         </p>
                       </div>
                       <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Total de números</p>
-                        <p className="mt-1 text-sm font-bold text-white">{mainResult.raffleTotalNumbers}</p>
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Dígitos do match</p>
+                        <p className="mt-1 text-sm font-bold text-white">{mainResult.comparisonDigits || '-'}</p>
                       </div>
                       <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2">
                         <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Resolução</p>
                         <p className="mt-1 text-sm font-bold text-white">
-                          {mainResult.fallbackDirection === 'none' ? 'Extração oficial' : 'Aproximação do mais próximo'}
+                          {mainResult.resolvedBy === 'federal_extraction' ? 'Extração oficial' : 'Redundância'}
                         </p>
                       </div>
                     </div>

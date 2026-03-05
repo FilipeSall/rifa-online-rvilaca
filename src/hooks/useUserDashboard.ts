@@ -1,5 +1,17 @@
 import { signOut } from 'firebase/auth'
-import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  startAfter,
+  where,
+  type DocumentData,
+  type QueryDocumentSnapshot,
+} from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -21,6 +33,8 @@ import {
   isOrderReservationExpired,
   mapOrderStatusToTicketStatus,
 } from '../utils/userDashboard'
+
+const USER_ORDERS_PAGE_SIZE = 20
 
 function readTimestampMillis(value: unknown): number | null {
   if (!value) {
@@ -71,6 +85,83 @@ function parseSectionParam(value: string | null): Section | null {
   return null
 }
 
+function mapOrderFromSnapshot(documentSnapshot: QueryDocumentSnapshot<DocumentData>): UserOrder | null {
+  const data = documentSnapshot.data()
+  const rawType = String(data.type || 'deposit').toLowerCase()
+  if (rawType !== 'deposit') {
+    return null
+  }
+
+  const createdAtMs =
+    readTimestampMillis(data.paidBusinessAppliedAt)
+    ?? readTimestampMillis(data.createdAt)
+    ?? readTimestampMillis(data.updatedAt)
+  const reservationExpiresAtMs = readTimestampMillis(data.reservationExpiresAt)
+  const numbers = readOrderNumbers(data.reservedNumbers)
+  const amount = typeof data.amount === 'number' && Number.isFinite(data.amount)
+    ? Number(data.amount)
+    : null
+  const payerPhone = typeof data.payerPhone === 'string' ? data.payerPhone : null
+  const payerCpf = typeof data.payerCpf === 'string' ? data.payerCpf : null
+  const rawStatus = String(data.status || 'pending')
+  const status = isOrderReservationExpired(rawStatus, reservationExpiresAtMs)
+    ? 'expirado'
+    : mapOrderStatusToTicketStatus(rawStatus)
+
+  return {
+    id: documentSnapshot.id,
+    cotas: numbers.length,
+    numbers,
+    amount,
+    payerPhone,
+    payerCpf,
+    totalBrl: formatCurrencyBrl(amount),
+    date: formatDashboardDate(createdAtMs),
+    status,
+    copyPaste: typeof data.pixCopyPaste === 'string' ? data.pixCopyPaste : null,
+    createdAtMs,
+    campaignId: typeof data.campaignId === 'string' ? data.campaignId : null,
+  }
+}
+
+function mergeOrdersById(current: UserOrder[], incoming: UserOrder[]): UserOrder[] {
+  const merged = new Map(current.map((item) => [item.id, item]))
+  for (const order of incoming) {
+    merged.set(order.id, order)
+  }
+
+  return Array.from(merged.values()).sort((left, right) => {
+    const leftTs = left.createdAtMs ?? 0
+    const rightTs = right.createdAtMs ?? 0
+    if (rightTs !== leftTs) {
+      return rightTs - leftTs
+    }
+
+    return left.id.localeCompare(right.id)
+  })
+}
+
+function buildTicketsFromOrders(orders: UserOrder[]): UserTicket[] {
+  return orders
+    .flatMap((order) => order.numbers.map((number) => ({
+      number: formatTicketNumber(number),
+      numericNumber: number,
+      orderId: order.id,
+      date: order.date,
+      status: order.status,
+      createdAtMs: order.createdAtMs,
+    })))
+    .sort((left, right) => {
+      const leftTs = left.createdAtMs ?? 0
+      const rightTs = right.createdAtMs ?? 0
+      if (rightTs !== leftTs) {
+        return rightTs - leftTs
+      }
+
+      return left.numericNumber - right.numericNumber
+    })
+}
+
 export function useUserDashboard() {
   const { user, isLoggedIn, isAuthReady, userRole, isRoleReady } = useAuthStore()
   const { campaign } = useCampaignSettings()
@@ -91,7 +182,10 @@ export function useUserDashboard() {
   const [receiptSearch, setReceiptSearch] = useState('')
 
   const [orders, setOrders] = useState<UserOrder[]>([])
-  const [tickets, setTickets] = useState<UserTicket[]>([])
+  const [isOrdersLoading, setIsOrdersLoading] = useState(false)
+  const [isOrdersLoadingMore, setIsOrdersLoadingMore] = useState(false)
+  const [hasMoreOrders, setHasMoreOrders] = useState(false)
+  const [lastOrderCursor, setLastOrderCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null)
   const [winningSummary, setWinningSummary] = useState<{
     hasWins: boolean
     winsCount: number
@@ -232,94 +326,114 @@ export function useUserDashboard() {
     }
   }, [getMyTopBuyersWinningSummary, isAuthReady, user])
 
+  const fetchOrdersPage = useCallback(async (params: {
+    uid: string
+    cursor?: QueryDocumentSnapshot<DocumentData> | null
+  }) => {
+    const baseConstraints = [
+      where('userId', '==', params.uid),
+      orderBy('createdAt', 'desc'),
+    ] as const
+
+    const pageQuery = params.cursor
+      ? query(
+        collection(db, 'orders'),
+        ...baseConstraints,
+        startAfter(params.cursor),
+        limit(USER_ORDERS_PAGE_SIZE),
+      )
+      : query(
+        collection(db, 'orders'),
+        ...baseConstraints,
+        limit(USER_ORDERS_PAGE_SIZE),
+      )
+
+    const snapshot = await getDocs(pageQuery)
+    const mappedOrders = snapshot.docs
+      .map((documentSnapshot) => mapOrderFromSnapshot(documentSnapshot))
+      .filter((item): item is UserOrder => Boolean(item))
+    const nextCursor = snapshot.docs[snapshot.docs.length - 1] || null
+    const hasMore = snapshot.docs.length === USER_ORDERS_PAGE_SIZE
+
+    return {
+      mappedOrders,
+      nextCursor,
+      hasMore,
+    }
+  }, [])
+
   useEffect(() => {
     if (!isAuthReady || !user) {
       setOrders([])
-      setTickets([])
+      setHasMoreOrders(false)
+      setLastOrderCursor(null)
+      setIsOrdersLoading(false)
+      setIsOrdersLoadingMore(false)
       return
     }
 
-    const ordersQuery = query(
-      collection(db, 'orders'),
-      where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc'),
-    )
+    let isCancelled = false
+    setIsOrdersLoading(true)
+    setIsOrdersLoadingMore(false)
 
-    const unsubscribe = onSnapshot(
-      ordersQuery,
-      (snapshot) => {
-        const nextOrders: UserOrder[] = snapshot.docs
-          .filter((documentSnapshot) => {
-            const rawType = String(documentSnapshot.data().type || 'deposit').toLowerCase()
-            return rawType === 'deposit'
-          })
-          .map((documentSnapshot) => {
-          const data = documentSnapshot.data()
-          const createdAtMs =
-            readTimestampMillis(data.paidBusinessAppliedAt)
-            ?? readTimestampMillis(data.createdAt)
-            ?? readTimestampMillis(data.updatedAt)
-          const reservationExpiresAtMs = readTimestampMillis(data.reservationExpiresAt)
-          const numbers = readOrderNumbers(data.reservedNumbers)
-          const amount = typeof data.amount === 'number' && Number.isFinite(data.amount)
-            ? Number(data.amount)
-            : null
-          const payerPhone = typeof data.payerPhone === 'string' ? data.payerPhone : null
-          const payerCpf = typeof data.payerCpf === 'string' ? data.payerCpf : null
-          const rawStatus = String(data.status || 'pending')
-          const status = isOrderReservationExpired(rawStatus, reservationExpiresAtMs)
-            ? 'expirado'
-            : mapOrderStatusToTicketStatus(rawStatus)
+    ;(async () => {
+      try {
+        const page = await fetchOrdersPage({ uid: user.uid })
+        if (isCancelled) {
+          return
+        }
 
-          return {
-            id: documentSnapshot.id,
-            cotas: numbers.length,
-            numbers,
-            amount,
-            payerPhone,
-            payerCpf,
-            totalBrl: formatCurrencyBrl(amount),
-            date: formatDashboardDate(createdAtMs),
-            status,
-            copyPaste: typeof data.pixCopyPaste === 'string' ? data.pixCopyPaste : null,
-            createdAtMs,
-            campaignId: typeof data.campaignId === 'string' ? data.campaignId : null,
-          }
-        })
-
-        const nextTickets: UserTicket[] = nextOrders
-          .flatMap((order) => order.numbers.map((number) => ({
-            number: formatTicketNumber(number),
-            numericNumber: number,
-            orderId: order.id,
-            date: order.date,
-            status: order.status,
-            createdAtMs: order.createdAtMs,
-          })))
-          .sort((left, right) => {
-            const leftTs = left.createdAtMs ?? 0
-            const rightTs = right.createdAtMs ?? 0
-            if (rightTs !== leftTs) {
-              return rightTs - leftTs
-            }
-
-            return left.numericNumber - right.numericNumber
-          })
-
-        setOrders(nextOrders)
-        setTickets(nextTickets)
-      },
-      (error) => {
-        console.error('Failed to subscribe orders:', error)
-        toast.error('Nao foi possivel carregar seus pedidos. Verifique os indices e as regras do Firestore.', {
+        setOrders(page.mappedOrders)
+        setHasMoreOrders(page.hasMore)
+        setLastOrderCursor(page.nextCursor)
+      } catch (error) {
+        if (isCancelled) {
+          return
+        }
+        console.error('Failed to load paginated orders:', error)
+        toast.error('Nao foi possivel carregar seus pedidos agora.', {
           position: 'bottom-right',
-          toastId: 'dashboard-orders-subscribe-error',
+          toastId: 'dashboard-orders-page-load-error',
         })
-      },
-    )
+      } finally {
+        if (!isCancelled) {
+          setIsOrdersLoading(false)
+        }
+      }
+    })()
 
-    return unsubscribe
-  }, [isAuthReady, user])
+    return () => {
+      isCancelled = true
+    }
+  }, [fetchOrdersPage, isAuthReady, user])
+
+  const loadMoreOrders = useCallback(async () => {
+    if (!isAuthReady || !user || !hasMoreOrders || !lastOrderCursor || isOrdersLoadingMore) {
+      return
+    }
+
+    setIsOrdersLoadingMore(true)
+    try {
+      const page = await fetchOrdersPage({
+        uid: user.uid,
+        cursor: lastOrderCursor,
+      })
+
+      setOrders((current) => mergeOrdersById(current, page.mappedOrders))
+      setHasMoreOrders(page.hasMore)
+      if (page.nextCursor) {
+        setLastOrderCursor(page.nextCursor)
+      }
+    } catch (error) {
+      console.error('Failed to load more user orders:', error)
+      toast.error('Nao foi possivel carregar mais números agora.', {
+        position: 'bottom-right',
+        toastId: 'dashboard-orders-load-more-error',
+      })
+    } finally {
+      setIsOrdersLoadingMore(false)
+    }
+  }, [fetchOrdersPage, hasMoreOrders, isAuthReady, isOrdersLoadingMore, lastOrderCursor, user])
 
   const refreshProfile = useCallback(async () => {
     if (!user) {
@@ -391,6 +505,8 @@ export function useUserDashboard() {
     navigate('/')
   }, [navigate])
 
+  const tickets = useMemo(() => buildTicketsFromOrders(orders), [orders])
+
   const filteredTickets = useMemo(
     () => filterTickets(tickets, ticketFilter, ticketSearch),
     [ticketFilter, ticketSearch, tickets],
@@ -437,6 +553,8 @@ export function useUserDashboard() {
     return loadUserCpf(user.uid)
   }, [user])
 
+  const isTicketsLoading = isOrdersLoading && orders.length === 0
+
   return {
     user,
     isAuthReady,
@@ -460,6 +578,10 @@ export function useUserDashboard() {
     setReceiptSearch,
     filteredTickets,
     filteredOrders,
+    isTicketsLoading,
+    isLoadingMoreTickets: isOrdersLoadingMore,
+    hasMoreTickets: hasMoreOrders,
+    loadMoreTickets: loadMoreOrders,
     paidCount,
     totalOrders: orders.length,
     totalTickets: tickets.length,

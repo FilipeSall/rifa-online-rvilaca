@@ -31,3 +31,24 @@ test('parseComparableWinnerTicket resolve corretamente em draw legado com aproxi
 
   assert.equal(comparable, 907200)
 })
+
+test('parseComparableWinnerTicket resolve corretamente em draw v2 por sufixo', () => {
+  const comparable = parseComparableWinnerTicket({
+    winnerTicketNumbers: ['9123456', '7654321'],
+    winningPosition: 1,
+    comparisonDigits: 6,
+    winningCode: '123456',
+    comparisonSide: 'right_suffix',
+    attempts: [
+      {
+        extractionIndex: 1,
+        extractionNumber: '123456',
+        rawCandidateCode: '123456',
+        candidateCode: '123456',
+        matchedPosition: 1,
+      },
+    ],
+  })
+
+  assert.equal(comparable, 9123456)
+})

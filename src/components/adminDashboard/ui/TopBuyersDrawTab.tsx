@@ -42,6 +42,7 @@ function formatDrawDate(drawDate: string) {
 
 function buildWinnerCalculationLabel(result: {
   resolvedBy: 'federal_extraction' | 'redundancy'
+  comparisonSide: 'left_prefix' | 'right_suffix'
   attempts: Array<{
     extractionIndex: number
     extractionNumber: string
@@ -64,14 +65,15 @@ function buildWinnerCalculationLabel(result: {
 
     const rawCode = (winnerAttempt.rawCandidateCode || winnerAttempt.candidateCode).padStart(result.comparisonDigits, '0')
     const resolvedCode = winnerAttempt.candidateCode.padStart(result.comparisonDigits, '0')
+    const sideLabel = result.comparisonSide === 'left_prefix' ? 'primeiros' : 'últimos'
     const hasPath = rawCode !== resolvedCode
 
     if (hasPath) {
       const directionLabel = winnerAttempt.nearestDirection === 'below' ? 'abaixo' : 'acima'
-      return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${rawCode} -> aproximação: ${rawCode} -> ${resolvedCode} (${directionLabel}) -> match na posição ${result.winningPosition}.`
+      return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> ${sideLabel} ${result.comparisonDigits} dígitos = ${rawCode} -> aproximação: ${rawCode} -> ${resolvedCode} (${directionLabel}) -> match na posição ${result.winningPosition}.`
     }
 
-    return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> últimos ${result.comparisonDigits} dígitos = ${resolvedCode} -> match na posição ${result.winningPosition}.`
+    return `Extração ${winnerAttempt.extractionIndex} (${winnerAttempt.extractionNumber}) -> ${sideLabel} ${result.comparisonDigits} dígitos = ${resolvedCode} -> match na posição ${result.winningPosition}.`
   }
 
   return `Fallback de segurança: nenhuma extração encontrou código elegível e o sistema aplicou posição final de contingência.`
@@ -107,6 +109,7 @@ function formatWinnerUserCode(result: {
 function pickComparableWinnerTicket(result: {
   winningTicketNumber: string | null
   winningCode: string
+  comparisonSide: 'left_prefix' | 'right_suffix'
   winningPosition: number
   comparisonDigits: number
   attempts: Array<{
@@ -119,6 +122,7 @@ function pickComparableWinnerTicket(result: {
   return pickComparableWinnerTicketNumber({
     winningTicketNumber: result.winningTicketNumber,
     winningCode: result.winningCode,
+    comparisonSide: result.comparisonSide,
     winningPosition: result.winningPosition,
     comparisonDigits: result.comparisonDigits,
     attempts: result.attempts,
@@ -228,9 +232,16 @@ export default function TopBuyersDrawTab() {
   )
 
   const previewCodes = useMemo(() => {
-    const comparisonDigits = Math.max(3, result?.comparisonDigits || 3)
-    return extractionInputs.map((item) => item.padStart(6, '0').slice(-comparisonDigits))
-  }, [extractionInputs, result?.comparisonDigits])
+    const comparisonDigits = Math.max(3, Math.min(6, result?.comparisonDigits || 6))
+    const comparisonSide = result?.comparisonSide === 'left_prefix' ? 'left_prefix' : 'right_suffix'
+    return extractionInputs.map((item) => {
+      const normalized = item.padStart(6, '0')
+      if (comparisonSide === 'left_prefix') {
+        return normalized.slice(0, comparisonDigits).padEnd(comparisonDigits, '0')
+      }
+      return normalized.slice(-comparisonDigits).padStart(comparisonDigits, '0')
+    })
+  }, [extractionInputs, result?.comparisonDigits, result?.comparisonSide])
 
   const handleExtractionChange = (index: number, value: string) => {
     setExtractionInputs((current) => current.map((item, itemIndex) => (
@@ -291,7 +302,7 @@ export default function TopBuyersDrawTab() {
             <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-amber-300">Operacao de sorteio</p>
             <h3 className="mt-2 font-display text-3xl font-bold text-white">Sorteio Federal com redundancia</h3>
             <p className="mt-3 max-w-2xl text-sm text-gray-300">
-              Regras ativas: 5 extracoes oficiais, comparacao por digitos dinamicos (minimo 3) e fallback por codigo mais proximo.
+              Regras ativas: ciclo de sufixos 6→5→4→3 (últimas casas) nas extrações informadas e fallback por proximidade em 3 dígitos.
             </p>
 
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -317,8 +328,8 @@ export default function TopBuyersDrawTab() {
             <div className="mt-3 rounded-xl border border-cyan-300/25 bg-cyan-500/10 p-4 text-xs text-cyan-100">
               <p>1) Escolha do premio vigente para a rodada</p>
               <p>2) De 1 a 5 extracoes da Federal</p>
-              <p>3) Digitos por quantidade de participantes (minimo 3)</p>
-              <p>4) Sem match exato: codigo mais proximo (abaixo/acima)</p>
+              <p>3) Ciclos de comparação por sufixo: 6→5→4→3</p>
+              <p>4) Sem match em 3 dígitos: proximidade (abaixo/acima)</p>
             </div>
             <div className="mt-4 rounded-xl border border-white/10 bg-black/40 p-4">
               <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">Previa de codigos</p>
@@ -459,7 +470,14 @@ export default function TopBuyersDrawTab() {
                   Códigos da Loteria informados: <span className="font-mono text-white">{formatLoteriaInputs(result.extractionNumbers)}</span>
                 </p>
                 <p className="mt-1 text-xs text-gray-300">
-                  Extração premiada: <span className="font-semibold text-white">1ª extração ({result.extractionNumbers[0] || '-'})</span>
+                  Extração premiada:{' '}
+                  <span className="font-semibold text-white">
+                    {(() => {
+                      const winnerAttempt = result.attempts.find((attempt) => attempt.matchedPosition === result.winningPosition)
+                      const sourceIndex = winnerAttempt?.sourceExtractionIndex || 1
+                      return `${sourceIndex}ª extração (${winnerAttempt?.extractionNumber || result.extractionNumbers[0] || '-'})`
+                    })()}
+                  </span>
                 </p>
                 <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
                   <div className="rounded-lg border border-white/10 bg-black/30 p-2">
