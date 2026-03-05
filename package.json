@@ -30,7 +30,9 @@
     "reset:draws:dry": "bun run scripts/reset-draws.ts",
     "reset:draws:apply": "bun run scripts/reset-draws.ts --confirm",
     "reset:draws:apply:legacy": "bun run scripts/reset-draws.ts --confirm --include-legacy",
-    "reset:campaign": "bun run scripts/reset-campaign.ts"
+    "reset:campaign": "bun run scripts/reset-campaign.ts",
+    "test:ui:unit": "node ./node_modules/vitest/vitest.mjs run --config vitest.config.ts",
+    "test:ui:unit:watch": "node ./node_modules/vitest/vitest.mjs --config vitest.config.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
@@ -50,19 +52,26 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/bun": "latest",
     "@types/luxon": "^3.7.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "@vitest/coverage-v8": "^4.0.18",
     "autoprefixer": "^10.4.24",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "happy-dom": "^20.8.3",
+    "jsdom": "^28.1.0",
     "postcss": "^8.5.6",
     "tailwindcss": "3.4.17",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18"
   }
 }

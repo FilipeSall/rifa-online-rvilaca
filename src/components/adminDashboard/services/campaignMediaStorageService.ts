@@ -3,7 +3,7 @@ import { storage } from '../../../lib/firebase'
 import type { CampaignFeaturedVideoMedia, CampaignHeroCarouselMedia } from '../../../types/campaign'
 
 const MAX_HERO_MEDIA_FILE_SIZE_BYTES = 8 * 1024 * 1024
-const MAX_FEATURED_VIDEO_FILE_SIZE_BYTES = 70 * 1024 * 1024
+const MAX_FEATURED_VIDEO_FILE_SIZE_BYTES = 150 * 1024 * 1024
 
 function sanitizeCampaignId(value: string) {
   return value.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) || 'campaign'
@@ -55,7 +55,7 @@ function ensureValidFeaturedVideoFile(file: File) {
   }
 
   if (file.size > MAX_FEATURED_VIDEO_FILE_SIZE_BYTES) {
-    throw new Error('Video acima do limite de 70MB.')
+    throw new Error('Video acima do limite de 150MB.')
   }
 }
 
