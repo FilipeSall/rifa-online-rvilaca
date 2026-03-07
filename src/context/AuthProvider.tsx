@@ -1,9 +1,14 @@
 import { FirebaseError } from 'firebase/app'
-import { onIdTokenChanged } from 'firebase/auth'
+import { onIdTokenChanged, signInWithCustomToken } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { auth } from '../lib/firebase'
 import { db } from '../lib/firebase'
+import {
+  clearSimpleAuthSession,
+  loginSimpleAccount,
+  readSimpleAuthSession,
+} from '../services/auth/simpleAuthService'
 import { upsertUserProfile } from '../services/firestore/userProfile'
 import { useAuthStore, type UserRole } from '../stores/authStore'
 import { markFetchedNow, readCachedJson, shouldFetchAfterDays, writeCachedJson } from '../utils/fetchCache'
@@ -55,6 +60,45 @@ export default function AuthProvider({ children }: AuthProviderProps) {
   const deniedUserIdsRef = useRef<Set<string>>(new Set())
   const syncedUserIdsRef = useRef<Set<string>>(new Set())
   const fetchingRoleUserIdsRef = useRef<Set<string>>(new Set())
+  const didAttemptSimpleSessionRestoreRef = useRef(false)
+
+  useEffect(() => {
+    if (didAttemptSimpleSessionRestoreRef.current) {
+      return
+    }
+
+    didAttemptSimpleSessionRestoreRef.current = true
+
+    let cancelled = false
+
+    void auth.authStateReady()
+      .then(() => {
+        if (cancelled || auth.currentUser) {
+          return
+        }
+
+        const cachedSession = readSimpleAuthSession()
+        if (!cachedSession?.lastIdentifier) {
+          return
+        }
+
+        return loginSimpleAccount({ identifier: cachedSession.lastIdentifier })
+          .then((result) => {
+            if (cancelled || auth.currentUser) {
+              return
+            }
+
+            return signInWithCustomToken(auth, result.token)
+          })
+          .catch(() => {
+            clearSimpleAuthSession()
+          })
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     const unsubscribe = onIdTokenChanged(auth, (user) => {

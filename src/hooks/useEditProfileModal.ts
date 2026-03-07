@@ -23,6 +23,7 @@ export function useEditProfileModal({
 }: UseEditProfileModalParams) {
   const [name, setName] = useState(currentName)
   const [phone, setPhone] = useState('')
+  const [hasPhone, setHasPhone] = useState(false)
   const [cpf, setCpf] = useState('')
   const [hasCpf, setHasCpf] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -35,6 +36,7 @@ export function useEditProfileModal({
       try {
         const [storedPhone, storedCpf] = await Promise.all([loadPhone(), loadCpf()])
         setPhone(storedPhone ?? '')
+        setHasPhone(Boolean(storedPhone))
         setCpf(storedCpf ? storedCpf.replace(/\D/g, '') : '')
         setHasCpf(Boolean(storedCpf))
       } catch {
@@ -73,10 +75,16 @@ export function useEditProfileModal({
 
       const trimmedName = name.trim()
       const trimmedPhone = phone.trim()
+      const sanitizedPhone = trimmedPhone.replace(/\D/g, '')
       const sanitizedCpf = cpf.replace(/\D/g, '')
 
       if (!trimmedName) {
         setError('O nome nao pode estar vazio.')
+        return
+      }
+
+      if (!hasPhone && (sanitizedPhone.length < 10 || sanitizedPhone.length > 11)) {
+        setError('Informe um telefone valido com DDD.')
         return
       }
 
@@ -111,6 +119,26 @@ export function useEditProfileModal({
           return
         }
 
+        if (err instanceof Error && err.message === 'cpf-immutable') {
+          setError('CPF ja cadastrado e protegido. Nao e possivel alterar.')
+          return
+        }
+
+        if (err instanceof Error && err.message === 'phone-invalid') {
+          setError('Informe um telefone valido com DDD.')
+          return
+        }
+
+        if (err instanceof Error && err.message === 'phone-registry-denied') {
+          setError('Telefone ja cadastrado em outra conta.')
+          return
+        }
+
+        if (err instanceof Error && err.message === 'phone-immutable') {
+          setError('Telefone ja cadastrado e protegido. Nao e possivel alterar.')
+          return
+        }
+
         if (isPermissionDenied) {
           setError('Sem permissao para salvar no Firestore. Verifique as regras/publicacao do projeto Firebase.')
           return
@@ -126,7 +154,7 @@ export function useEditProfileModal({
         setIsSaving(false)
       }
     },
-    [cpf, hasCpf, name, onClose, onSaved, phone, userId],
+    [cpf, hasCpf, hasPhone, name, onClose, onSaved, phone, userId],
   )
 
   return {
@@ -142,6 +170,7 @@ export function useEditProfileModal({
     handleSave,
     cpf,
     setCpf,
+    hasPhone,
     hasCpf,
   }
 }

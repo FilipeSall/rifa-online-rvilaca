@@ -28,6 +28,7 @@ export default function EditProfileModal({
     setPhone,
     cpf,
     setCpf,
+    hasPhone,
     hasCpf,
     isLoading,
     isSaving,
@@ -89,16 +90,27 @@ export default function EditProfileModal({
             <div className="flex flex-col gap-1.5">
               <label htmlFor="edit-phone" className="text-xs font-semibold uppercase tracking-widest text-text-muted">
                 Telefone / WhatsApp
+                {hasPhone && (
+                  <span className="ml-2 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] normal-case tracking-normal text-text-muted">
+                    Protegido
+                  </span>
+                )}
               </label>
               <input
                 id="edit-phone"
                 type="tel"
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}
-                className="rounded-lg border border-luxury-border bg-luxury-bg px-4 py-3 text-sm text-white placeholder:text-text-muted focus:border-neon-pink/50 focus:outline-none focus:ring-1 focus:ring-neon-pink/30"
+                className="rounded-lg border border-luxury-border bg-luxury-bg px-4 py-3 text-sm text-white placeholder:text-text-muted focus:border-neon-pink/50 focus:outline-none focus:ring-1 focus:ring-neon-pink/30 disabled:cursor-not-allowed disabled:opacity-70"
                 placeholder="(11) 99999-9999"
                 autoComplete="tel"
+                disabled={hasPhone}
               />
+              {!hasPhone && (
+                <p className="text-[11px] text-text-muted">
+                  Este telefone sera protegido apos o cadastro.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -131,7 +143,7 @@ export default function EditProfileModal({
               <label className="text-xs font-semibold uppercase tracking-widest text-text-muted">
                 E-mail
                 <span className="ml-2 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] normal-case tracking-normal text-text-muted">
-                  Gerenciado pelo Google
+                  Opcional
                 </span>
               </label>
               <div className="flex items-center gap-2 rounded-lg border border-luxury-border bg-white/5 px-4 py-3 text-sm text-text-muted">

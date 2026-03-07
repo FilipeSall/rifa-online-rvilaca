@@ -1,174 +1,43 @@
-import { FirebaseError } from 'firebase/app'
 import {
-  GoogleAuthProvider,
-  createUserWithEmailAndPassword,
-  deleteUser,
-  fetchSignInMethodsForEmail,
-  getRedirectResult,
-  sendPasswordResetEmail,
-  sendEmailVerification,
+  signInWithCustomToken,
   signOut,
-  signInWithRedirect,
-  signInWithEmailAndPassword,
-  signInWithPopup,
   type AuthError,
-  type User,
 } from 'firebase/auth'
-import { doc, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { OPEN_AUTH_MODAL_EVENT } from '../const/auth'
-import { auth, db } from '../lib/firebase'
+import { auth } from '../lib/firebase'
+import {
+  clearSimpleAuthSession,
+  loginSimpleAccount,
+  normalizeSimpleAuthIdentifier,
+  registerSimpleAccount,
+  saveSimpleAuthSession,
+} from '../services/auth/simpleAuthService'
 import { useAuthStore } from '../stores/authStore'
-import { getEmailAuthErrorMessage, getGoogleAuthErrorMessage, getPasswordResetAuthErrorMessage } from '../utils/home'
-import { buildUserSearchFields } from '../utils/userSearch'
 
-const googleProvider = new GoogleAuthProvider()
-googleProvider.setCustomParameters({ prompt: 'select_account' })
-const GOOGLE_AUTH_FLOW = `${import.meta.env.VITE_FIREBASE_GOOGLE_AUTH_FLOW ?? 'auto'}`.toLowerCase()
-
-function shouldPreferGoogleRedirectFlow() {
-  return GOOGLE_AUTH_FLOW === 'redirect'
-}
-
-function getVerificationActionSettings() {
-  const origin = window.location.origin.replace(/\/+$/, '')
-  return {
-    url: `${origin}/?email_verified=1`,
-    handleCodeInApp: false,
-  }
-}
-
-function getPasswordResetActionSettings() {
-  const origin = window.location.origin.replace(/\/+$/, '')
-  return {
-    url: `${origin}/?password_reset=1`,
-    handleCodeInApp: false,
-  }
-}
-
-function getVerificationErrorMessage(error: unknown) {
+function getSimpleAuthErrorMessage(error: unknown, isCreatingAccount: boolean) {
   const authError = error as AuthError
-  if (authError?.code === 'auth/unauthorized-continue-uri' || authError?.code === 'auth/invalid-continue-uri') {
-    return 'a configuracao do link de confirmacao esta invalida. Ajuste os dominios autorizados no Firebase.'
+  if (authError?.code === 'functions/invalid-argument') {
+    return 'Confira os dados e tente novamente.'
   }
 
-  if (authError?.code === 'auth/too-many-requests') {
-    return 'Ja enviamos um email recentemente. Aguarde um pouco e tente novamente.'
+  if (authError?.code === 'functions/not-found') {
+    return 'Conta nao encontrada. Cadastre-se para continuar.'
   }
 
-  if (authError?.code === 'auth/network-request-failed') {
-    return 'Falha de rede ao enviar email de confirmacao. Tente novamente.'
+  if (authError?.code === 'functions/already-exists') {
+    return 'CPF ou telefone ja cadastrado em outra conta.'
   }
 
-  return 'Nao foi possivel enviar o email de confirmacao agora.'
-}
-
-function isContinueUriError(error: unknown) {
-  const authError = error as AuthError
-  return authError?.code === 'auth/unauthorized-continue-uri' || authError?.code === 'auth/invalid-continue-uri'
-}
-
-function getAuthErrorDebugData(error: unknown) {
-  const authError = error as AuthError
-  return {
-    code: authError?.code || 'unknown',
-    message: authError?.message || 'unknown',
-  }
-}
-
-async function sendVerificationEmailWithFallback(user: User) {
-  const actionSettings = getVerificationActionSettings()
-
-  try {
-    await sendEmailVerification(user, actionSettings)
-    console.info('[auth:email-verification] sent_with_action_settings', {
-      uid: user.uid,
-      actionUrl: actionSettings.url,
-    })
-    return { sent: true, usedFallback: false, error: null as unknown }
-  } catch (error) {
-    console.error('[auth:email-verification] send_failed_with_action_settings', {
-      uid: user.uid,
-      actionUrl: actionSettings.url,
-      ...getAuthErrorDebugData(error),
-    })
-
-    if (!isContinueUriError(error)) {
-      return { sent: false, usedFallback: false, error }
-    }
-
-    try {
-      await sendEmailVerification(user)
-      console.info('[auth:email-verification] sent_with_default_fallback', {
-        uid: user.uid,
-      })
-      return { sent: true, usedFallback: true, error: null as unknown }
-    } catch (fallbackError) {
-      console.error('[auth:email-verification] fallback_send_failed', {
-        uid: user.uid,
-        ...getAuthErrorDebugData(fallbackError),
-      })
-      return { sent: false, usedFallback: true, error: fallbackError }
-    }
-  }
-}
-
-async function sendPasswordResetEmailWithFallback(email: string) {
-  const actionSettings = getPasswordResetActionSettings()
-
-  try {
-    await sendPasswordResetEmail(auth, email, actionSettings)
-    console.info('[auth:password-reset] sent_with_action_settings', {
-      email,
-      actionUrl: actionSettings.url,
-    })
-    return { sent: true, usedFallback: false, error: null as unknown }
-  } catch (error) {
-    console.error('[auth:password-reset] send_failed_with_action_settings', {
-      email,
-      actionUrl: actionSettings.url,
-      ...getAuthErrorDebugData(error),
-    })
-
-    if (!isContinueUriError(error)) {
-      return { sent: false, usedFallback: false, error }
-    }
-
-    try {
-      await sendPasswordResetEmail(auth, email)
-      console.info('[auth:password-reset] sent_with_default_fallback', { email })
-      return { sent: true, usedFallback: true, error: null as unknown }
-    } catch (fallbackError) {
-      console.error('[auth:password-reset] fallback_send_failed', {
-        email,
-        ...getAuthErrorDebugData(fallbackError),
-      })
-      return { sent: false, usedFallback: true, error: fallbackError }
-    }
-  }
-}
-
-function isPasswordProviderUser(user: User) {
-  return user.providerData.some((provider) => provider.providerId === 'password')
-}
-
-async function sendPasswordSignupVerificationEmail(user: User) {
-  if (user.emailVerified || !isPasswordProviderUser(user)) {
-    return {
-      attempted: false,
-      sent: false,
-      usedFallback: false,
-      error: null as unknown,
-    }
+  if (authError?.code === 'functions/unavailable' || authError?.code === 'auth/network-request-failed') {
+    return 'Falha de rede. Tente novamente.'
   }
 
-  const verificationResult = await sendVerificationEmailWithFallback(user)
-  return {
-    attempted: true,
-    ...verificationResult,
-  }
+  return isCreatingAccount
+    ? 'Nao foi possivel criar sua conta agora.'
+    : 'Nao foi possivel entrar na sua conta agora.'
 }
 
 export function useHeaderAuth() {
@@ -177,18 +46,18 @@ export function useHeaderAuth() {
   const userRole = useAuthStore((state) => state.userRole)
   const setAuthUser = useAuthStore((state) => state.setAuthUser)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
-  const [isSigningIn, setIsSigningIn] = useState(false)
-  const [isEmailFormOpen, setIsEmailFormOpen] = useState(false)
+  const [isSimpleFormOpen, setIsSimpleFormOpen] = useState(false)
   const [isCreatingAccount, setIsCreatingAccount] = useState(false)
-  const [emailValue, setEmailValue] = useState('')
-  const [passwordValue, setPasswordValue] = useState('')
+  const [identifierValue, setIdentifierValue] = useState('')
+  const [nameValue, setNameValue] = useState('')
   const [cpfValue, setCpfValue] = useState('')
+  const [confirmCpfValue, setConfirmCpfValue] = useState('')
   const [phoneValue, setPhoneValue] = useState('')
-  const [isEmailSubmitting, setIsEmailSubmitting] = useState(false)
-  const [isPasswordResetSubmitting, setIsPasswordResetSubmitting] = useState(false)
-  const [googleAuthError, setGoogleAuthError] = useState<string | null>(null)
-  const [emailAuthError, setEmailAuthError] = useState<string | null>(null)
+  const [confirmPhoneValue, setConfirmPhoneValue] = useState('')
+  const [isSimpleSubmitting, setIsSimpleSubmitting] = useState(false)
+  const [simpleAuthError, setSimpleAuthError] = useState<string | null>(null)
   const authMenuRef = useRef<HTMLDivElement>(null)
+
   const showLoginSuccessToast = useCallback(() => {
     toast.success('Login realizado com sucesso.', {
       position: 'bottom-right',
@@ -198,23 +67,20 @@ export function useHeaderAuth() {
 
   const closeAuthModal = useCallback(() => {
     setIsAuthModalOpen(false)
-    setIsSigningIn(false)
-    setIsEmailFormOpen(false)
+    setIsSimpleFormOpen(false)
     setIsCreatingAccount(false)
-    setEmailValue('')
-    setPasswordValue('')
+    setIdentifierValue('')
+    setNameValue('')
     setCpfValue('')
+    setConfirmCpfValue('')
     setPhoneValue('')
-    setIsEmailSubmitting(false)
-    setIsPasswordResetSubmitting(false)
-    setGoogleAuthError(null)
-    setEmailAuthError(null)
+    setConfirmPhoneValue('')
+    setIsSimpleSubmitting(false)
+    setSimpleAuthError(null)
   }, [])
 
   const openAuthModal = useCallback(() => {
-    setGoogleAuthError(null)
-    setEmailAuthError(null)
-    setIsSigningIn(false)
+    setSimpleAuthError(null)
     setIsAuthModalOpen(true)
   }, [])
 
@@ -230,10 +96,10 @@ export function useHeaderAuth() {
   }, [setAuthUser, storeIsLoggedIn])
 
   useEffect(() => {
-    if (isLoggedIn && !isEmailSubmitting) {
+    if (isLoggedIn && !isSimpleSubmitting) {
       closeAuthModal()
     }
-  }, [isLoggedIn, isEmailSubmitting, closeAuthModal])
+  }, [isLoggedIn, isSimpleSubmitting, closeAuthModal])
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -277,40 +143,6 @@ export function useHeaderAuth() {
     }
   }, [isLoggedIn, openAuthModal])
 
-  useEffect(() => {
-    let isMounted = true
-
-    const resolveGoogleRedirect = async () => {
-      try {
-        const redirectResult = await getRedirectResult(auth)
-
-        if (redirectResult?.user) {
-          setAuthUser(redirectResult.user)
-          showLoginSuccessToast()
-        }
-      } catch (error) {
-        const redirectAuthError = error as AuthError
-
-        if (!isMounted) {
-          return
-        }
-
-        const redirectErrorMessage = getGoogleAuthErrorMessage(redirectAuthError.code)
-        setGoogleAuthError(redirectErrorMessage)
-        toast.error(redirectErrorMessage, {
-          position: 'bottom-right',
-          toastId: 'auth-redirect-error',
-        })
-      }
-    }
-
-    void resolveGoogleRedirect()
-
-    return () => {
-      isMounted = false
-    }
-  }, [setAuthUser, showLoginSuccessToast])
-
   const handleAuthButtonClick = useCallback(() => {
     if (isLoggedIn) {
       navigate(userRole === 'admin' ? '/dashboard' : '/minha-conta')
@@ -325,276 +157,150 @@ export function useHeaderAuth() {
     openAuthModal()
   }, [closeAuthModal, isAuthModalOpen, isLoggedIn, navigate, openAuthModal, userRole])
 
-  const handleGoogleSignIn = useCallback(async () => {
-    setIsSigningIn(true)
-    setGoogleAuthError(null)
-    setEmailAuthError(null)
-
-    const useRedirectFlow = shouldPreferGoogleRedirectFlow()
-
-    try {
-      if (useRedirectFlow) {
-        closeAuthModal()
-        await signInWithRedirect(auth, googleProvider)
-        return
-      }
-
-      await signInWithPopup(auth, googleProvider)
-      showLoginSuccessToast()
-      closeAuthModal()
-    } catch (error) {
-      const currentAuthError = error as AuthError
-
-      setGoogleAuthError(getGoogleAuthErrorMessage(currentAuthError.code))
-    } finally {
-      setIsSigningIn(false)
-    }
-  }, [closeAuthModal, showLoginSuccessToast])
-
   const handleSignOut = useCallback(async () => {
     closeAuthModal()
+    clearSimpleAuthSession()
     await signOut(auth)
     navigate('/')
   }, [closeAuthModal, navigate])
 
-  const handleEmailOptionClick = useCallback(() => {
-    setIsEmailFormOpen(true)
+  const handleSimpleOptionClick = useCallback(() => {
+    setIsSimpleFormOpen(true)
     setIsCreatingAccount(false)
+    setNameValue('')
     setCpfValue('')
+    setConfirmCpfValue('')
     setPhoneValue('')
-    setEmailAuthError(null)
-    setGoogleAuthError(null)
+    setConfirmPhoneValue('')
+    setSimpleAuthError(null)
   }, [])
 
   const handleCreateAccountClick = useCallback(() => {
-    setIsEmailFormOpen(true)
+    setIsSimpleFormOpen(true)
     setIsCreatingAccount((currentValue) => !currentValue)
+    setNameValue('')
+    setIdentifierValue('')
     setCpfValue('')
+    setConfirmCpfValue('')
     setPhoneValue('')
-    setEmailAuthError(null)
-    setGoogleAuthError(null)
+    setConfirmPhoneValue('')
+    setSimpleAuthError(null)
   }, [])
 
-  const handlePasswordResetRequest = useCallback(async () => {
-    const normalizedEmail = emailValue.trim().toLowerCase()
-    if (!normalizedEmail) {
-      setEmailAuthError('Informe seu email para recuperar a senha.')
-      return
-    }
-
-    setIsPasswordResetSubmitting(true)
-    setEmailAuthError(null)
-    setGoogleAuthError(null)
-
-    try {
-      const resetResult = await sendPasswordResetEmailWithFallback(normalizedEmail)
-      if (resetResult.sent) {
-        const successMessage = resetResult.usedFallback
-          ? 'Se existir conta para este email, enviamos o link de recuperação usando o fluxo padrão do Firebase.'
-          : 'Se existir conta para este email, enviamos um link de recuperação de senha.'
-
-        toast.success(successMessage, {
-          position: 'bottom-right',
-        })
-        return
-      }
-
-      const currentAuthError = resetResult.error as AuthError
-      if (currentAuthError?.code === 'auth/user-not-found') {
-        toast.success('Se existir conta para este email, enviamos um link de recuperação de senha.', {
-          position: 'bottom-right',
-        })
-        return
-      }
-
-      setEmailAuthError(getPasswordResetAuthErrorMessage(currentAuthError?.code))
-    } catch (error) {
-      const currentAuthError = error as AuthError
-      if (currentAuthError?.code === 'auth/user-not-found') {
-        toast.success('Se existir conta para este email, enviamos um link de recuperação de senha.', {
-          position: 'bottom-right',
-        })
-        return
-      }
-
-      setEmailAuthError(getPasswordResetAuthErrorMessage(currentAuthError?.code))
-    } finally {
-      setIsPasswordResetSubmitting(false)
-    }
-  }, [emailValue])
-
-  const handleEmailAuthSubmit = useCallback(
+  const handleSimpleAuthSubmit = useCallback(
     async (event: SyntheticEvent<HTMLFormElement>) => {
       event.preventDefault()
-      if (!emailValue || !passwordValue) {
-        setEmailAuthError('Preencha email e senha para continuar.')
+
+      const identifierDigits = normalizeSimpleAuthIdentifier(identifierValue)
+      const name = nameValue.trim()
+      const cpfDigits = normalizeSimpleAuthIdentifier(cpfValue)
+      const confirmCpfDigits = normalizeSimpleAuthIdentifier(confirmCpfValue)
+      const phoneDigits = normalizeSimpleAuthIdentifier(phoneValue)
+      const confirmPhoneDigits = normalizeSimpleAuthIdentifier(confirmPhoneValue)
+
+      if (!isCreatingAccount && (identifierDigits.length !== 10 && identifierDigits.length !== 11)) {
+        setSimpleAuthError('Informe um CPF ou telefone valido para entrar.')
         return
       }
 
-      const sanitizedCpf = cpfValue.replace(/\D/g, '')
-      const sanitizedPhone = phoneValue.replace(/\D/g, '')
-      if (isCreatingAccount && sanitizedCpf.length !== 11) {
-        setEmailAuthError('Informe um CPF válido (11 dígitos).')
-        return
-      }
-      if (isCreatingAccount && sanitizedPhone.length < 10) {
-        setEmailAuthError('Informe um telefone válido para continuar.')
+      if (isCreatingAccount && name.length < 2) {
+        setSimpleAuthError('Informe seu nome completo para criar a conta.')
         return
       }
 
-      setIsEmailSubmitting(true)
-      setEmailAuthError(null)
-      setGoogleAuthError(null)
-      let createdUser: User | null = null
+      if (isCreatingAccount && cpfDigits.length !== 11) {
+        setSimpleAuthError('Informe um CPF valido com 11 digitos.')
+        return
+      }
+
+      if (isCreatingAccount && (phoneDigits.length < 10 || phoneDigits.length > 11)) {
+        setSimpleAuthError('Informe um telefone valido com DDD.')
+        return
+      }
+
+      if (isCreatingAccount && phoneDigits !== confirmPhoneDigits) {
+        setSimpleAuthError('Os telefones informados nao conferem.')
+        return
+      }
+
+      if (isCreatingAccount && cpfDigits !== confirmCpfDigits) {
+        setSimpleAuthError('Os CPFs informados nao conferem.')
+        return
+      }
+
+      setIsSimpleSubmitting(true)
+      setSimpleAuthError(null)
 
       try {
         if (isCreatingAccount) {
-          const normalizedEmail = emailValue.trim().toLowerCase()
-          const existingMethods = await fetchSignInMethodsForEmail(auth, normalizedEmail)
-          if (existingMethods.length > 0) {
-            setEmailAuthError('Este email já está em uso. Faça login ou recupere a senha.')
-            return
-          }
-
-          const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, passwordValue)
-          createdUser = userCredential.user
-          await userCredential.user.getIdToken(true)
-
-          const profileName = normalizedEmail.split('@')[0] || 'Usuario'
-
-          const cpfRegistryRef = doc(db, 'cpfRegistry', sanitizedCpf)
-          const userDocRef = doc(db, 'users', userCredential.user.uid)
-          const batch = writeBatch(db)
-
-          batch.set(cpfRegistryRef, {
-            uid: userCredential.user.uid,
-            cpf: sanitizedCpf,
-            createdAt: serverTimestamp(),
+          const result = await registerSimpleAccount({
+            name,
+            cpf: cpfDigits,
+            phone: phoneDigits,
           })
 
-          batch.set(
-            userDocRef,
-            {
-              uid: userCredential.user.uid,
-              name: profileName,
-              email: normalizedEmail,
-              cpf: sanitizedCpf,
-              phone: sanitizedPhone,
-              ...buildUserSearchFields({
-                name: profileName,
-                email: normalizedEmail,
-                cpf: sanitizedCpf,
-                phone: sanitizedPhone,
-              }),
-              role: 'user',
-              providerIds: ['password'],
-              lastLoginAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true },
-          )
+          const userCredential = await signInWithCustomToken(auth, result.token)
+          setAuthUser(userCredential.user)
+          saveSimpleAuthSession(result.profile, cpfDigits)
 
-          await batch.commit()
-          const verificationResult = await sendPasswordSignupVerificationEmail(userCredential.user)
-          const verificationMessage = verificationResult.sent
-            ? verificationResult.usedFallback
-              ? 'Conta criada! Enviamos o email de confirmacao com link padrao do Firebase.'
-              : 'Conta criada! Enviamos um email de confirmacao para ativar sua conta.'
-            : `Conta criada, mas ${getVerificationErrorMessage(verificationResult.error).toLowerCase()}`
-
-          await signOut(auth).catch(() => null)
-          closeAuthModal()
-          toast[verificationResult.sent ? 'success' : 'warning'](verificationMessage, {
+          toast.success('Conta criada e login realizado com sucesso.', {
             position: 'bottom-right',
+            toastId: 'auth-signup-success',
           })
-          return
         } else {
-          const userCredential = await signInWithEmailAndPassword(auth, emailValue.trim().toLowerCase(), passwordValue)
-          const signedUser = userCredential.user
-          const usesPasswordProvider = signedUser.providerData.some((provider) => provider.providerId === 'password')
-          if (usesPasswordProvider && !signedUser.emailVerified) {
-            let message = 'Seu email ainda nao foi confirmado. Verifique sua caixa de entrada para ativar a conta.'
-
-            try {
-              const verificationResult = await sendPasswordSignupVerificationEmail(signedUser)
-              if (verificationResult.sent) {
-                message = verificationResult.usedFallback
-                  ? 'Seu email ainda nao foi confirmado. Reenviamos usando o link padrao do Firebase.'
-                  : 'Seu email ainda nao foi confirmado. Reenviamos um novo link de ativacao.'
-              } else {
-                message = getVerificationErrorMessage(verificationResult.error)
-              }
-            } catch (sendError) {
-              message = getVerificationErrorMessage(sendError)
-            } finally {
-              await signOut(auth).catch(() => null)
-            }
-
-            setEmailAuthError(message)
-            return
-          }
+          const result = await loginSimpleAccount({ identifier: identifierDigits })
+          const userCredential = await signInWithCustomToken(auth, result.token)
+          setAuthUser(userCredential.user)
+          saveSimpleAuthSession(result.profile, identifierDigits)
+          showLoginSuccessToast()
         }
 
-        showLoginSuccessToast()
         closeAuthModal()
       } catch (error) {
-        if (isCreatingAccount && createdUser) {
-          try {
-            await deleteUser(createdUser)
-          } catch (deleteError) {
-            console.error('Failed to rollback newly created user:', deleteError)
-          } finally {
-            await signOut(auth).catch(() => null)
-          }
-        }
-
-        if (error instanceof FirebaseError && isCreatingAccount) {
-          if (error.code === 'permission-denied' || error.code === 'already-exists') {
-            setEmailAuthError('CPF já cadastrado em outra conta ou regras do Firestore não publicadas.')
-            return
-          }
-
-          if (error.code === 'auth/network-request-failed') {
-            setEmailAuthError('Falha de rede ao criar conta. Tente novamente.')
-            return
-          }
-        }
-
-        const currentAuthError = error as AuthError
-        setEmailAuthError(getEmailAuthErrorMessage(currentAuthError.code, isCreatingAccount))
+        setSimpleAuthError(getSimpleAuthErrorMessage(error, isCreatingAccount))
       } finally {
-        setIsEmailSubmitting(false)
+        setIsSimpleSubmitting(false)
       }
     },
-    [closeAuthModal, cpfValue, emailValue, isCreatingAccount, passwordValue, phoneValue, showLoginSuccessToast]
+    [
+      closeAuthModal,
+      confirmCpfValue,
+      confirmPhoneValue,
+      cpfValue,
+      identifierValue,
+      isCreatingAccount,
+      nameValue,
+      phoneValue,
+      setAuthUser,
+      showLoginSuccessToast,
+    ],
   )
 
   return {
     isLoggedIn,
     userRole,
     isAuthModalOpen,
-    isSigningIn,
-    isEmailFormOpen,
+    isSimpleFormOpen,
     isCreatingAccount,
-    emailValue,
-    passwordValue,
+    identifierValue,
+    nameValue,
     cpfValue,
+    confirmCpfValue,
     phoneValue,
-    isEmailSubmitting,
-    isPasswordResetSubmitting,
-    googleAuthError,
-    emailAuthError,
+    confirmPhoneValue,
+    isSimpleSubmitting,
+    simpleAuthError,
     authMenuRef,
     handleAuthButtonClick,
-    handleGoogleSignIn,
     handleSignOut,
-    handleEmailOptionClick,
+    handleSimpleOptionClick,
     handleCreateAccountClick,
-    handlePasswordResetRequest,
-    handleEmailAuthSubmit,
-    setEmailValue,
-    setPasswordValue,
+    handleSimpleAuthSubmit,
+    setIdentifierValue,
+    setNameValue,
     setCpfValue,
+    setConfirmCpfValue,
     setPhoneValue,
+    setConfirmPhoneValue,
   }
 }

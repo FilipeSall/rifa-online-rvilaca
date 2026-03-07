@@ -1,9 +1,13 @@
 import { FirebaseError } from 'firebase/app'
 import { updateProfile } from 'firebase/auth'
-import { doc, getDoc, getDocFromServer, serverTimestamp, setDoc } from 'firebase/firestore'
+import { doc, getDoc, getDocFromServer } from 'firebase/firestore'
 import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage'
 import { auth, db, storage } from '../../lib/firebase'
-import { buildUserSearchFields } from '../../utils/userSearch'
+import {
+  readSimpleAuthSession,
+  saveSimpleAuthSession,
+  updateSimpleProfile,
+} from '../auth/simpleAuthService'
 
 async function getCurrentUserWithValidation(expectedUserId?: string) {
   const currentUser = auth.currentUser
@@ -99,52 +103,67 @@ export async function loadUserCpf(expectedUserId: string) {
 
 export async function saveUserProfile(expectedUserId: string, name: string, phone: string, cpf?: string | null) {
   const currentUser = await getCurrentUserWithValidation(expectedUserId)
+  const sanitizedPhone = phone.replace(/\D/g, '')
+  const sanitizedCpf = cpf ? cpf.replace(/\D/g, '') : null
+
+  if (sanitizedPhone.length < 10 || sanitizedPhone.length > 11) {
+    throw new Error('phone-invalid')
+  }
+
+  if (sanitizedCpf && sanitizedCpf.length !== 11) {
+    throw new Error('cpf-invalid')
+  }
 
   const persist = async () => {
-    await updateProfile(currentUser, { displayName: name })
+    const result = await updateSimpleProfile({
+      name,
+      phone: sanitizedPhone,
+      ...(sanitizedCpf ? { cpf: sanitizedCpf } : {}),
+    })
 
-    const sanitizedCpf = cpf ? cpf.replace(/\D/g, '') : null
+    await updateProfile(currentUser, { displayName: result.profile.name })
 
-    if (sanitizedCpf) {
-      if (sanitizedCpf.length !== 11) {
-        throw new Error('cpf-invalid')
+    const session = readSimpleAuthSession()
+    if (session?.uid === result.profile.uid) {
+      saveSimpleAuthSession(result.profile, session.lastIdentifier)
+    }
+  }
+
+  const mapError = (error: unknown) => {
+    if (!(error instanceof FirebaseError)) {
+      return error
+    }
+
+    const lowerMessage = (error.message || '').toLowerCase()
+    if (error.code === 'functions/already-exists') {
+      if (lowerMessage.includes('telefone')) {
+        return new Error('phone-registry-denied')
       }
 
-      try {
-        await setDoc(doc(db, 'cpfRegistry', sanitizedCpf), {
-          uid: currentUser.uid,
-          cpf: sanitizedCpf,
-          createdAt: serverTimestamp(),
-        })
-      } catch (error) {
-        const isPermissionDenied = error instanceof FirebaseError && error.code === 'permission-denied'
-
-        if (isPermissionDenied) {
-          throw new Error('cpf-registry-denied')
-        }
-
-        throw error
+      if (lowerMessage.includes('cpf')) {
+        return new Error('cpf-registry-denied')
       }
     }
 
-    await setDoc(
-      doc(db, 'users', currentUser.uid),
-      {
-        uid: currentUser.uid,
-        name,
-        phone: phone || null,
-        email: currentUser.email || null,
-        ...buildUserSearchFields({
-          name,
-          email: currentUser.email || null,
-          phone,
-          ...(sanitizedCpf ? { cpf: sanitizedCpf } : {}),
-        }),
-        ...(sanitizedCpf ? { cpf: sanitizedCpf } : {}),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true },
-    )
+    if (error.code === 'functions/failed-precondition' && lowerMessage.includes('cpf')) {
+      return new Error('cpf-immutable')
+    }
+
+    if (error.code === 'functions/failed-precondition' && lowerMessage.includes('telefone')) {
+      return new Error('phone-immutable')
+    }
+
+    if (error.code === 'functions/invalid-argument') {
+      if (lowerMessage.includes('telefone')) {
+        return new Error('phone-invalid')
+      }
+
+      if (lowerMessage.includes('cpf')) {
+        return new Error('cpf-invalid')
+      }
+    }
+
+    return error
   }
 
   await currentUser.getIdToken()
@@ -152,14 +171,20 @@ export async function saveUserProfile(expectedUserId: string, name: string, phon
   try {
     await persist()
   } catch (error) {
-    const isPermissionDenied = error instanceof FirebaseError && error.code === 'permission-denied'
+    const mappedError = mapError(error)
+    const isPermissionDenied = mappedError instanceof FirebaseError && mappedError.code === 'permission-denied'
+    const isUnauthenticated = mappedError instanceof FirebaseError && mappedError.code === 'functions/unauthenticated'
 
-    if (!isPermissionDenied) {
-      throw error
+    if (!isPermissionDenied && !isUnauthenticated) {
+      throw mappedError
     }
 
     await currentUser.getIdToken(true)
-    await persist()
+    try {
+      await persist()
+    } catch (retryError) {
+      throw mapError(retryError)
+    }
   }
 }
 

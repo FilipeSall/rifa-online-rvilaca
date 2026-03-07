@@ -13,6 +13,7 @@
     "emulators:start": "FIREBASE_SKIP_UPDATE_CHECK=true firebase emulators:start --only auth,firestore,functions,storage --project demo-rifa-online",
     "seed:emulator:backend": "node scripts/seed-emulator-backend.mjs",
     "seed:emulator:users": "node scripts/seed-emulator-users.mjs",
+    "seed:emulator:admin": "node scripts/seed-emulator-admin-simple.mjs",
     "webhook:mock:paid": "node scripts/mock-pix-webhook.mjs",
     "emulators:exec:backend-e2e": "FIREBASE_SKIP_UPDATE_CHECK=true firebase emulators:exec --only auth,firestore,functions,storage --project demo-rifa-online \"USE_MOCK_HORSEPAY=true HORSEPAY_WEBHOOK_TOKEN=test-webhook-token node --test tests/backend-emulator.e2e.test.mjs\"",
     "functions:build": "cd functions && bun run build",

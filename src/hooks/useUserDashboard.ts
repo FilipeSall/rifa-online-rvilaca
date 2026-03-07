@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { auth, db, functions } from '../lib/firebase'
+import { clearSimpleAuthSession } from '../services/auth/simpleAuthService'
 import { loadUserCpf, loadUserPhone, loadUserProfile, uploadUserAvatar } from '../services/userDashboard/userDashboardService'
 import { useAuthStore } from '../stores/authStore'
 import { formatTicketNumber } from '../utils/ticketNumber'
@@ -501,6 +502,7 @@ export function useUserDashboard() {
   )
 
   const handleSignOut = useCallback(async () => {
+    clearSimpleAuthSession()
     await signOut(auth)
     navigate('/')
   }, [navigate])

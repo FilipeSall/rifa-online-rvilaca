@@ -87,13 +87,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Perfil do usuário: somente o próprio usuário pode ler e escrever.
-    // delete: if false explícito é seguro porque write foi separado em create/update.
+    // Perfil do usuário: leitura apenas do próprio usuário.
+    // Escrita é server-only via Cloud Functions (Admin SDK) para manter
+    // consistência entre users, cpfRegistry e phoneRegistry.
     match /users/{uid} {
       allow get: if isOwner(uid);
       allow list: if false;
-      allow create: if isOwner(uid) && isValidUserProfileCreate();
-      allow update: if isOwner(uid) && isValidUserProfileUpdate();
+      allow create: if false;
+      allow update: if false;
       allow delete: if false;
     }
 
@@ -105,6 +106,17 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['uid', 'cpf', 'createdAt'])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.cpf == cpfId;
+      allow get: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow list: if false;
+      allow update, delete: if false;
+    }
+
+    match /phoneRegistry/{phoneId} {
+      allow create: if isSignedIn()
+        && phoneId.matches('^[0-9]{10,11}$')
+        && request.resource.data.keys().hasOnly(['uid', 'phone', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.phone == phoneId;
       allow get: if isSignedIn() && resource.data.uid == request.auth.uid;
       allow list: if false;
       allow update, delete: if false;

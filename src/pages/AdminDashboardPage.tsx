@@ -5,6 +5,7 @@ import AdminDashboardContent from '../components/adminDashboard/AdminDashboardCo
 import Header from '../components/home/Header'
 import { type AdminTabId } from '../const/adminDashboard'
 import { auth } from '../lib/firebase'
+import { clearSimpleAuthSession } from '../services/auth/simpleAuthService'
 import { useAuthStore } from '../stores/authStore'
 
 function resolveDashboardTabFromSearch(search: string): AdminTabId | null {
@@ -51,6 +52,7 @@ export default function AdminDashboardPage() {
   }, [isAuthReady, isLoggedIn, isRoleReady, navigate, userRole])
 
   const handleSignOut = async () => {
+    clearSimpleAuthSession()
     await signOut(auth)
     navigate('/')
   }

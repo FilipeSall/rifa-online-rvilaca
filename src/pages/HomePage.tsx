@@ -141,6 +141,7 @@ export default function HomePage() {
           <PurchaseHeroSection
             unitPrice={purchaseState.unitPrice}
             minQuantity={purchaseState.minSelectableQuantity}
+            manualPurchaseLinkHref="/comprar-manualmente?mode=manual"
           />
           <WinnersFaqSection />
           <TrustBadgesSection />

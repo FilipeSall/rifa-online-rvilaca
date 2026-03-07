@@ -53,6 +53,11 @@ import {
   createUpdateAdminUserRoleHandler,
 } from './lib/userAdminHandlers.js'
 import { createEnsureUserProfileHandler } from './lib/userProfileHandlers.js'
+import {
+  createLoginSimpleAccountHandler,
+  createRegisterSimpleAccountHandler,
+  createUpdateSimpleProfileHandler,
+} from './lib/simpleAuthHandlers.js'
 
 initializeApp()
 
@@ -157,6 +162,9 @@ export const getPublicMainRaffleDrawHistory = onCall(
   callableOptions,
   createGetPublicMainRaffleDrawHistoryHandler(db),
 )
+export const registerSimpleAccount = onCall(callableOptions, createRegisterSimpleAccountHandler(db))
+export const loginSimpleAccount = onCall(callableOptions, createLoginSimpleAccountHandler(db))
+export const updateSimpleProfile = onCall(callableOptions, createUpdateSimpleProfileHandler(db))
 export const ensureUserProfile = onCall(callableOptions, createEnsureUserProfileHandler(db))
 export const searchAdminUsers = onCall(callableOptions, createSearchAdminUsersHandler(db))
 export const getAdminUserDetails = onCall(callableOptions, createGetAdminUserDetailsHandler(db))

@@ -3,17 +3,27 @@ import { formatCurrency } from '../../utils/purchaseNumbers'
 type PurchaseHeroSectionProps = {
   unitPrice: number
   minQuantity: number
+  manualPurchaseLinkHref?: string
 }
 
-export default function PurchaseHeroSection({ unitPrice, minQuantity }: PurchaseHeroSectionProps) {
+export default function PurchaseHeroSection({ unitPrice, minQuantity, manualPurchaseLinkHref }: PurchaseHeroSectionProps) {
   return (
     <section className="hero-bg border-b border-white/5">
       <div className="container mx-auto px-4 py-14 lg:px-8 lg:py-20">
         <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <span className="inline-flex items-center rounded-full border border-neon-pink/40 bg-neon-pink/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-neon-pink">
-              Pagina de compra de numeros
-            </span>
+            {manualPurchaseLinkHref ? (
+              <a
+                href={manualPurchaseLinkHref}
+                className="inline-flex items-center rounded-full border border-neon-pink/40 bg-neon-pink/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-neon-pink transition hover:border-neon-pink/60 hover:bg-neon-pink/20"
+              >
+                Pagina de compra de numeros
+              </a>
+            ) : (
+              <span className="inline-flex items-center rounded-full border border-neon-pink/40 bg-neon-pink/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-neon-pink">
+                Pagina de compra de numeros
+              </span>
+            )}
             <h1 className="mt-5 text-3xl font-display font-bold leading-tight lg:text-5xl">
               Escolha suas cotas e
               <span className="text-neon-pink"> garanta sua chance</span> no sorteio.
