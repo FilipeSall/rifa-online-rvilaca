@@ -41,7 +41,6 @@ export default function CommercialRulesSection({ controller }: CommercialRulesSe
                         className="text-[10px] font-semibold uppercase tracking-[0.12em] text-red-300 transition hover:text-red-200"
                         type="button"
                         onClick={() => controller.handleRemovePromotion(index)}
-                        disabled={controller.promotionDrafts.length <= 1}
                       >
                         Remover
                       </button>

@@ -234,74 +234,72 @@ function sanitizeCampaignPackPrices(value: unknown, unitPriceFallback: number): 
 
     let hasMostPurchasedTag = false
     return normalized.map((item) => {
-      if (!item.mostPurchasedTag) {
-        return item
-      }
-      if (hasMostPurchasedTag) {
-        return {
-          ...item,
-          mostPurchasedTag: false,
+        if (!item.mostPurchasedTag) {
+            return item
         }
-      }
+        if (hasMostPurchasedTag) {
+            return {
+                ...item,
+                mostPurchasedTag: false,
+            }
+        }
 
-      hasMostPurchasedTag = true
-      return item
+        hasMostPurchasedTag = true
+        return item
     })
 }
 
 function sanitizeCampaignFeaturedPromotionItem(value: unknown): CampaignFeaturedPromotion | null {
-  if (!value || typeof value !== 'object') {
-    return null
-  }
+    if (!value || typeof value !== 'object') {
+        return null
+    }
 
-  const payload = value as Record<string, unknown>
-  const targetQuantity = Number(payload.targetQuantity)
-  if (!Number.isInteger(targetQuantity) || targetQuantity <= 0 || targetQuantity > MAX_QUANTITY) {
-    return null
-  }
+    const payload = value as Record<string, unknown>
+    const targetQuantity = Number(payload.targetQuantity)
+    if (!Number.isInteger(targetQuantity) || targetQuantity <= 0 || targetQuantity > MAX_QUANTITY) {
+        return null
+    }
 
-  const discountType = sanitizeCouponDiscountType(payload.discountType)
-  const rawValue = Number(payload.discountValue)
-  if (!Number.isFinite(rawValue) || rawValue < 0) {
-    return null
-  }
+    const discountType = sanitizeCouponDiscountType(payload.discountType)
+    const rawValue = Number(payload.discountValue)
+    if (!Number.isFinite(rawValue) || rawValue < 0) {
+        return null
+    }
 
-  const discountValue = Number((discountType === 'percent' ? Math.min(rawValue, 100) : rawValue).toFixed(2))
+    const discountValue = Number((discountType === 'percent' ? Math.min(rawValue, 100) : rawValue).toFixed(2))
 
-  return {
-    active: payload.active === true,
-    targetQuantity,
-    discountType,
-    discountValue,
-    label: 'Mais compradas',
-  }
+    return {
+        active: payload.active === true,
+        targetQuantity,
+        discountType,
+        discountValue,
+        label: 'Mais compradas',
+    }
 }
 
 function sanitizeCampaignFeaturedPromotions(value: unknown, fallback: unknown): CampaignFeaturedPromotion[] {
-  const items = Array.isArray(value) ? value : []
-  const normalized = items
-    .map((item) => sanitizeCampaignFeaturedPromotionItem(item))
-    .filter((item): item is CampaignFeaturedPromotion => Boolean(item))
+    if (Array.isArray(value)) {
+        const normalized = value
+            .map((item) => sanitizeCampaignFeaturedPromotionItem(item))
+            .filter((item): item is CampaignFeaturedPromotion => Boolean(item))
+        return normalized
+    }
 
-  if (normalized.length > 0) {
-    return normalized
-  }
+    const fallbackItem = sanitizeCampaignFeaturedPromotionItem(fallback)
+    if (fallbackItem) {
+        const defaults = DEFAULT_CAMPAIGN_FEATURED_PROMOTIONS.map((item) => ({ ...item }))
+        const hasSame = (item: CampaignFeaturedPromotion) =>
+            item.targetQuantity === fallbackItem.targetQuantity
+            && item.discountType === fallbackItem.discountType
+            && item.discountValue === fallbackItem.discountValue
+        const merged = [
+            fallbackItem,
+            ...defaults.filter((item) => !hasSame(item)),
+        ]
+        return merged
+    }
 
-  const fallbackItem = sanitizeCampaignFeaturedPromotionItem(fallback)
-  if (fallbackItem) {
-    const defaults = DEFAULT_CAMPAIGN_FEATURED_PROMOTIONS.map((item) => ({ ...item }))
-    const hasSame = (item: CampaignFeaturedPromotion) =>
-      item.targetQuantity === fallbackItem.targetQuantity
-      && item.discountType === fallbackItem.discountType
-      && item.discountValue === fallbackItem.discountValue
-    const merged = [
-      fallbackItem,
-      ...defaults.filter((item) => !hasSame(item)),
-    ]
-    return merged
-  }
-
-  return DEFAULT_CAMPAIGN_FEATURED_PROMOTIONS.map((item) => ({ ...item }))
+    return DEFAULT_CAMPAIGN_FEATURED_PROMOTIONS.map((item) => ({ ...item }))
 }
 
 function sanitizeCouponDiscountType(value: unknown): CampaignCouponDiscountType {

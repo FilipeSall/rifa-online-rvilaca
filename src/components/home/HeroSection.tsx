@@ -361,7 +361,7 @@ export default function HeroSection({
                     />
                     <div className="relative z-10 flex items-center justify-between gap-3">
                       <p className="flex-1 text-left text-[9px] font-semibold uppercase tracking-[0.08em] text-cyan-200/80 sm:text-[10px] sm:tracking-[0.18em]">
-                        Ajuste personalizado
+                        Compra personalizada
                       </p>
                       <div className="inline-flex shrink-0 items-center gap-1.5 sm:gap-2">
                         <button
