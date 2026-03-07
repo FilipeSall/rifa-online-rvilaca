@@ -55,7 +55,7 @@ export default function WinnerCard({ winner }: WinnerCardProps) {
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-base font-black text-white">{winner.winnerName}</p>
+          <p className="text-base font-black text-white break-words">{winner.winnerName}</p>
           <p className="mt-0.5 text-[11px] uppercase tracking-[0.14em] text-gray-400">
             {winner.drawType === 'main_raffle' ? 'Sorteio principal' : 'Top compradores'} | {formatDrawDate(winner.drawDate)}
           </p>

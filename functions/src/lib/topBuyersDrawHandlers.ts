@@ -271,19 +271,7 @@ function formatPublicName(name: string, uid: string): string {
     return `Participante ${uid.slice(-4).toUpperCase()}`
   }
 
-  const tokens = normalized.split(/\s+/).filter(Boolean)
-  const firstName = tokens[0] || normalized
-  const secondInitial = tokens[1]?.[0]
-
-  if (secondInitial) {
-    return `${firstName} ${secondInitial.toUpperCase()}.`
-  }
-
-  if (firstName.length <= 2) {
-    return `${firstName[0] || 'P'}*`
-  }
-
-  return `${firstName.slice(0, 1).toUpperCase()}${firstName.slice(1).toLowerCase()}`
+  return normalized
 }
 
 function readOrderQuantity(data: DocumentData): number {
@@ -1420,7 +1408,6 @@ function parseHistoryResultSummary(
   raw: Record<string, unknown>,
   documentId: string,
   fallbackMainPrize: string,
-  options?: { maskWinnerName?: boolean },
 ): TopBuyersDrawResult | null {
   const drawId = sanitizeString(raw.drawId) || documentId
   const drawDate = sanitizeString(raw.drawDate)
@@ -1458,7 +1445,7 @@ function parseHistoryResultSummary(
   const winnerName = sanitizeString(winnerRecord.name) || 'Participante'
   const winner: TopBuyersDrawWinner = {
     userId: winnerUid,
-    name: options?.maskWinnerName ? formatPublicName(winnerName, winnerUid) : winnerName,
+    name: winnerName,
     cotas: Number(winnerRecord.cotas) || 0,
     pos: Number(winnerRecord.pos) || winningPosition,
     photoURL: sanitizeString(winnerRecord.photoURL),
@@ -1629,7 +1616,6 @@ export function createGetPublicTopBuyersDrawHistoryHandler(db: Firestore) {
           asRecord(documentSnapshot.data()),
           documentSnapshot.id,
           fallbackMainPrize,
-          { maskWinnerName: true },
         ))
 
       const results = dedupeResultsByPrize(

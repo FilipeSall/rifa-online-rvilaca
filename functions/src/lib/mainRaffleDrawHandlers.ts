@@ -150,19 +150,7 @@ function formatPublicName(name: string, uid: string): string {
     return `Participante ${uid.slice(-4).toUpperCase()}`
   }
 
-  const tokens = normalized.split(/\s+/).filter(Boolean)
-  const firstName = tokens[0] || normalized
-  const secondInitial = tokens[1]?.[0]
-
-  if (secondInitial) {
-    return `${firstName} ${secondInitial.toUpperCase()}.`
-  }
-
-  if (firstName.length <= 2) {
-    return `${firstName[0] || 'P'}*`
-  }
-
-  return `${firstName.slice(0, 1).toUpperCase()}${firstName.slice(1).toLowerCase()}`
+  return normalized
 }
 
 function sanitizeExtractionNumber(value: unknown, index: number): string {
