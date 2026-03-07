@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react'
 import { formatCurrency } from '../../utils/purchaseNumbers'
 
 export type PackPricingByQuantity = Record<number, {
@@ -27,6 +28,26 @@ export default function QuantitySelectionCard({
   maxSelectable,
   onSetQuantity,
 }: QuantitySelectionCardProps) {
+  const [customQuantityInput, setCustomQuantityInput] = useState(String(quantity))
+  const [isCustomQuantityFocused, setIsCustomQuantityFocused] = useState(false)
+
+  useEffect(() => {
+    if (isCustomQuantityFocused) {
+      return
+    }
+
+    setCustomQuantityInput(String(quantity))
+  }, [isCustomQuantityFocused, quantity])
+
+  const commitCustomQuantity = useCallback(() => {
+    const parsedValue = Number(customQuantityInput)
+    const normalizedValue = Number.isFinite(parsedValue) ? Math.floor(parsedValue) : minQuantity
+    const safeValue = Math.max(minQuantity, Math.min(normalizedValue, maxSelectable))
+
+    onSetQuantity(safeValue)
+    setCustomQuantityInput(String(safeValue))
+  }, [customQuantityInput, maxSelectable, minQuantity, onSetQuantity])
+
   const suggestedPacks = Array.from(new Set(
     packQuantities.filter((pack) => pack >= minQuantity && pack <= maxSelectable),
   )).sort((left, right) => left - right)
@@ -138,11 +159,28 @@ export default function QuantitySelectionCard({
             <input
               id="quantity-input"
               className="h-10 w-24 rounded-lg border border-white/15 bg-black/25 text-center font-bold text-white outline-none transition focus:border-neon-pink"
-              min={minQuantity}
-              max={maxSelectable}
-              type="number"
-              value={quantity}
-              onChange={(event) => onSetQuantity(Number(event.target.value || minQuantity))}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              type="text"
+              value={customQuantityInput}
+              onFocus={() => setIsCustomQuantityFocused(true)}
+              onBlur={() => {
+                setIsCustomQuantityFocused(false)
+                commitCustomQuantity()
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.currentTarget.blur()
+                }
+              }}
+              onChange={(event) => {
+                const nextValue = event.target.value
+                if (!/^\d*$/.test(nextValue)) {
+                  return
+                }
+
+                setCustomQuantityInput(nextValue)
+              }}
             />
             <button
               className="h-10 w-10 rounded-lg border border-white/15 bg-white/5 text-white transition hover:bg-white/10 disabled:opacity-40"

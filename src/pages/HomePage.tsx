@@ -129,6 +129,8 @@ export default function HomePage() {
         <main className="flex-grow">
           <HeroSection
             quantity={purchaseState.quantity}
+            minSelectable={purchaseState.minSelectableQuantity}
+            maxSelectable={purchaseState.maxSelectable}
             packQuantities={purchaseState.availablePackQuantities}
             onSetQuantity={purchaseState.handleSetQuantity}
             onQuickCheckout={purchaseState.handleQuickCheckout}
