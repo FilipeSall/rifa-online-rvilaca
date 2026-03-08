@@ -112,8 +112,6 @@ function RankingBoard({
   const hasItems = items.length > 0
   const canPaginate = totalPages > 1
   const visibleItems = items
-  const windowStart = totalItems > 0 ? (page - 1) * pageSize + 1 : 0
-  const windowEnd = totalItems > 0 ? Math.min(page * pageSize, totalItems) : 0
   const paginationTokens = useMemo(() => buildPaginationTokens(page, totalPages), [page, totalPages])
   const previousDisabled = page <= 1 || isLoading
   const nextDisabled = page >= totalPages || isLoading
@@ -128,9 +126,6 @@ function RankingBoard({
           <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
             <span className={`h-1.5 w-1.5 rounded-full ${isLoading ? 'bg-amber-300 animate-pulse' : 'bg-emerald-300'}`} />
             Pagina {page} de {Math.max(totalPages, 1)}
-          </span>
-          <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
-            Exibindo {windowStart}-{windowEnd} de {totalItems}
           </span>
         </div>
       </div>
@@ -211,8 +206,8 @@ function RankingBoard({
                     {token}
                   </button>
                 )
-              ))}
-            </div>
+                ))}
+              </div>
 
             <button
               className="inline-flex items-center gap-1 rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-xs font-semibold text-gray-200 transition disabled:cursor-not-allowed disabled:opacity-40 hover:border-neon-pink/40 hover:text-neon-pink"

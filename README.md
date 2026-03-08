@@ -20,8 +20,8 @@ bun run dev:emulator
 ```
 
 Login admin local (emulator):
-- email: `admin@gmail.com`
-- senha: `admin123`
+- CPF: `00000000000`
+- Telefone: `99999999999`
 
 Quando gerar um PIX e quiser simular o pagamento HorsePay no emulator:
 
@@ -209,14 +209,14 @@ bun run seed:emulator:users
 
 Contas criadas:
 
-- admin: `admin@gmail.com` / `admin123`
-- admin: `filipesallesdev@gmail.com` / `199200`
-- user: `filipesalles69@gmail.com` / `199200`
-- user: `teste@gmail.com` / `teste123`
+- admin: CPF `00000000000` / telefone `99999999999`
+- user: CPF `11111111111` / telefone `98911111111`
+- user: CPF `22222222222` / telefone `98922222222`
 
 Comportamento do script:
 
-- cria usuario no **Auth Emulator** com `emailVerified=true`;
+- cria/atualiza usuario no **Auth Emulator** (sem email/senha, login por token custom);
+- cria/atualiza `cpfRegistry/{cpf}` e `phoneRegistry/{phone}` no **Firestore Emulator**;
 - cria/atualiza `users/{uid}` no **Firestore Emulator** com `role` correto;
 - e idempotente (rodar de novo so atualiza os mesmos usuarios).
 

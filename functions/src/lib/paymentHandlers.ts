@@ -38,7 +38,7 @@ import {
   readCampaignNumberRange,
 } from './numberStateStore.js'
 import { readStoredReservationNumbers } from './reservationHandlers.js'
-import { markPublicRankingCachesDirty } from './rankingHandlers.js'
+import { CHAMPIONS_RANKING_USERS_COLLECTION, markPublicRankingCachesDirty } from './rankingHandlers.js'
 import {
   asRecord,
   buildWebhookEventId,
@@ -877,6 +877,26 @@ export async function runPaidDepositBusinessLogic(
           },
           { merge: true },
         )
+      }
+
+      if (order.campaignId === CAMPAIGN_DOC_ID && soldNumbersInAttempt > 0) {
+        const championsAggregateRef = db.collection(CHAMPIONS_RANKING_USERS_COLLECTION).doc(userId)
+        const championsAggregateSnapshot = await transaction.get(championsAggregateRef)
+        const currentCotas = Number(championsAggregateSnapshot.get('cotas'))
+        const currentFirstPurchaseAtMs = Number(championsAggregateSnapshot.get('firstPurchaseAtMs'))
+        const nextCotas = (Number.isInteger(currentCotas) && currentCotas > 0 ? currentCotas : 0) + soldNumbersInAttempt
+        const nextFirstPurchaseAtMs = Number.isFinite(currentFirstPurchaseAtMs) && currentFirstPurchaseAtMs > 0
+          ? Math.min(currentFirstPurchaseAtMs, nowMs)
+          : nowMs
+
+        transaction.set(championsAggregateRef, {
+          campaignId: CAMPAIGN_DOC_ID,
+          userId,
+          cotas: nextCotas,
+          firstPurchaseAtMs: nextFirstPurchaseAtMs,
+          updatedAtMs: nowMs,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true })
       }
     }
 

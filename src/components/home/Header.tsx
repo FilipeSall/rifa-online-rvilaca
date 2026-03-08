@@ -259,7 +259,7 @@ export default function Header() {
               </div>
             ) : null}
             <button
-              className="lg:hidden text-white transition-transform duration-200"
+              className="lg:hidden inline-flex h-10 w-10 items-center justify-center text-white transition-transform duration-200"
               type="button"
               aria-label={isMobileMenuOpen ? 'Fechar menu' : 'Abrir menu'}
               aria-expanded={isMobileMenuOpen}

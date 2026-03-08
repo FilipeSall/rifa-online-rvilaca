@@ -12,7 +12,7 @@ export default function AdminDashboardContent({ activeTab, onTabChange, onSignOu
     <div className="flex min-h-[calc(100vh-80px)] bg-luxury-bg">
       <AdminSidebar activeTab={activeTab} onTabChange={onTabChange} onSignOut={onSignOut} />
 
-      <main className="flex-1 p-4 md:p-8">
+      <main className="min-w-0 flex-1 p-4 md:p-8">
         <AdminMobileTabs activeTab={activeTab} onTabChange={onTabChange} />
 
         <div className="mt-6">

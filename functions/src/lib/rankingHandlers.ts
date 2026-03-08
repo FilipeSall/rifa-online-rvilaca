@@ -97,7 +97,7 @@ type WeeklyLiveRankingCacheDoc = {
   rebuildLockUntilMs: number
 }
 
-const MAX_PUBLIC_RANKING_LIMIT = 50
+const MAX_WEEKLY_PUBLIC_RANKING_LIMIT = 50
 const PUBLIC_RANKING_PAGE_SIZE = 10
 const PUBLIC_RANKING_CACHE_TTL_MS = 60 * 1000
 const PUBLIC_RANKING_REBUILD_LOCK_MS = 60 * 1000
@@ -105,6 +105,7 @@ const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
 const CHAMPIONS_PUBLIC_CACHE_DOC_ID = '_public-champions-ranking'
 const WEEKLY_PUBLIC_CACHE_DOC_ID = '_public-weekly-top-buyers-ranking'
 const TOP_BUYERS_DRAW_HISTORY_COLLECTION = 'topBuyersDrawResults'
+export const CHAMPIONS_RANKING_USERS_COLLECTION = 'championsRankingUsers'
 
 let championsRankingCache: RankingCacheEntry | null = null
 let championsRankingInFlight: Promise<RankingCacheEntry> | null = null
@@ -126,7 +127,7 @@ function sanitizeConfiguredTopBuyersRankingLimit(value: unknown) {
     return DEFAULT_TOP_BUYERS_RANKING_LIMIT
   }
 
-  return Math.max(1, Math.min(parsed, MAX_PUBLIC_RANKING_LIMIT))
+  return Math.max(1, Math.min(parsed, MAX_WEEKLY_PUBLIC_RANKING_LIMIT))
 }
 
 function readOrderQuantity(data: DocumentData): number {
@@ -191,10 +192,10 @@ function toRankingCacheEntry(cache: ChampionsPublicCacheDoc): RankingCacheEntry 
   }
 }
 
-function parseRankingItems(value: unknown): ChampionRankingItem[] {
+function parseRankingItems(value: unknown, maxItems?: number): ChampionRankingItem[] {
   const rawItems = Array.isArray(value) ? value : []
 
-  return rawItems
+  const normalizedItems = rawItems
     .map((item) => (item && typeof item === 'object' ? (item as Record<string, unknown>) : null))
     .filter((item): item is Record<string, unknown> => Boolean(item))
     .map((item) => {
@@ -211,7 +212,12 @@ function parseRankingItems(value: unknown): ChampionRankingItem[] {
     })
     .filter((item) => item.pos > 0 && item.cotas > 0)
     .sort((left, right) => left.pos - right.pos)
-    .slice(0, MAX_PUBLIC_RANKING_LIMIT)
+
+  if (Number.isInteger(maxItems) && Number(maxItems) > 0) {
+    return normalizedItems.slice(0, Number(maxItems))
+  }
+
+  return normalizedItems
 }
 
 function paginateRankingItems(
@@ -241,6 +247,122 @@ function paginateRankingItems(
     items: totalItems > 0
       ? items.slice(startIndex, startIndex + PUBLIC_RANKING_PAGE_SIZE)
       : [],
+  }
+}
+
+function readPositiveInteger(value: unknown): number | null {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return null
+  }
+
+  return parsed
+}
+
+function readFiniteTimestampMs(value: unknown): number | null {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null
+  }
+
+  return parsed
+}
+
+async function readChampionsRankingPage(
+  db: Firestore,
+  requestedPage: number,
+): Promise<GetChampionsRankingOutput> {
+  const baseQuery = db.collection(CHAMPIONS_RANKING_USERS_COLLECTION)
+    .where('campaignId', '==', CAMPAIGN_DOC_ID)
+  const countSnapshot = await baseQuery.count().get()
+  const totalItems = Number(countSnapshot.data().count) || 0
+  const totalPages = totalItems > 0
+    ? Math.ceil(totalItems / PUBLIC_RANKING_PAGE_SIZE)
+    : 0
+  const page = totalPages > 0
+    ? Math.min(Math.max(1, requestedPage), totalPages)
+    : 1
+  const offset = totalPages > 0
+    ? (page - 1) * PUBLIC_RANKING_PAGE_SIZE
+    : 0
+
+  if (totalItems <= 0) {
+    return {
+      campaignId: CAMPAIGN_DOC_ID,
+      updatedAtMs: Date.now(),
+      page,
+      pageSize: PUBLIC_RANKING_PAGE_SIZE,
+      totalItems,
+      totalPages,
+      items: [],
+    }
+  }
+
+  const rankingSnapshot = await baseQuery
+    .orderBy('cotas', 'desc')
+    .orderBy('firstPurchaseAtMs', 'asc')
+    .orderBy('userId', 'asc')
+    .offset(offset)
+    .limit(PUBLIC_RANKING_PAGE_SIZE)
+    .get()
+
+  const aggregateRows = rankingSnapshot.docs
+    .map((document) => {
+      const data = document.data()
+      const userId = readString(data.userId) || document.id
+      const cotas = readPositiveInteger(data.cotas)
+      const updatedAtMs = readFiniteTimestampMs(data.updatedAtMs)
+
+      if (!userId || !cotas) {
+        return null
+      }
+
+      return {
+        userId,
+        cotas,
+        updatedAtMs,
+      }
+    })
+    .filter((item): item is { userId: string; cotas: number; updatedAtMs: number | null } => Boolean(item))
+
+  const userRefs = aggregateRows.map((item) => db.collection('users').doc(item.userId))
+  const userSnapshots = userRefs.length > 0 ? await db.getAll(...userRefs) : []
+  const userDisplayNamesById = new Map<string, string>()
+
+  for (let index = 0; index < aggregateRows.length; index += 1) {
+    const aggregate = aggregateRows[index]
+    const userData = userSnapshots[index]?.data() || {}
+    const normalizedName = sanitizeString(userData.name) || sanitizeString(userData.displayName)
+    userDisplayNamesById.set(aggregate.userId, normalizedName)
+  }
+
+  const items: ChampionRankingItem[] = aggregateRows.map((aggregate, index) => {
+    const absolutePosition = offset + index + 1
+    const name = userDisplayNamesById.get(aggregate.userId) || ''
+
+    return {
+      pos: absolutePosition,
+      name: formatPublicName(name, aggregate.userId),
+      cotas: aggregate.cotas,
+      isGold: absolutePosition === 1,
+    }
+  })
+
+  const updatedAtMs = aggregateRows.reduce((maxMs, item) => {
+    if (item.updatedAtMs && item.updatedAtMs > maxMs) {
+      return item.updatedAtMs
+    }
+    return maxMs
+  }, 0) || Date.now()
+
+  return {
+    campaignId: CAMPAIGN_DOC_ID,
+    updatedAtMs,
+    page,
+    pageSize: PUBLIC_RANKING_PAGE_SIZE,
+    totalItems,
+    totalPages,
+    items,
   }
 }
 
@@ -285,7 +407,7 @@ function parseWeeklyLiveRankingCacheDoc(data: DocumentData | undefined): WeeklyL
     return null
   }
 
-  const items = parseRankingItems(data.items)
+  const items = parseRankingItems(data.items, MAX_WEEKLY_PUBLIC_RANKING_LIMIT)
 
   return {
     campaignId: CAMPAIGN_DOC_ID,
@@ -357,7 +479,7 @@ export async function resolveCurrentTopBuyersRankingWindow(
 
 async function buildRanking(
   db: Firestore,
-  limit: number,
+  limit: number | null,
   window: { startMs?: number, endMs?: number } = {},
 ): Promise<ChampionRankingItem[]> {
   const hasWindow = Number.isFinite(window.startMs) && Number.isFinite(window.endMs)
@@ -416,7 +538,7 @@ async function buildRanking(
     })
   }
 
-  const sorted = Array.from(totalsByUser.entries())
+  const sortedItems = Array.from(totalsByUser.entries())
     .sort((left, right) => {
       if (right[1].cotas !== left[1].cotas) {
         return right[1].cotas - left[1].cotas
@@ -428,7 +550,10 @@ async function buildRanking(
 
       return left[0].localeCompare(right[0])
     })
-    .slice(0, limit)
+
+  const sorted = Number.isInteger(limit) && Number(limit) > 0
+    ? sortedItems.slice(0, Number(limit))
+    : sortedItems
 
   const userRefs = sorted.map(([uid]) => db.collection('users').doc(uid))
   const usersSnapshot = userRefs.length > 0 ? await db.getAll(...userRefs) : []
@@ -692,7 +817,7 @@ export async function syncChampionsRankingLive(
     }
 
     try {
-      const items = await buildRanking(db, MAX_PUBLIC_RANKING_LIMIT)
+      const items = await buildRanking(db, null)
       const updatedAtMs = Date.now()
       const cacheEntry: RankingCacheEntry = {
         items,
@@ -747,7 +872,7 @@ export async function syncWeeklyTopBuyersRankingLive(
     }
 
     try {
-      const items = await buildRanking(db, MAX_PUBLIC_RANKING_LIMIT, {
+      const items = await buildRanking(db, MAX_WEEKLY_PUBLIC_RANKING_LIMIT, {
         startMs: window.startMs,
         endMs: window.endMs,
       })
@@ -791,18 +916,7 @@ export function createGetChampionsRankingHandler(db: Firestore) {
     const requestedPage = sanitizePage(payload.page, 1)
 
     try {
-      const cached = await syncChampionsRankingLive(db)
-      const pagination = paginateRankingItems(cached.items, requestedPage)
-
-      return {
-        campaignId: CAMPAIGN_DOC_ID,
-        updatedAtMs: cached.updatedAtMs,
-        page: pagination.page,
-        pageSize: pagination.pageSize,
-        totalItems: pagination.totalItems,
-        totalPages: pagination.totalPages,
-        items: pagination.items,
-      }
+      return await readChampionsRankingPage(db, requestedPage)
     } catch (error) {
       logger.error('getChampionsRanking failed', {
         error: String(error),

@@ -22,6 +22,7 @@
     "seed:firestore": "bun run scripts/seed-firestore.ts",
     "seed:campaign-hero-media": "bun run scripts/seed-campaign-hero-media.ts",
     "seed:campaign-featured-video": "bun run scripts/seed-campaign-featured-video.ts",
+    "ranking:backfill:champions": "bun run scripts/backfill-champions-ranking-users.ts",
     "backfill:cpf-registry": "bun run scripts/backfill-cpf-registry.ts",
     "reset:winners": "bun run scripts/reset-draws.ts",
     "reset:winners:dry": "bun run scripts/reset-draws.ts",

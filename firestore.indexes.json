@@ -153,6 +153,28 @@
       ]
     },
     {
+      "collectionGroup": "championsRankingUsers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "campaignId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "cotas",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "firstPurchaseAtMs",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "numberChunks",
       "queryScope": "COLLECTION",
       "fields": [
