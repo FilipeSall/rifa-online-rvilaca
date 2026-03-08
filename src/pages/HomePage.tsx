@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useScrollToHash } from '../hooks/useScrollToHash'
 import { OPEN_PURCHASE_CART_EVENT } from '../const/purchaseNumbers'
 import AnnouncementBar from '../components/home/AnnouncementBar'
@@ -15,6 +16,7 @@ import { applyCampaignShareMeta, buildCampaignShareMeta } from '../utils/shareMe
 
 export default function HomePage() {
   useScrollToHash()
+  const navigate = useNavigate()
   const purchaseState = usePurchaseNumbers()
   const [isCartModalOpen, setIsCartModalOpen] = useState(false)
   const [isQuickCheckoutAuthModalOpen, setIsQuickCheckoutAuthModalOpen] = useState(false)
@@ -90,6 +92,11 @@ export default function HomePage() {
   const handleHomeSummaryProceed = useCallback(() => {
     void purchaseState.handleProceed()
   }, [purchaseState.handleProceed])
+  const handleSwitchToManualFromCart = useCallback(() => {
+    purchaseState.setSelectionMode('manual')
+    closeCartModal()
+    navigate('/comprar-manualmente?mode=manual')
+  }, [closeCartModal, navigate, purchaseState])
 
   const homeSummaryCardProps = useMemo(
     () => ({
@@ -113,10 +120,10 @@ export default function HomePage() {
       selectedNumbers: purchaseState.selectedNumbers,
       onCouponCodeChange: purchaseState.setCouponCode,
       onApplyCoupon: purchaseState.handleApplyCoupon,
-      onSwitchToManual: () => purchaseState.setSelectionMode('manual'),
+      onSwitchToManual: handleSwitchToManualFromCart,
       onProceed: handleHomeSummaryProceed,
     }),
-    [handleHomeSummaryProceed, purchaseState],
+    [handleHomeSummaryProceed, handleSwitchToManualFromCart, purchaseState],
   )
 
   return (

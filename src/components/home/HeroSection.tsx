@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useCampaignSettings } from '../../hooks/useCampaignSettings'
+import { useScopedCampaignSettings } from '../../hooks/useScopedCampaignSettings'
 import { DEFAULT_BONUS_PRIZE, DEFAULT_CAMPAIGN_TITLE, DEFAULT_MAIN_PRIZE, DEFAULT_SECOND_PRIZE } from '../../const/campaign'
 import { calculateCampaignPricing } from '../../utils/campaignPricing'
 import { formatCurrency } from '../../utils/purchaseNumbers'
@@ -31,7 +31,7 @@ export default function HeroSection({
   onQuickCheckout,
   isQuickCheckoutLoading,
 }: HeroSectionProps) {
-  const { campaign } = useCampaignSettings()
+  const { campaign } = useScopedCampaignSettings()
   const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({})
   const titleRef = useRef<HTMLHeadingElement>(null)
   const [heroSalesCardWidth, setHeroSalesCardWidth] = useState<number | null>(null)
@@ -353,19 +353,19 @@ export default function HeroSection({
                   })}
                 </div>
 
-                <div className="mt-4 border-t border-white/10 pt-3">
-                  <div className="relative mx-auto w-full overflow-hidden rounded-2xl border border-violet-300/25 bg-[linear-gradient(125deg,rgba(11,8,34,0.96),rgba(7,12,27,0.94))] px-4 py-3 shadow-[0_14px_32px_rgba(8,6,25,0.55)] ring-1 ring-white/5">
+                <div className="mt-3 border-t border-white/10 pt-2">
+                  <div className="relative mx-auto w-full overflow-hidden rounded-2xl border border-violet-300/25 bg-[linear-gradient(125deg,rgba(11,8,34,0.96),rgba(7,12,27,0.94))] px-3 py-2 shadow-[0_14px_32px_rgba(8,6,25,0.55)] ring-1 ring-white/5">
                     <span
                       aria-hidden="true"
                       className="pointer-events-none absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-neon-pink/60 to-transparent"
                     />
-                    <div className="relative z-10 flex items-center justify-between gap-3">
-                      <p className="flex-1 text-left text-[9px] font-semibold uppercase tracking-[0.08em] text-cyan-200/80 sm:text-[10px] sm:tracking-[0.18em]">
+                    <div className="relative z-10 flex items-center justify-between gap-2">
+                      <p className="flex-1 text-left text-[9px] font-semibold uppercase tracking-[0.08em] text-cyan-200/80 sm:text-[10px] sm:tracking-[0.14em]">
                         Compra personalizada
                       </p>
-                      <div className="inline-flex shrink-0 items-center gap-1.5 sm:gap-2">
+                      <div className="inline-flex shrink-0 items-center gap-1 sm:gap-1.5">
                         <button
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-white/[0.03] text-base font-black text-white transition hover:-translate-y-0.5 hover:border-cyan-200/50 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40 sm:h-10 sm:w-10 sm:text-lg"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-white/[0.03] text-sm font-black text-white transition hover:-translate-y-0.5 hover:border-cyan-200/50 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40 sm:h-9 sm:w-9 sm:text-base"
                           type="button"
                           onClick={() => onSetQuantity(quantity - 1)}
                           disabled={isQuickCheckoutLoading || quantity <= minSelectable}
@@ -374,7 +374,7 @@ export default function HeroSection({
                           -
                         </button>
                         <input
-                          className="h-9 w-[4.5rem] rounded-xl border border-white/15 bg-black/35 px-2 text-center text-xl leading-none font-black text-white outline-none transition focus:border-neon-pink/80 focus:shadow-[0_0_0_1px_rgba(255,0,204,0.3)] sm:h-10 sm:w-24"
+                          className="h-8 w-[4rem] rounded-lg border border-white/15 bg-black/35 px-2 text-center text-lg leading-none font-black text-white outline-none transition focus:border-neon-pink/80 focus:shadow-[0_0_0_1px_rgba(255,0,204,0.3)] sm:h-9 sm:w-20"
                           type="text"
                           inputMode="numeric"
                           pattern="[0-9]*"
@@ -400,7 +400,7 @@ export default function HeroSection({
                           aria-label="Quantidade personalizada de numeros"
                         />
                         <button
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-white/[0.03] text-base font-black text-white transition hover:-translate-y-0.5 hover:border-cyan-200/50 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40 sm:h-10 sm:w-10 sm:text-lg"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-white/[0.03] text-sm font-black text-white transition hover:-translate-y-0.5 hover:border-cyan-200/50 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40 sm:h-9 sm:w-9 sm:text-base"
                           type="button"
                           onClick={() => onSetQuantity(quantity + 1)}
                           disabled={isQuickCheckoutLoading || quantity >= maxSelectable}

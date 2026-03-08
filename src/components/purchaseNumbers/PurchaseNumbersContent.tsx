@@ -174,6 +174,10 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
   const handleSummaryProceed = useCallback(() => {
     void handleProceed()
   }, [handleProceed])
+  const handleSwitchToManualFromSummary = useCallback(() => {
+    setSelectionMode('manual')
+    setIsMobileCartOpen(false)
+  }, [setSelectionMode])
 
   const summaryCardProps = useMemo(
     () => ({
@@ -197,7 +201,7 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
       selectedNumbers,
       onCouponCodeChange: setCouponCode,
       onApplyCoupon: handleApplyCoupon,
-      onSwitchToManual: () => setSelectionMode('manual'),
+      onSwitchToManual: handleSwitchToManualFromSummary,
       onProceed: handleSummaryProceed,
     }),
     [
@@ -221,8 +225,8 @@ export default function PurchaseNumbersContent({ purchaseState }: PurchaseNumber
       selectedNumbers,
       setCouponCode,
       handleApplyCoupon,
+      handleSwitchToManualFromSummary,
       handleSummaryProceed,
-      setSelectionMode,
     ],
   )
   const mostPurchasedPackQuantities = useMemo(

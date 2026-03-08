@@ -143,13 +143,13 @@ export default function QuantitySelectionCard({
           })}
         </div>
 
-        <div className="mt-5 flex flex-col gap-4 rounded-xl border border-white/10 bg-[linear-gradient(160deg,rgba(8,13,24,0.7),rgba(15,23,42,0.7))] p-4 md:flex-row md:items-center md:justify-between">
-          <label className="text-xs uppercase tracking-[0.18em] text-gray-400" htmlFor="quantity-input">
+        <div className="mt-3 flex flex-col gap-1.5 rounded-xl border border-white/10 bg-[linear-gradient(160deg,rgba(8,13,24,0.7),rgba(15,23,42,0.7))] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+          <label className="text-[10px] uppercase tracking-[0.14em] text-gray-400" htmlFor="quantity-input">
             Compra personalizada
           </label>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:justify-end">
             <button
-              className="h-10 w-10 rounded-lg border border-white/15 bg-white/5 text-white transition hover:bg-white/10 disabled:opacity-40"
+              className="h-8 w-8 rounded-md border border-white/15 bg-white/5 text-white transition hover:bg-white/10 disabled:opacity-40"
               type="button"
               onClick={() => onSetQuantity(quantity - 1)}
               disabled={quantity <= minQuantity}
@@ -158,7 +158,7 @@ export default function QuantitySelectionCard({
             </button>
             <input
               id="quantity-input"
-              className="h-10 w-24 rounded-lg border border-white/15 bg-black/25 text-center font-bold text-white outline-none transition focus:border-neon-pink"
+              className="h-8 w-16 rounded-md border border-white/15 bg-black/25 text-center text-base font-bold text-white outline-none transition focus:border-neon-pink"
               inputMode="numeric"
               pattern="[0-9]*"
               type="text"
@@ -183,7 +183,7 @@ export default function QuantitySelectionCard({
               }}
             />
             <button
-              className="h-10 w-10 rounded-lg border border-white/15 bg-white/5 text-white transition hover:bg-white/10 disabled:opacity-40"
+              className="h-8 w-8 rounded-md border border-white/15 bg-white/5 text-white transition hover:bg-white/10 disabled:opacity-40"
               type="button"
               onClick={() => onSetQuantity(quantity + 1)}
               disabled={quantity >= maxSelectable}

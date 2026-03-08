@@ -1,17 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { doc, onSnapshot } from 'firebase/firestore'
+import { useEffect, useMemo, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
-import { db, functions } from '../lib/firebase'
+import { functions } from '../lib/firebase'
 import type { RankingItem } from '../const/home'
 
 type GetChampionsRankingOutput = {
   updatedAtMs?: number
+  page?: number
+  pageSize?: number
+  totalItems?: number
+  totalPages?: number
   items?: RankingItem[]
 }
-const RANKING_LIMIT = 20
-const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
-const MIN_REFRESH_INTERVAL_MS = 8_000
-const PUBLIC_CACHE_DOC_PATH = ['draws', '_public-champions-ranking'] as const
 
 type CallableEnvelope<T> = T | { result?: T }
 
@@ -48,129 +47,90 @@ function normalizeRankingItems(value: unknown): RankingItem[] {
     .filter((item) => item.pos > 0 && item.cotas > 0)
 }
 
-function shouldRefreshRanking(updatedAtMs: number | null, nowMs = Date.now()) {
-  if (!updatedAtMs || !Number.isFinite(updatedAtMs)) {
-    return true
+function sanitizePositiveInteger(value: unknown, fallback: number) {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return fallback
   }
 
-  return nowMs >= updatedAtMs + CACHE_TTL_MS
+  return parsed
 }
 
-export function useChampionsRanking() {
+export function useChampionsRanking(page: number) {
   const [items, setItems] = useState<RankingItem[]>([])
   const [updatedAtMs, setUpdatedAtMs] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const hasCachedSnapshotRef = useRef(false)
-  const isRefreshingRef = useRef(false)
-  const lastRefreshStartedAtRef = useRef(0)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [totalItems, setTotalItems] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
   const getRankingCallable = useMemo(
-    () => httpsCallable<{ limit: number }, unknown>(functions, 'getChampionsRanking'),
+    () => httpsCallable<{ page: number }, unknown>(functions, 'getChampionsRanking'),
     [],
   )
-  const rankingCacheDocRef = useMemo(
-    () => doc(db, PUBLIC_CACHE_DOC_PATH[0], PUBLIC_CACHE_DOC_PATH[1]),
-    [],
-  )
-
-  const refreshRanking = useCallback(async () => {
-    const nowMs = Date.now()
-    if (isRefreshingRef.current) {
-      return
-    }
-
-    // Evita tempestade de chamadas quando listener estiver desconectado.
-    if (nowMs - lastRefreshStartedAtRef.current < MIN_REFRESH_INTERVAL_MS) {
-      return
-    }
-
-    lastRefreshStartedAtRef.current = nowMs
-    isRefreshingRef.current = true
-    setIsLoading(true)
-
-    try {
-      const response = await getRankingCallable({ limit: RANKING_LIMIT })
-      const payload = unwrapCallableData(response.data as CallableEnvelope<GetChampionsRankingOutput>)
-      const nextItems = normalizeRankingItems(payload.items)
-      const nextUpdatedAtMs =
-        typeof payload.updatedAtMs === 'number' && Number.isFinite(payload.updatedAtMs)
-          ? payload.updatedAtMs
-          : Date.now()
-
-      setItems(nextItems)
-      setUpdatedAtMs(nextUpdatedAtMs)
-      setErrorMessage(null)
-    } catch {
-      if (!hasCachedSnapshotRef.current) {
-        setErrorMessage('Nao foi possivel carregar o ranking agora.')
-      }
-    } finally {
-      isRefreshingRef.current = false
-      setIsLoading(false)
-    }
-  }, [getRankingCallable])
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(
-      rankingCacheDocRef,
-      (snapshot) => {
-        if (!snapshot.exists()) {
-          void refreshRanking()
+    let isCancelled = false
+    const requestedPage = sanitizePositiveInteger(page, 1)
+
+    const load = async () => {
+      setIsLoading(true)
+
+      try {
+        const response = await getRankingCallable({ page: requestedPage })
+        if (isCancelled) {
           return
         }
 
-        const payload = snapshot.data() as Record<string, unknown>
+        const payload = unwrapCallableData(response.data as CallableEnvelope<GetChampionsRankingOutput>)
         const nextItems = normalizeRankingItems(payload.items)
         const nextUpdatedAtMs =
           typeof payload.updatedAtMs === 'number' && Number.isFinite(payload.updatedAtMs)
             ? payload.updatedAtMs
-            : null
+            : Date.now()
+        const nextPage = sanitizePositiveInteger(payload.page, requestedPage)
+        const nextPageSize = sanitizePositiveInteger(payload.pageSize, 10)
+        const nextTotalItems = Number.isInteger(payload.totalItems) && Number(payload.totalItems) >= 0
+          ? Number(payload.totalItems)
+          : nextItems.length
+        const nextTotalPages = Number.isInteger(payload.totalPages) && Number(payload.totalPages) >= 0
+          ? Number(payload.totalPages)
+          : (nextTotalItems > 0 ? Math.ceil(nextTotalItems / nextPageSize) : 0)
 
-        hasCachedSnapshotRef.current = true
         setItems(nextItems)
         setUpdatedAtMs(nextUpdatedAtMs)
+        setCurrentPage(nextPage)
+        setPageSize(nextPageSize)
+        setTotalItems(nextTotalItems)
+        setTotalPages(nextTotalPages)
         setErrorMessage(null)
-        setIsLoading(false)
-
-        // Se o snapshot vier apenas do cache local (ou vazio), força refresh
-        // para evitar ficar preso em estado antigo do IndexedDB.
-        if (snapshot.metadata.fromCache || nextItems.length === 0 || shouldRefreshRanking(nextUpdatedAtMs)) {
-          void refreshRanking()
+      } catch {
+        if (!isCancelled) {
+          setErrorMessage('Nao foi possivel carregar o ranking agora.')
         }
-      },
-      () => {
-        // Mantém fallback via callable.
-        void refreshRanking()
-      },
-    )
-
-    return unsubscribe
-  }, [rankingCacheDocRef, refreshRanking])
-
-  useEffect(() => {
-    if (!updatedAtMs || !Number.isFinite(updatedAtMs)) {
-      return
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false)
+        }
+      }
     }
 
-    const refreshAtMs = updatedAtMs + CACHE_TTL_MS
-    const delayMs = refreshAtMs - Date.now()
+    void load()
 
-    if (delayMs <= 0) {
-      void refreshRanking()
-      return
+    return () => {
+      isCancelled = true
     }
-
-    const timer = window.setTimeout(() => {
-      void refreshRanking()
-    }, delayMs)
-
-    return () => window.clearTimeout(timer)
-  }, [updatedAtMs, refreshRanking])
+  }, [getRankingCallable, page])
 
   return {
     items,
     updatedAtMs,
     isLoading,
     errorMessage,
+    page: currentPage,
+    pageSize,
+    totalItems,
+    totalPages,
   }
 }

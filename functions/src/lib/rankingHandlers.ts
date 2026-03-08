@@ -6,15 +6,14 @@ import { getCampaignDocCached } from './campaignDocCache.js'
 import { asRecord, readString, readTimestampMillis, requireActiveUid, sanitizeString } from './shared.js'
 
 interface GetChampionsRankingInput {
-  limit?: number
+  page?: number
 }
 
 interface GetWeeklyTopBuyersRankingInput {
-  limit?: number
+  page?: number
 }
 
 interface RefreshWeeklyTopBuyersRankingCacheInput {
-  limit?: number
   forceRebuild?: boolean
 }
 
@@ -28,6 +27,10 @@ interface ChampionRankingItem {
 interface GetChampionsRankingOutput {
   campaignId: string
   updatedAtMs: number
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
   items: ChampionRankingItem[]
 }
 
@@ -37,6 +40,10 @@ interface GetWeeklyTopBuyersRankingOutput {
   weekId: string
   weekStartAtMs: number
   weekEndAtMs: number
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
   items: ChampionRankingItem[]
 }
 
@@ -66,15 +73,34 @@ type TopBuyersRankingWindow = {
   sourceDrawDate: string | null
 }
 
-type WeeklyLiveRankingCacheDoc = GetWeeklyTopBuyersRankingOutput & {
+type ChampionsPublicCacheDoc = {
+  campaignId: string
+  updatedAtMs: number
+  items: ChampionRankingItem[]
+  dirty: boolean
+  rebuiltAtMs: number
+  rebuildLockUntilMs: number
+}
+
+type WeeklyLiveRankingCacheDoc = {
+  campaignId: string
+  updatedAtMs: number
+  weekId: string
+  weekStartAtMs: number
+  weekEndAtMs: number
+  items: ChampionRankingItem[]
   sourceDrawId: string | null
   sourceDrawDate: string | null
   updatedBy: 'manual' | 'payment' | 'draw-publication' | 'callable'
+  dirty: boolean
+  rebuiltAtMs: number
+  rebuildLockUntilMs: number
 }
 
 const MAX_PUBLIC_RANKING_LIMIT = 50
-const CHAMPIONS_CACHE_TTL_MS = 20 * 1000
-const WEEKLY_CACHE_TTL_MS = 20 * 1000
+const PUBLIC_RANKING_PAGE_SIZE = 10
+const PUBLIC_RANKING_CACHE_TTL_MS = 60 * 1000
+const PUBLIC_RANKING_REBUILD_LOCK_MS = 60 * 1000
 const BRAZIL_OFFSET_MS = -3 * 60 * 60 * 1000
 const CHAMPIONS_PUBLIC_CACHE_DOC_ID = '_public-champions-ranking'
 const WEEKLY_PUBLIC_CACHE_DOC_ID = '_public-weekly-top-buyers-ranking'
@@ -84,14 +110,14 @@ let championsRankingCache: RankingCacheEntry | null = null
 let championsRankingInFlight: Promise<RankingCacheEntry> | null = null
 let weeklyRankingInFlight: Promise<WeeklyLiveRankingCacheDoc> | null = null
 
-function sanitizeLimit(value: unknown, max = 10, fallback = 5) {
+function sanitizePage(value: unknown, fallback = 1) {
   const parsed = Number(value)
 
   if (!Number.isInteger(parsed) || parsed <= 0) {
     return fallback
   }
 
-  return Math.max(1, Math.min(parsed, max))
+  return parsed
 }
 
 function sanitizeConfiguredTopBuyersRankingLimit(value: unknown) {
@@ -138,6 +164,149 @@ function formatBrazilDateId(sourceMs: number) {
   const month = String(localDate.getUTCMonth() + 1).padStart(2, '0')
   const day = String(localDate.getUTCDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function isCacheFresh(updatedAtMs: number, nowMs = Date.now()) {
+  return nowMs < updatedAtMs + PUBLIC_RANKING_CACHE_TTL_MS
+}
+
+function shouldUseChampionsCache(cache: ChampionsPublicCacheDoc, nowMs = Date.now()) {
+  return !cache.dirty && isCacheFresh(cache.updatedAtMs, nowMs)
+}
+
+function shouldUseWeeklyCache(cache: WeeklyLiveRankingCacheDoc, window: TopBuyersRankingWindow, nowMs = Date.now()) {
+  return (
+    cache.weekStartAtMs === window.startMs
+    && cache.weekEndAtMs <= nowMs
+    && !cache.dirty
+    && isCacheFresh(cache.updatedAtMs, nowMs)
+  )
+}
+
+function toRankingCacheEntry(cache: ChampionsPublicCacheDoc): RankingCacheEntry {
+  return {
+    updatedAtMs: cache.updatedAtMs,
+    expiresAtMs: cache.updatedAtMs + PUBLIC_RANKING_CACHE_TTL_MS,
+    items: cache.items,
+  }
+}
+
+function parseRankingItems(value: unknown): ChampionRankingItem[] {
+  const rawItems = Array.isArray(value) ? value : []
+
+  return rawItems
+    .map((item) => (item && typeof item === 'object' ? (item as Record<string, unknown>) : null))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .map((item) => {
+      const pos = Number(item.pos)
+      const cotas = Number(item.cotas)
+      const name = sanitizeString(item.name)
+
+      return {
+        pos: Number.isInteger(pos) && pos > 0 ? pos : 0,
+        name: name || 'Participante',
+        cotas: Number.isInteger(cotas) && cotas > 0 ? cotas : 0,
+        isGold: Number.isInteger(pos) && pos === 1,
+      } satisfies ChampionRankingItem
+    })
+    .filter((item) => item.pos > 0 && item.cotas > 0)
+    .sort((left, right) => left.pos - right.pos)
+    .slice(0, MAX_PUBLIC_RANKING_LIMIT)
+}
+
+function paginateRankingItems(
+  items: ChampionRankingItem[],
+  requestedPage: number,
+): {
+    page: number
+    pageSize: number
+    totalItems: number
+    totalPages: number
+    items: ChampionRankingItem[]
+  } {
+  const totalItems = items.length
+  const totalPages = totalItems > 0
+    ? Math.ceil(totalItems / PUBLIC_RANKING_PAGE_SIZE)
+    : 0
+  const page = totalPages > 0
+    ? Math.min(Math.max(1, requestedPage), totalPages)
+    : 1
+  const startIndex = (page - 1) * PUBLIC_RANKING_PAGE_SIZE
+
+  return {
+    page,
+    pageSize: PUBLIC_RANKING_PAGE_SIZE,
+    totalItems,
+    totalPages,
+    items: totalItems > 0
+      ? items.slice(startIndex, startIndex + PUBLIC_RANKING_PAGE_SIZE)
+      : [],
+  }
+}
+
+function parseChampionsPublicCacheDoc(data: DocumentData | undefined): ChampionsPublicCacheDoc | null {
+  if (!data) {
+    return null
+  }
+
+  const updatedAtMs = Number(data.updatedAtMs)
+  if (!Number.isFinite(updatedAtMs)) {
+    return null
+  }
+
+  const items = parseRankingItems(data.items)
+
+  return {
+    campaignId: CAMPAIGN_DOC_ID,
+    updatedAtMs,
+    items,
+    dirty: data.dirty === true,
+    rebuiltAtMs: Number.isFinite(Number(data.rebuiltAtMs)) ? Number(data.rebuiltAtMs) : updatedAtMs,
+    rebuildLockUntilMs: Number.isFinite(Number(data.rebuildLockUntilMs)) ? Number(data.rebuildLockUntilMs) : 0,
+  }
+}
+
+function parseWeeklyLiveRankingCacheDoc(data: DocumentData | undefined): WeeklyLiveRankingCacheDoc | null {
+  if (!data) {
+    return null
+  }
+
+  const weekId = sanitizeString(data.weekId)
+  const weekStartAtMs = Number(data.weekStartAtMs)
+  const weekEndAtMs = Number(data.weekEndAtMs)
+  const updatedAtMs = Number(data.updatedAtMs)
+
+  if (
+    !weekId
+    || !Number.isFinite(weekStartAtMs)
+    || !Number.isFinite(weekEndAtMs)
+    || !Number.isFinite(updatedAtMs)
+  ) {
+    return null
+  }
+
+  const items = parseRankingItems(data.items)
+
+  return {
+    campaignId: CAMPAIGN_DOC_ID,
+    updatedAtMs,
+    weekId,
+    weekStartAtMs,
+    weekEndAtMs,
+    items,
+    sourceDrawId: sanitizeString(data.sourceDrawId) || null,
+    sourceDrawDate: sanitizeString(data.sourceDrawDate) || null,
+    updatedBy: data.updatedBy === 'manual'
+      ? 'manual'
+      : data.updatedBy === 'payment'
+        ? 'payment'
+        : data.updatedBy === 'draw-publication'
+          ? 'draw-publication'
+          : 'callable',
+    dirty: data.dirty === true,
+    rebuiltAtMs: Number.isFinite(Number(data.rebuiltAtMs)) ? Number(data.rebuiltAtMs) : updatedAtMs,
+    rebuildLockUntilMs: Number.isFinite(Number(data.rebuildLockUntilMs)) ? Number(data.rebuildLockUntilMs) : 0,
+  }
 }
 
 async function assertAdminRole(db: Firestore, uid: string) {
@@ -208,7 +377,6 @@ async function buildRanking(
   }
 
   const ordersSnapshot = await ordersQuery.get()
-
   const totalsByUser = new Map<string, RankingAggregate>()
 
   for (const document of ordersSnapshot.docs) {
@@ -221,7 +389,6 @@ async function buildRanking(
     }
 
     const purchaseAtMs = readTimestampMillis(data.createdAt)
-
     if (!purchaseAtMs) {
       continue
     }
@@ -275,65 +442,17 @@ async function buildRanking(
       name: formatPublicName(name, uid),
       cotas: aggregate.cotas,
       isGold: index === 0,
-    }
+    } satisfies ChampionRankingItem
   })
 }
 
-function parseWeeklyLiveRankingCacheDoc(data: DocumentData | undefined): WeeklyLiveRankingCacheDoc | null {
-  if (!data) {
+async function readPublishedChampionsRankingCache(db: Firestore): Promise<ChampionsPublicCacheDoc | null> {
+  const snapshot = await db.collection('draws').doc(CHAMPIONS_PUBLIC_CACHE_DOC_ID).get()
+  if (!snapshot.exists) {
     return null
   }
 
-  const weekId = sanitizeString(data.weekId)
-  const weekStartAtMs = Number(data.weekStartAtMs)
-  const weekEndAtMs = Number(data.weekEndAtMs)
-  const updatedAtMs = Number(data.updatedAtMs)
-
-  if (
-    !weekId
-    || !Number.isFinite(weekStartAtMs)
-    || !Number.isFinite(weekEndAtMs)
-    || !Number.isFinite(updatedAtMs)
-  ) {
-    return null
-  }
-
-  const itemsRaw = Array.isArray(data.items) ? data.items : []
-  const items = itemsRaw
-    .map((item) => (item && typeof item === 'object' ? (item as Record<string, unknown>) : null))
-    .filter((item): item is Record<string, unknown> => Boolean(item))
-    .map((item) => {
-      const pos = Number(item.pos)
-      const cotas = Number(item.cotas)
-      const name = sanitizeString(item.name)
-      return {
-        pos: Number.isInteger(pos) && pos > 0 ? pos : 0,
-        name: name || 'Participante',
-        cotas: Number.isInteger(cotas) && cotas > 0 ? cotas : 0,
-        isGold: Number.isInteger(pos) && pos === 1,
-      }
-    })
-    .filter((item) => item.pos > 0 && item.cotas > 0)
-    .sort((left, right) => left.pos - right.pos)
-    .slice(0, MAX_PUBLIC_RANKING_LIMIT)
-
-  return {
-    campaignId: CAMPAIGN_DOC_ID,
-    updatedAtMs,
-    weekId,
-    weekStartAtMs,
-    weekEndAtMs,
-    items,
-    sourceDrawId: sanitizeString(data.sourceDrawId) || null,
-    sourceDrawDate: sanitizeString(data.sourceDrawDate) || null,
-    updatedBy: data.updatedBy === 'manual'
-      ? 'manual'
-      : data.updatedBy === 'payment'
-        ? 'payment'
-        : data.updatedBy === 'draw-publication'
-          ? 'draw-publication'
-          : 'callable',
-  }
+  return parseChampionsPublicCacheDoc(snapshot.data() as DocumentData | undefined)
 }
 
 async function readPublishedWeeklyLiveRankingCache(db: Firestore): Promise<WeeklyLiveRankingCacheDoc | null> {
@@ -353,9 +472,10 @@ async function publishWeeklyLiveRankingCache(
     updatedBy: 'manual' | 'payment' | 'draw-publication' | 'callable'
   },
 ): Promise<WeeklyLiveRankingCacheDoc> {
+  const nowMs = Date.now()
   const cacheDoc: WeeklyLiveRankingCacheDoc = {
     campaignId: CAMPAIGN_DOC_ID,
-    updatedAtMs: Date.now(),
+    updatedAtMs: nowMs,
     weekId: params.window.weekId,
     weekStartAtMs: params.window.startMs,
     weekEndAtMs: params.window.endMs,
@@ -363,6 +483,9 @@ async function publishWeeklyLiveRankingCache(
     sourceDrawId: params.window.sourceDrawId,
     sourceDrawDate: params.window.sourceDrawDate,
     updatedBy: params.updatedBy,
+    dirty: false,
+    rebuiltAtMs: nowMs,
+    rebuildLockUntilMs: 0,
   }
 
   await db.collection('draws').doc(WEEKLY_PUBLIC_CACHE_DOC_ID).set({
@@ -376,77 +499,272 @@ async function publishWeeklyLiveRankingCache(
     sourceDrawId: cacheDoc.sourceDrawId,
     sourceDrawDate: cacheDoc.sourceDrawDate,
     updatedBy: cacheDoc.updatedBy,
+    dirty: false,
+    rebuiltAtMs: cacheDoc.rebuiltAtMs,
+    rebuildLockUntilMs: 0,
   }, { merge: true })
 
   return cacheDoc
 }
 
-function toWeeklyTopBuyersOutput(payload: WeeklyLiveRankingCacheDoc, limit: number): GetWeeklyTopBuyersRankingOutput {
+function toWeeklyTopBuyersOutput(
+  payload: WeeklyLiveRankingCacheDoc,
+  page: number,
+  rankingLimit: number,
+): GetWeeklyTopBuyersRankingOutput {
+  const pagination = paginateRankingItems(payload.items.slice(0, rankingLimit), page)
+
   return {
     campaignId: payload.campaignId,
     updatedAtMs: payload.updatedAtMs,
     weekId: payload.weekId,
     weekStartAtMs: payload.weekStartAtMs,
     weekEndAtMs: payload.weekEndAtMs,
-    items: payload.items.slice(0, limit),
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    totalItems: pagination.totalItems,
+    totalPages: pagination.totalPages,
+    items: pagination.items,
   }
 }
 
 function toRefreshWeeklyTopBuyersOutput(
   payload: WeeklyLiveRankingCacheDoc,
-  limit: number,
+  rankingLimit: number,
 ): RefreshWeeklyTopBuyersRankingCacheOutput {
+  const pagination = paginateRankingItems(payload.items.slice(0, rankingLimit), 1)
+
   return {
     campaignId: payload.campaignId,
     updatedAtMs: payload.updatedAtMs,
     weekId: payload.weekId,
     weekStartAtMs: payload.weekStartAtMs,
     weekEndAtMs: payload.weekEndAtMs,
-    items: payload.items.slice(0, limit),
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    totalItems: pagination.totalItems,
+    totalPages: pagination.totalPages,
+    items: pagination.items,
     sourceDrawId: payload.sourceDrawId,
     sourceDrawDate: payload.sourceDrawDate,
     updatedBy: payload.updatedBy,
   }
 }
 
-function isCacheFresh(updatedAtMs: number, nowMs = Date.now()) {
-  return nowMs < updatedAtMs + WEEKLY_CACHE_TTL_MS
+async function publishChampionsRankingCache(db: Firestore, cache: RankingCacheEntry) {
+  try {
+    await db.collection('draws').doc(CHAMPIONS_PUBLIC_CACHE_DOC_ID).set({
+      cacheType: 'championsRanking',
+      campaignId: CAMPAIGN_DOC_ID,
+      updatedAtMs: cache.updatedAtMs,
+      items: cache.items,
+      dirty: false,
+      rebuiltAtMs: cache.updatedAtMs,
+      rebuildLockUntilMs: 0,
+    }, { merge: true })
+  } catch (error) {
+    logger.warn('publishChampionsRankingCache failed', { error: String(error) })
+  }
 }
 
-async function rebuildWeeklyRankingLive(
+async function tryAcquireChampionsRebuildLock(
   db: Firestore,
-  options: {
-    updatedBy: 'manual' | 'payment' | 'draw-publication' | 'callable'
-    nowMs?: number
-  },
-): Promise<WeeklyLiveRankingCacheDoc> {
-  const nowMs = Number.isFinite(options.nowMs) ? Number(options.nowMs) : Date.now()
-  const window = await resolveCurrentTopBuyersRankingWindow(db, nowMs)
-  const items = await buildRanking(db, MAX_PUBLIC_RANKING_LIMIT, {
-    startMs: window.startMs,
-    endMs: window.endMs,
-  })
+  nowMs: number,
+  forceRebuild = false,
+): Promise<{ shouldRebuild: boolean; cached: ChampionsPublicCacheDoc | null }> {
+  const cacheRef = db.collection('draws').doc(CHAMPIONS_PUBLIC_CACHE_DOC_ID)
 
-  return publishWeeklyLiveRankingCache(db, {
-    window,
-    items,
-    updatedBy: options.updatedBy,
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(cacheRef)
+    const cached = snapshot.exists
+      ? parseChampionsPublicCacheDoc(snapshot.data() as DocumentData | undefined)
+      : null
+
+    if (cached && !forceRebuild && shouldUseChampionsCache(cached, nowMs)) {
+      return { shouldRebuild: false, cached }
+    }
+
+    if (cached && cached.rebuildLockUntilMs > nowMs) {
+      return { shouldRebuild: false, cached }
+    }
+
+    transaction.set(cacheRef, {
+      cacheType: 'championsRanking',
+      campaignId: CAMPAIGN_DOC_ID,
+      rebuildLockUntilMs: nowMs + PUBLIC_RANKING_REBUILD_LOCK_MS,
+    }, { merge: true })
+
+    return { shouldRebuild: true, cached }
   })
+}
+
+async function tryAcquireWeeklyRebuildLock(
+  db: Firestore,
+  nowMs: number,
+  window: TopBuyersRankingWindow,
+  forceRebuild = false,
+): Promise<{ shouldRebuild: boolean; cached: WeeklyLiveRankingCacheDoc | null }> {
+  const cacheRef = db.collection('draws').doc(WEEKLY_PUBLIC_CACHE_DOC_ID)
+
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(cacheRef)
+    const cached = snapshot.exists
+      ? parseWeeklyLiveRankingCacheDoc(snapshot.data() as DocumentData | undefined)
+      : null
+
+    if (cached && !forceRebuild && shouldUseWeeklyCache(cached, window, nowMs)) {
+      return { shouldRebuild: false, cached }
+    }
+
+    if (cached && cached.rebuildLockUntilMs > nowMs) {
+      return { shouldRebuild: false, cached }
+    }
+
+    transaction.set(cacheRef, {
+      cacheType: 'weeklyTopBuyersRankingLive',
+      campaignId: CAMPAIGN_DOC_ID,
+      rebuildLockUntilMs: nowMs + PUBLIC_RANKING_REBUILD_LOCK_MS,
+    }, { merge: true })
+
+    return { shouldRebuild: true, cached }
+  })
+}
+
+export async function markPublicRankingCachesDirty(
+  db: Firestore,
+  updatedBy: 'payment' | 'manual' | 'callable' = 'payment',
+): Promise<void> {
+  const dirtyAtMs = Date.now()
+
+  await Promise.all([
+    db.collection('draws').doc(CHAMPIONS_PUBLIC_CACHE_DOC_ID).set({
+      cacheType: 'championsRanking',
+      campaignId: CAMPAIGN_DOC_ID,
+      dirty: true,
+      dirtyAtMs,
+      updatedBy,
+      rebuildLockUntilMs: 0,
+    }, { merge: true }),
+    db.collection('draws').doc(WEEKLY_PUBLIC_CACHE_DOC_ID).set({
+      cacheType: 'weeklyTopBuyersRankingLive',
+      campaignId: CAMPAIGN_DOC_ID,
+      dirty: true,
+      dirtyAtMs,
+      updatedBy,
+      rebuildLockUntilMs: 0,
+    }, { merge: true }),
+  ])
+
+  if (championsRankingCache) {
+    championsRankingCache.expiresAtMs = 0
+  }
+}
+
+export async function syncChampionsRankingLive(
+  db: Firestore,
+  options: { forceRebuild?: boolean } = {},
+): Promise<RankingCacheEntry> {
+  if (championsRankingInFlight) {
+    return championsRankingInFlight
+  }
+
+  championsRankingInFlight = (async () => {
+    const nowMs = Date.now()
+
+    if (!options.forceRebuild) {
+      if (championsRankingCache && championsRankingCache.expiresAtMs > nowMs) {
+        return championsRankingCache
+      }
+
+      const published = await readPublishedChampionsRankingCache(db)
+      if (published && shouldUseChampionsCache(published, nowMs)) {
+        const cacheEntry = toRankingCacheEntry(published)
+        championsRankingCache = cacheEntry
+        return cacheEntry
+      }
+    }
+
+    const lockResult = await tryAcquireChampionsRebuildLock(db, nowMs, options.forceRebuild === true)
+    if (!lockResult.shouldRebuild && lockResult.cached) {
+      const cacheEntry = toRankingCacheEntry(lockResult.cached)
+      championsRankingCache = cacheEntry
+      return cacheEntry
+    }
+
+    try {
+      const items = await buildRanking(db, MAX_PUBLIC_RANKING_LIMIT)
+      const updatedAtMs = Date.now()
+      const cacheEntry: RankingCacheEntry = {
+        items,
+        updatedAtMs,
+        expiresAtMs: updatedAtMs + PUBLIC_RANKING_CACHE_TTL_MS,
+      }
+
+      championsRankingCache = cacheEntry
+      await publishChampionsRankingCache(db, cacheEntry)
+      return cacheEntry
+    } catch (error) {
+      await db.collection('draws').doc(CHAMPIONS_PUBLIC_CACHE_DOC_ID).set({
+        dirty: true,
+        rebuildLockUntilMs: 0,
+      }, { merge: true })
+      throw error
+    }
+  })()
+
+  try {
+    return await championsRankingInFlight
+  } finally {
+    championsRankingInFlight = null
+  }
 }
 
 export async function syncWeeklyTopBuyersRankingLive(
   db: Firestore,
   options: {
     updatedBy?: 'manual' | 'payment' | 'draw-publication' | 'callable'
+    forceRebuild?: boolean
   } = {},
 ): Promise<WeeklyLiveRankingCacheDoc> {
   if (weeklyRankingInFlight) {
     return weeklyRankingInFlight
   }
 
-  weeklyRankingInFlight = rebuildWeeklyRankingLive(db, {
-    updatedBy: options.updatedBy || 'callable',
-  })
+  weeklyRankingInFlight = (async () => {
+    const nowMs = Date.now()
+    const window = await resolveCurrentTopBuyersRankingWindow(db, nowMs)
+
+    if (!options.forceRebuild) {
+      const published = await readPublishedWeeklyLiveRankingCache(db)
+      if (published && shouldUseWeeklyCache(published, window, nowMs)) {
+        return published
+      }
+    }
+
+    const lockResult = await tryAcquireWeeklyRebuildLock(db, nowMs, window, options.forceRebuild === true)
+    if (!lockResult.shouldRebuild && lockResult.cached) {
+      return lockResult.cached
+    }
+
+    try {
+      const items = await buildRanking(db, MAX_PUBLIC_RANKING_LIMIT, {
+        startMs: window.startMs,
+        endMs: window.endMs,
+      })
+
+      return publishWeeklyLiveRankingCache(db, {
+        window,
+        items,
+        updatedBy: options.updatedBy || 'callable',
+      })
+    } catch (error) {
+      await db.collection('draws').doc(WEEKLY_PUBLIC_CACHE_DOC_ID).set({
+        dirty: true,
+        rebuildLockUntilMs: 0,
+      }, { merge: true })
+      throw error
+    }
+  })()
 
   try {
     return await weeklyRankingInFlight
@@ -463,95 +781,27 @@ export async function syncWeeklyTopBuyersRankingFromLatestDraw(
 ): Promise<WeeklyLiveRankingCacheDoc> {
   return syncWeeklyTopBuyersRankingLive(db, {
     updatedBy: 'draw-publication',
+    forceRebuild: true,
   })
-}
-
-async function publishChampionsRankingCache(db: Firestore, cache: RankingCacheEntry) {
-  try {
-    await db.collection('draws').doc(CHAMPIONS_PUBLIC_CACHE_DOC_ID).set({
-      cacheType: 'championsRanking',
-      updatedAtMs: cache.updatedAtMs,
-      items: cache.items,
-    }, { merge: true })
-  } catch (error) {
-    logger.warn('publishChampionsRankingCache failed', { error: String(error) })
-  }
-}
-
-async function loadChampionsRankingCached(db: Firestore): Promise<RankingCacheEntry> {
-  const nowMs = Date.now()
-  if (championsRankingCache && championsRankingCache.expiresAtMs > nowMs) {
-    return championsRankingCache
-  }
-
-  if (championsRankingInFlight) {
-    return championsRankingInFlight
-  }
-
-  championsRankingInFlight = (async () => {
-    const items = await buildRanking(db, MAX_PUBLIC_RANKING_LIMIT)
-    const updatedAtMs = Date.now()
-    const cacheEntry: RankingCacheEntry = {
-      items,
-      updatedAtMs,
-      expiresAtMs: updatedAtMs + CHAMPIONS_CACHE_TTL_MS,
-    }
-    championsRankingCache = cacheEntry
-    return cacheEntry
-  })()
-
-  try {
-    return await championsRankingInFlight
-  } finally {
-    championsRankingInFlight = null
-  }
-}
-
-export async function syncChampionsRankingLive(db: Firestore): Promise<RankingCacheEntry> {
-  if (championsRankingInFlight) {
-    return championsRankingInFlight
-  }
-
-  championsRankingInFlight = (async () => {
-    const items = await buildRanking(db, MAX_PUBLIC_RANKING_LIMIT)
-    const updatedAtMs = Date.now()
-    const cacheEntry: RankingCacheEntry = {
-      items,
-      updatedAtMs,
-      expiresAtMs: updatedAtMs + CHAMPIONS_CACHE_TTL_MS,
-    }
-
-    championsRankingCache = cacheEntry
-    await publishChampionsRankingCache(db, cacheEntry)
-    return cacheEntry
-  })()
-
-  try {
-    return await championsRankingInFlight
-  } finally {
-    championsRankingInFlight = null
-  }
 }
 
 export function createGetChampionsRankingHandler(db: Firestore) {
   return async (request: { data: unknown }): Promise<GetChampionsRankingOutput> => {
     const payload = asRecord(request.data) as GetChampionsRankingInput
-    const limit = sanitizeLimit(payload.limit, MAX_PUBLIC_RANKING_LIMIT, 5)
+    const requestedPage = sanitizePage(payload.page, 1)
 
     try {
-      let cached = await loadChampionsRankingCached(db)
-
-      // Evita prender o frontend em cache vazio quando existem novas compras pagas.
-      if (cached.items.length === 0) {
-        cached = await syncChampionsRankingLive(db)
-      } else {
-        await publishChampionsRankingCache(db, cached)
-      }
+      const cached = await syncChampionsRankingLive(db)
+      const pagination = paginateRankingItems(cached.items, requestedPage)
 
       return {
         campaignId: CAMPAIGN_DOC_ID,
         updatedAtMs: cached.updatedAtMs,
-        items: cached.items.slice(0, limit),
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalItems: pagination.totalItems,
+        totalPages: pagination.totalPages,
+        items: pagination.items,
       }
     } catch (error) {
       logger.error('getChampionsRanking failed', {
@@ -566,27 +816,22 @@ export function createGetWeeklyTopBuyersRankingHandler(db: Firestore) {
   return async (request: { data: unknown }): Promise<GetWeeklyTopBuyersRankingOutput> => {
     const startedAtMs = Date.now()
     const payload = asRecord(request.data) as GetWeeklyTopBuyersRankingInput
+    const requestedPage = sanitizePage(payload.page, 1)
 
     try {
       const configuredLimit = await readConfiguredTopBuyersRankingLimit(db)
-      const requestedLimit = sanitizeLimit(payload.limit, MAX_PUBLIC_RANKING_LIMIT, configuredLimit)
       const nowMs = Date.now()
       const currentWindow = await resolveCurrentTopBuyersRankingWindow(db, nowMs)
       const published = await readPublishedWeeklyLiveRankingCache(db)
 
-      if (
-        published
-        && published.weekStartAtMs === currentWindow.startMs
-        && published.weekEndAtMs <= nowMs
-        && isCacheFresh(published.updatedAtMs, nowMs)
-      ) {
-        return toWeeklyTopBuyersOutput(published, requestedLimit)
+      if (published && shouldUseWeeklyCache(published, currentWindow, nowMs)) {
+        return toWeeklyTopBuyersOutput(published, requestedPage, configuredLimit)
       }
 
       const refreshed = await syncWeeklyTopBuyersRankingLive(db, {
         updatedBy: 'callable',
       })
-      const output = toWeeklyTopBuyersOutput(refreshed, requestedLimit)
+      const output = toWeeklyTopBuyersOutput(refreshed, requestedPage, configuredLimit)
 
       logger.info('getWeeklyTopBuyersRanking completed', {
         trigger: 'getWeeklyTopBuyersRanking',
@@ -594,6 +839,9 @@ export function createGetWeeklyTopBuyersRankingHandler(db: Firestore) {
         weekStartAtMs: output.weekStartAtMs,
         weekEndAtMs: output.weekEndAtMs,
         itemsCount: output.items.length,
+        totalItems: output.totalItems,
+        page: output.page,
+        totalPages: output.totalPages,
         durationMs: Date.now() - startedAtMs,
       })
 
@@ -620,26 +868,20 @@ export function createRefreshWeeklyTopBuyersRankingCacheHandler(db: Firestore) {
 
     try {
       const configuredLimit = await readConfiguredTopBuyersRankingLimit(db)
-      const requestedLimit = sanitizeLimit(payload.limit, MAX_PUBLIC_RANKING_LIMIT, configuredLimit)
       const forceRebuild = payload.forceRebuild === true
       const nowMs = Date.now()
       const currentWindow = await resolveCurrentTopBuyersRankingWindow(db, nowMs)
       const published = await readPublishedWeeklyLiveRankingCache(db)
 
-      if (
-        !forceRebuild
-        && published
-        && published.weekStartAtMs === currentWindow.startMs
-        && published.weekEndAtMs <= nowMs
-        && isCacheFresh(published.updatedAtMs, nowMs)
-      ) {
-        return toRefreshWeeklyTopBuyersOutput(published, requestedLimit)
+      if (!forceRebuild && published && shouldUseWeeklyCache(published, currentWindow, nowMs)) {
+        return toRefreshWeeklyTopBuyersOutput(published, configuredLimit)
       }
 
       const refreshed = await syncWeeklyTopBuyersRankingLive(db, {
         updatedBy: 'manual',
+        forceRebuild,
       })
-      const output = toRefreshWeeklyTopBuyersOutput(refreshed, requestedLimit)
+      const output = toRefreshWeeklyTopBuyersOutput(refreshed, configuredLimit)
 
       logger.info('refreshWeeklyTopBuyersRankingCache completed', {
         trigger: 'refreshWeeklyTopBuyersRankingCache',
@@ -647,6 +889,7 @@ export function createRefreshWeeklyTopBuyersRankingCacheHandler(db: Firestore) {
         weekStartAtMs: output.weekStartAtMs,
         weekEndAtMs: output.weekEndAtMs,
         itemsCount: output.items.length,
+        totalItems: output.totalItems,
         durationMs: Date.now() - startedAtMs,
       })
 

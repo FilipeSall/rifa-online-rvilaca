@@ -1,7 +1,7 @@
 import { getDownloadURL, ref as storageRef } from 'firebase/storage'
 import { type MouseEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
 import { FaWhatsapp } from 'react-icons/fa'
-import { useCampaignSettings } from '../../hooks/useCampaignSettings'
+import { useScopedCampaignSettings } from '../../hooks/useScopedCampaignSettings'
 import { storage } from '../../lib/firebase'
 import {
   getLocalStorage,
@@ -60,7 +60,7 @@ export default function FeaturedVideoFloatingButton({
   topSlot = null,
   middleSlot = null,
 }: FeaturedVideoFloatingButtonProps) {
-  const { campaign } = useCampaignSettings()
+  const { campaign } = useScopedCampaignSettings()
   const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [showNotificationBadge, setShowNotificationBadge] = useState(false)

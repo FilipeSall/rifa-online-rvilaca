@@ -13,7 +13,7 @@ import {
 } from '../const/purchaseNumbers'
 import { DEFAULT_TICKET_PRICE } from '../const/campaign'
 import { functions } from '../lib/firebase'
-import { useCampaignSettings } from './useCampaignSettings'
+import { useScopedCampaignSettings } from './useScopedCampaignSettings'
 import {
   calculateCouponDiscount,
   getCouponHint,
@@ -334,7 +334,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
   const navigate = useNavigate()
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
   const setPurchaseSummary = usePurchaseSummaryStore((state) => state.setSummary)
-  const { campaign } = useCampaignSettings()
+  const { campaign } = useScopedCampaignSettings()
   const initialSelectionMode = options?.initialSelectionMode === 'manual' ? 'manual' : 'automatico'
 
   const baseTotalNumbers =
@@ -769,6 +769,11 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
       return
     }
 
+    if (selectionMode !== 'manual') {
+      setIsPageLoading(false)
+      return
+    }
+
     const requestId = numberWindowRequestRef.current + 1
     numberWindowRequestRef.current = requestId
     setIsPageLoading(true)
@@ -803,6 +808,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     fetchWindowPage,
     isWindowCacheReady,
     pageStart,
+    selectionMode,
   ])
 
   useEffect(() => {
@@ -1012,7 +1018,6 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
       return
     }
 
-    let isCancelled = false
     setIsAutoSelecting(true)
 
     const preservedSelection = Array.from(new Set(selectedNumbersRef.current))
@@ -1031,69 +1036,23 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
       return
     }
 
-    void requestAvailableNumbers({
-      quantity: missingQuantity,
-      excludeNumbers: preservedSelection,
-    })
-      .then((generatedFromBackend) => {
-        if (isCancelled) {
-          return
-        }
+    const generated = pickRandomUniqueNumbersFromRange(
+      rangeStart,
+      rangeEnd,
+      missingQuantity,
+      preservedSelection,
+    )
+    const mergedSelection = Array.from(new Set([...preservedSelection, ...generated]))
+      .sort((left, right) => left - right)
+      .slice(0, quantity)
 
-        const missingAfterBackend = Math.max(missingQuantity - generatedFromBackend.length, 0)
-        const fallbackGenerated = missingAfterBackend > 0
-          ? pickRandomUniqueNumbersFromRange(
-            rangeStart,
-            rangeEnd,
-            missingAfterBackend,
-            [...preservedSelection, ...generatedFromBackend],
-          )
-          : []
-        const mergedSelection = Array.from(new Set([
-          ...preservedSelection,
-          ...generatedFromBackend,
-          ...fallbackGenerated,
-        ]))
-          .sort((left, right) => left - right)
-          .slice(0, quantity)
-
-        setSelectedNumbers((currentSelection) => (
-          areNumberListsEqual(currentSelection, mergedSelection)
-            ? currentSelection
-            : mergedSelection
-        ))
-      })
-      .catch(() => {
-        if (isCancelled) {
-          return
-        }
-
-        const fallbackGenerated = pickRandomUniqueNumbersFromRange(
-          rangeStart,
-          rangeEnd,
-          missingQuantity,
-          preservedSelection,
-        )
-        const mergedSelection = Array.from(new Set([...preservedSelection, ...fallbackGenerated]))
-          .sort((left, right) => left - right)
-          .slice(0, quantity)
-
-        setSelectedNumbers((currentSelection) => (
-          areNumberListsEqual(currentSelection, mergedSelection)
-            ? currentSelection
-            : mergedSelection
-        ))
-      })
-      .finally(() => {
-        if (!isCancelled) {
-          setIsAutoSelecting(false)
-        }
-      })
-
-    return () => {
-      isCancelled = true
-    }
-  }, [quantity, rangeEnd, rangeStart, requestAvailableNumbers, reservationSeconds, selectionMode])
+    setSelectedNumbers((currentSelection) => (
+      areNumberListsEqual(currentSelection, mergedSelection)
+        ? currentSelection
+        : mergedSelection
+    ))
+    setIsAutoSelecting(false)
+  }, [quantity, rangeEnd, rangeStart, reservationSeconds, selectionMode])
 
   useEffect(() => {
     if (reservationSeconds === null) {
@@ -1195,26 +1154,12 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
       return
     }
 
-    let generated: number[] = []
-
-    try {
-      generated = await requestAvailableNumbers({
-        quantity: missingQuantity,
-        excludeNumbers: preservedSelection,
-      })
-    } catch {
-      generated = []
-    }
-
-    if (generated.length < missingQuantity) {
-      const fallbackGenerated = pickRandomUniqueNumbersFromRange(
-        rangeStart,
-        rangeEnd,
-        missingQuantity - generated.length,
-        [...preservedSelection, ...generated],
-      )
-      generated = [...generated, ...fallbackGenerated]
-    }
+    const generated = pickRandomUniqueNumbersFromRange(
+      rangeStart,
+      rangeEnd,
+      missingQuantity,
+      preservedSelection,
+    )
 
     if (generated.length === 0) {
       toast.warning('Nao foi possivel completar a selecao automaticamente no momento.', {
@@ -1234,7 +1179,7 @@ export function usePurchaseNumbers(options?: { initialSelectionMode?: SelectionM
     ))
     setSelectionMode('manual')
     clearReservationState()
-  }, [clearReservationState, quantity, rangeEnd, rangeStart, requestAvailableNumbers])
+  }, [clearReservationState, quantity, rangeEnd, rangeStart])
 
   const handleToggleNumber = useCallback(
     (slot: NumberSlot) => {

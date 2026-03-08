@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App'
 import AuthProvider from './context/AuthProvider'
+import { CampaignSettingsProvider } from './context/CampaignSettingsProvider'
 import { syncCachesWithEmulatorRuntime } from './utils/fetchCache'
 
 const queryClient = new QueryClient()
@@ -23,7 +24,9 @@ async function bootstrap() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <BrowserRouter>
-            <App />
+            <CampaignSettingsProvider>
+              <App />
+            </CampaignSettingsProvider>
           </BrowserRouter>
         </AuthProvider>
       </QueryClientProvider>

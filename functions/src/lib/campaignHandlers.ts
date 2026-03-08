@@ -1,4 +1,4 @@
-import { FieldValue, type DocumentData, type Firestore } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp, type DocumentData, type Firestore } from 'firebase-admin/firestore'
 import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
 import {
@@ -169,6 +169,147 @@ interface PublicCampaignDeadlineOutput {
 }
 
 const CAMPAIGN_DEADLINE_TIMEZONE = 'America/Sao_Paulo' as const
+const DASHBOARD_SUMMARY_CACHE_TTL_MS = 60 * 1000
+const PUBLIC_SALES_SNAPSHOT_CACHE_TTL_MS = 60 * 1000
+
+type InMemoryCacheEntry<T> = {
+  payload: T
+  expiresAtMs: number
+}
+
+let dashboardSummaryCache: InMemoryCacheEntry<DashboardSummaryOutput> | null = null
+let publicSalesSnapshotCache: InMemoryCacheEntry<PublicSalesSnapshotOutput> | null = null
+let salesSummaryBackfillInFlight: Promise<{ totalRevenue: number; paidOrders: number; soldNumbers: number } | null> | null = null
+let salesSummaryBackfillDone = false
+
+function readCachedEntry<T>(entry: InMemoryCacheEntry<T> | null, nowMs = Date.now()): T | null {
+  if (!entry || entry.expiresAtMs <= nowMs) {
+    return null
+  }
+
+  return entry.payload
+}
+
+function isMissingIndexError(error: unknown): boolean {
+  const code = Number((error as { code?: unknown })?.code)
+  const message = String((error as { message?: unknown })?.message || error).toLowerCase()
+
+  return (
+    code === 9
+    || (message.includes('index') && (message.includes('requires') || message.includes('create')))
+  )
+}
+
+async function countExpiredPendingOrders(db: Firestore, nowMs: number): Promise<number> {
+  try {
+    const pendingExpiredCountResult = await db.collection('orders')
+      .where('status', '==', 'pending')
+      .where('type', '==', 'deposit')
+      .where('reservationExpiresAt', '<=', Timestamp.fromMillis(nowMs))
+      .count()
+      .get()
+
+    return pendingExpiredCountResult.data().count
+  } catch (error) {
+    if (!isMissingIndexError(error)) {
+      throw error
+    }
+
+    logger.warn('countExpiredPendingOrders fallback to snapshot scan due to missing index', {
+      error: String(error),
+    })
+
+    const pendingSnapshot = await db.collection('orders')
+      .where('status', '==', 'pending')
+      .where('type', '==', 'deposit')
+      .select('reservationExpiresAt')
+      .get()
+
+    return pendingSnapshot.docs.reduce((total, orderDoc) => {
+      const reservationExpiresAtMs = readTimestampMillis(orderDoc.get('reservationExpiresAt'))
+      if (reservationExpiresAtMs !== null && reservationExpiresAtMs <= nowMs) {
+        return total + 1
+      }
+
+      return total
+    }, 0)
+  }
+}
+
+async function backfillSalesSummaryOnce(db: Firestore): Promise<{ totalRevenue: number; paidOrders: number; soldNumbers: number } | null> {
+  if (salesSummaryBackfillDone) {
+    return null
+  }
+
+  if (salesSummaryBackfillInFlight) {
+    return salesSummaryBackfillInFlight
+  }
+
+  salesSummaryBackfillInFlight = (async () => {
+    const paidOrdersSnapshot = await db.collection('orders')
+      .where('status', '==', 'paid')
+      .where('type', '==', 'deposit')
+      .where('campaignId', '==', CAMPAIGN_DOC_ID)
+      .select('reservedNumbers', 'quantity', 'amount')
+      .get()
+
+    let soldNumbers = 0
+    let totalRevenue = 0
+
+    for (const orderDoc of paidOrdersSnapshot.docs) {
+      const data = orderDoc.data()
+      const amount = Number(data.amount)
+      if (Number.isFinite(amount) && amount > 0) {
+        totalRevenue += amount
+      }
+
+      if (Array.isArray(data.reservedNumbers)) {
+        soldNumbers += data.reservedNumbers.filter((value) => Number.isInteger(value) && Number(value) > 0).length
+        continue
+      }
+
+      const quantity = Number(data.quantity)
+      if (Number.isInteger(quantity) && quantity > 0) {
+        soldNumbers += quantity
+      }
+    }
+
+    const backfill = {
+      totalRevenue: Number(totalRevenue.toFixed(2)),
+      paidOrders: paidOrdersSnapshot.size,
+      soldNumbers,
+    }
+
+    await db.collection('metrics').doc('sales_summary').set({
+      totalRevenue: backfill.totalRevenue,
+      paidOrders: backfill.paidOrders,
+      soldNumbers: backfill.soldNumbers,
+      updatedAt: FieldValue.serverTimestamp(),
+      backfilledAt: FieldValue.serverTimestamp(),
+      backfilledBy: 'getPublicSalesSnapshot',
+    }, { merge: true })
+
+    salesSummaryBackfillDone = true
+    logger.warn('sales_summary backfilled from orders', {
+      paidOrders: backfill.paidOrders,
+      soldNumbers: backfill.soldNumbers,
+      totalRevenue: backfill.totalRevenue,
+    })
+
+    return backfill
+  })()
+    .catch((error) => {
+      logger.error('sales_summary backfill failed', {
+        error: String(error),
+      })
+      return null
+    })
+    .finally(() => {
+      salesSummaryBackfillInFlight = null
+    })
+
+  return salesSummaryBackfillInFlight
+}
 
 function sanitizeCampaignPrice(value: unknown): number | null {
   if (value === undefined || value === null || value === '') {
@@ -1215,6 +1356,8 @@ export function createUpsertCampaignSettingsHandler(db: Firestore) {
 
       await campaignRef.set(updateData, { merge: true })
       invalidateCampaignDocCache(CAMPAIGN_DOC_ID)
+      dashboardSummaryCache = null
+      publicSalesSnapshotCache = null
 
       const updatedCampaign = await campaignRef.get()
       const campaignData = (updatedCampaign.exists ? updatedCampaign.data() : undefined) as DocumentData | undefined
@@ -1275,8 +1418,12 @@ export function createGetDashboardSummaryHandler(db: Firestore) {
     const uid = requireActiveUid(request.auth)
     await assertAdminRole(db, uid)
     const nowMs = Date.now()
+    const cached = readCachedEntry(dashboardSummaryCache, nowMs)
+    if (cached) {
+      return cached
+    }
 
-    const [summarySnapshot, dailySnapshot, failedCountResult, pendingSnapshot] = await Promise.all([
+    const [summarySnapshot, dailySnapshot, failedCountResult, expiredPendingOrders] = await Promise.all([
       db.collection('metrics').doc('sales_summary').get(),
       db
         .collection('salesMetricsDaily')
@@ -1288,26 +1435,24 @@ export function createGetDashboardSummaryHandler(db: Firestore) {
         .where('type', '==', 'deposit')
         .count()
         .get(),
-      db.collection('orders')
-        .where('status', '==', 'pending')
-        .where('type', '==', 'deposit')
-        .select('reservationExpiresAt')
-        .get(),
+      countExpiredPendingOrders(db, nowMs),
     ])
 
-    const totalRevenue = readMetricNumber(summarySnapshot.get('totalRevenue'))
-    const paidOrders = Math.max(0, Math.floor(readMetricNumber(summarySnapshot.get('paidOrders'))))
-    const soldNumbers = Math.max(0, Math.floor(readMetricNumber(summarySnapshot.get('soldNumbers'))))
+    const backfilledSummary = !summarySnapshot.exists
+      ? await backfillSalesSummaryOnce(db)
+      : null
+
+    const totalRevenue = backfilledSummary
+      ? backfilledSummary.totalRevenue
+      : readMetricNumber(summarySnapshot.get('totalRevenue'))
+    const paidOrders = backfilledSummary
+      ? backfilledSummary.paidOrders
+      : Math.max(0, Math.floor(readMetricNumber(summarySnapshot.get('paidOrders'))))
+    const soldNumbers = backfilledSummary
+      ? backfilledSummary.soldNumbers
+      : Math.max(0, Math.floor(readMetricNumber(summarySnapshot.get('soldNumbers'))))
     const avgTicket = paidOrders > 0 ? Number((totalRevenue / paidOrders).toFixed(2)) : 0
     const failedOrders = failedCountResult.data().count
-    const expiredPendingOrders = pendingSnapshot.docs.reduce((total, orderDoc) => {
-      const reservationExpiresAtMs = readTimestampMillis(orderDoc.get('reservationExpiresAt'))
-      if (reservationExpiresAtMs !== null && reservationExpiresAtMs <= nowMs) {
-        return total + 1
-      }
-
-      return total
-    }, 0)
     const cancelledOrders = failedOrders + expiredPendingOrders
     const daily = dailySnapshot.docs.map((dailyDoc) => ({
       date: sanitizeString(dailyDoc.get('date')) || dailyDoc.id,
@@ -1316,7 +1461,7 @@ export function createGetDashboardSummaryHandler(db: Firestore) {
       soldNumbers: Math.max(0, Math.floor(readMetricNumber(dailyDoc.get('soldNumbers')))),
     }))
 
-    return {
+    const output = {
       totalRevenue,
       paidOrders,
       soldNumbers,
@@ -1324,6 +1469,13 @@ export function createGetDashboardSummaryHandler(db: Firestore) {
       avgTicket,
       daily,
     } satisfies DashboardSummaryOutput
+
+    dashboardSummaryCache = {
+      payload: output,
+      expiresAtMs: nowMs + DASHBOARD_SUMMARY_CACHE_TTL_MS,
+    }
+
+    return output
   }
 }
 
@@ -1344,6 +1496,12 @@ export function createGetPublicCampaignDeadlineHandler(db: Firestore) {
 
 export function createGetPublicSalesSnapshotHandler(db: Firestore) {
   return async (): Promise<PublicSalesSnapshotOutput> => {
+    const nowMs = Date.now()
+    const cached = readCachedEntry(publicSalesSnapshotCache, nowMs)
+    if (cached) {
+      return cached
+    }
+
     const [campaignData, summarySnapshot] = await Promise.all([
       getCampaignDocCached(db, CAMPAIGN_DOC_ID),
       db.collection('metrics').doc('sales_summary').get(),
@@ -1362,40 +1520,30 @@ export function createGetPublicSalesSnapshotHandler(db: Firestore) {
       soldNumbers = Math.max(0, Math.floor(readMetricNumber(summarySnapshot.get('soldNumbers'))))
       paidOrders = Math.max(0, Math.floor(readMetricNumber(summarySnapshot.get('paidOrders'))))
     } else {
-      const paidOrdersSnapshot = await db.collection('orders')
-        .where('status', '==', 'paid')
-        .where('type', '==', 'deposit')
-        .where('campaignId', '==', CAMPAIGN_DOC_ID)
-        .select('reservedNumbers', 'quantity')
-        .get()
-
-      paidOrders = paidOrdersSnapshot.size
-      soldNumbers = paidOrdersSnapshot.docs.reduce((total, orderDoc) => {
-        const data = orderDoc.data()
-
-        if (Array.isArray(data.reservedNumbers)) {
-          return total + data.reservedNumbers.filter((value) => Number.isInteger(value) && Number(value) > 0).length
-        }
-
-        const quantity = Number(data.quantity)
-        if (Number.isInteger(quantity) && quantity > 0) {
-          return total + quantity
-        }
-
-        return total
-      }, 0)
+      const backfilledSummary = await backfillSalesSummaryOnce(db)
+      if (backfilledSummary) {
+        soldNumbers = backfilledSummary.soldNumbers
+        paidOrders = backfilledSummary.paidOrders
+      }
     }
 
     const cappedSoldNumbers = Math.min(soldNumbers, totalNumbers)
     const soldPercentage = Number(((cappedSoldNumbers / totalNumbers) * 100).toFixed(1))
 
-    return {
+    const output = {
       campaignId: CAMPAIGN_DOC_ID,
       totalNumbers,
       soldNumbers: cappedSoldNumbers,
       paidOrders,
       soldPercentage,
-      updatedAtMs: Date.now(),
+      updatedAtMs: nowMs,
     }
+
+    publicSalesSnapshotCache = {
+      payload: output,
+      expiresAtMs: nowMs + PUBLIC_SALES_SNAPSHOT_CACHE_TTL_MS,
+    }
+
+    return output
   }
 }

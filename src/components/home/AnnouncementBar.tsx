@@ -4,13 +4,13 @@ import {
   ANNOUNCEMENT_URGENCY_TEXT,
   ANNOUNCEMENT_URGENCY_THRESHOLD_PERCENT,
 } from '../../const/home'
-import { useCampaignSettings } from '../../hooks/useCampaignSettings'
+import { useScopedCampaignSettings } from '../../hooks/useScopedCampaignSettings'
 import { usePublicSalesSnapshot } from '../../hooks/usePublicSalesSnapshot'
 import { parseCampaignDateTime } from '../../utils/campaignSchedule'
 
 export default function AnnouncementBar() {
   const { soldPercentage } = usePublicSalesSnapshot()
-  const { campaign } = useCampaignSettings()
+  const { campaign } = useScopedCampaignSettings()
   const startsAtMs = parseCampaignDateTime(campaign.startsAt, campaign.startsAtTime, false)
   const isCampaignNotStarted = campaign.status === 'scheduled'
     || (startsAtMs !== null && Date.now() < startsAtMs)

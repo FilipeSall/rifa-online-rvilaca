@@ -99,8 +99,7 @@ interface GetManualNumberSelectionSnapshotOutput extends GetNumberWindowOutput {
   }
 }
 
-const SEARCH_BLOCK_SIZE = 240
-const RANDOM_ROUNDS = 20
+const MAX_CHUNK_READS_PER_REQUEST = 12
 
 function sanitizeCampaignId(raw: unknown): string {
   const campaignId = sanitizeString(raw)
@@ -749,24 +748,90 @@ function randomIntInclusive(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min
 }
 
-function buildRandomCandidates(params: {
-  start: number
-  end: number
-  size: number
-  excluded: Set<number>
-}): number[] {
-  const candidateSet = new Set<number>()
-  const total = params.end - params.start + 1
+function shuffleArray<T>(input: T[]): T[] {
+  const output = [...input]
 
-  while (candidateSet.size < params.size && candidateSet.size + params.excluded.size < total) {
-    const value = randomIntInclusive(params.start, params.end)
-    if (params.excluded.has(value)) {
-      continue
-    }
-    candidateSet.add(value)
+  for (let index = output.length - 1; index > 0; index -= 1) {
+    const swapIndex = randomIntInclusive(0, index)
+    const current = output[index]
+    output[index] = output[swapIndex]
+    output[swapIndex] = current
   }
 
-  return Array.from(candidateSet)
+  return output
+}
+
+function buildAllChunkStarts(rangeStart: number, rangeEnd: number) {
+  const chunkStarts: number[] = []
+
+  for (let chunkStart = rangeStart; chunkStart <= rangeEnd; chunkStart += NUMBER_CHUNK_SIZE) {
+    chunkStarts.push(chunkStart)
+  }
+
+  return chunkStarts
+}
+
+function buildChunkReadPlan(
+  rangeStart: number,
+  rangeEnd: number,
+  maxChunksToRead: number,
+) {
+  const allChunkStarts = buildAllChunkStarts(rangeStart, rangeEnd)
+  if (allChunkStarts.length <= maxChunksToRead) {
+    return allChunkStarts
+  }
+
+  const randomPhaseLimit = Math.min(
+    allChunkStarts.length,
+    Math.max(1, Math.ceil(maxChunksToRead * 0.66)),
+  )
+  const randomPhase = shuffleArray(allChunkStarts).slice(0, randomPhaseLimit)
+  const anchorChunkStart = randomPhase[0] ?? allChunkStarts[0]
+  const anchorIndex = Math.max(0, allChunkStarts.indexOf(anchorChunkStart))
+  const sequentialPhase: number[] = []
+
+  for (let step = 0; step < allChunkStarts.length; step += 1) {
+    const chunkStart = allChunkStarts[(anchorIndex + step) % allChunkStarts.length]
+    sequentialPhase.push(chunkStart)
+    if (sequentialPhase.length >= maxChunksToRead) {
+      break
+    }
+  }
+
+  return Array.from(new Set([...randomPhase, ...sequentialPhase]))
+    .slice(0, maxChunksToRead)
+}
+
+function readAvailableNumbersFromChunk(params: {
+  chunkState: NumberChunkRuntimeState
+  excludedNumbers: Set<number>
+  selectedNumbers: Set<number>
+  needed: number
+}) {
+  if (params.needed <= 0) {
+    return []
+  }
+
+  const candidates: number[] = []
+
+  for (let number = params.chunkState.chunkStart; number <= params.chunkState.chunkEnd; number += 1) {
+    if (params.excludedNumbers.has(number) || params.selectedNumbers.has(number)) {
+      continue
+    }
+
+    const numberView = getChunkNumberView(params.chunkState, number)
+    if (numberView.status !== 'disponivel') {
+      continue
+    }
+
+    candidates.push(number)
+  }
+
+  if (candidates.length <= params.needed) {
+    return candidates
+  }
+
+  return shuffleArray(candidates).slice(0, params.needed)
 }
 
 export function createPickRandomAvailableNumbersHandler(db: Firestore) {
@@ -782,72 +847,54 @@ export function createPickRandomAvailableNumbersHandler(db: Firestore) {
       )
       const nowMs = Date.now()
       const selectedNumbers = new Set<number>()
-      const blockedNumbers = new Set<number>()
-      const randomBatchSize = Math.max(40, Math.min(200, quantity * 4))
+      let chunksRead = 0
+      let fallbackUsed = false
+      const chunkReadPlan = buildChunkReadPlan(
+        campaignRange.start,
+        campaignRange.end,
+        MAX_CHUNK_READS_PER_REQUEST,
+      )
 
-      for (let round = 0; round < RANDOM_ROUNDS && selectedNumbers.size < quantity; round += 1) {
-        const candidates = buildRandomCandidates({
-          start: campaignRange.start,
-          end: campaignRange.end,
-          size: randomBatchSize,
-          excluded: new Set([...selectedNumbers, ...blockedNumbers, ...excludedNumbers]),
-        })
-
-        if (candidates.length === 0) {
+      for (const chunkStart of chunkReadPlan) {
+        if (selectedNumbers.size >= quantity || chunksRead >= MAX_CHUNK_READS_PER_REQUEST) {
           break
         }
 
-        const states = await readNumbersState(db, {
+        const chunkRef = getNumberChunkRef(db, campaignId, chunkStart)
+        const chunkSnapshot = await chunkRef.get()
+        chunksRead += 1
+
+        const chunkState = readChunkState({
           campaignId,
-          numbers: candidates,
-          nowMs,
           rangeStart: campaignRange.start,
           rangeEnd: campaignRange.end,
+          chunkStart,
+          snapshotData: chunkSnapshot.exists ? (chunkSnapshot.data() || null) : null,
+          nowMs,
         })
 
-        for (const state of states) {
-          if (state.status === 'disponivel') {
-            selectedNumbers.add(state.number)
-            if (selectedNumbers.size >= quantity) {
-              break
-            }
-          } else {
-            blockedNumbers.add(state.number)
+        if (chunkState.availableCount <= 0) {
+          continue
+        }
+
+        const needed = quantity - selectedNumbers.size
+        const availableNumbers = readAvailableNumbersFromChunk({
+          chunkState,
+          excludedNumbers,
+          selectedNumbers,
+          needed,
+        })
+
+        for (const number of availableNumbers) {
+          selectedNumbers.add(number)
+          if (selectedNumbers.size >= quantity) {
+            break
           }
         }
       }
 
-      if (selectedNumbers.size < quantity) {
-        for (
-          let blockStart = campaignRange.start;
-          blockStart <= campaignRange.end && selectedNumbers.size < quantity;
-          blockStart += SEARCH_BLOCK_SIZE
-        ) {
-          const blockEnd = Math.min(blockStart + SEARCH_BLOCK_SIZE - 1, campaignRange.end)
-          const states = await readRangeState(db, {
-            campaignId,
-            start: blockStart,
-            end: blockEnd,
-            nowMs,
-            rangeStart: campaignRange.start,
-            rangeEnd: campaignRange.end,
-          })
-
-          for (const state of states) {
-            if (
-              state.status !== 'disponivel'
-              || selectedNumbers.has(state.number)
-              || excludedNumbers.has(state.number)
-            ) {
-              continue
-            }
-
-            selectedNumbers.add(state.number)
-            if (selectedNumbers.size >= quantity) {
-              break
-            }
-          }
-        }
+      if (selectedNumbers.size < quantity && chunksRead >= MAX_CHUNK_READS_PER_REQUEST) {
+        fallbackUsed = true
       }
 
       const numbers = Array.from(selectedNumbers).sort((a, b) => a - b)
@@ -861,8 +908,9 @@ export function createPickRandomAvailableNumbersHandler(db: Firestore) {
         numbersRequested: quantity,
         conflictsCount: 0,
         transactionAttempts: 0,
-        chunksRead: 0,
+        chunksRead,
         chunksWritten: 0,
+        fallbackUsed,
         durationMs,
       })
 

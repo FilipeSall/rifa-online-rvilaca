@@ -47,6 +47,7 @@ type RefreshWeeklyTopBuyersRankingCacheOutput = {
   updatedAtMs?: number
   weekId?: string
   sourceDrawDate?: string | null
+  totalItems?: number
   items?: unknown[]
 }
 
@@ -532,7 +533,9 @@ export default function CampaignTab() {
         : (payloadEnvelope as RefreshWeeklyTopBuyersRankingCacheOutput)
       const weekId = typeof payload.weekId === 'string' ? payload.weekId : '-'
       const sourceDrawDate = typeof payload.sourceDrawDate === 'string' ? payload.sourceDrawDate : null
-      const itemsCount = Array.isArray(payload.items) ? payload.items.length : 0
+      const itemsCount = Number.isInteger(payload.totalItems) && Number(payload.totalItems) >= 0
+        ? Number(payload.totalItems)
+        : (Array.isArray(payload.items) ? payload.items.length : 0)
       const sourceLabel = sourceDrawDate ? ` | draw: ${sourceDrawDate}` : ''
 
       toast.success(`Ranking semanal atualizado (${itemsCount} posições) | semana: ${weekId}${sourceLabel}`, {

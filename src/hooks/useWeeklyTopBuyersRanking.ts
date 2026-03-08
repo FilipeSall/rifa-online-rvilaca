@@ -1,21 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { doc, onSnapshot } from 'firebase/firestore'
+import { useEffect, useMemo, useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
-import { db, functions } from '../lib/firebase'
-import { DEFAULT_TOP_BUYERS_RANKING_LIMIT } from '../const/campaign'
+import { functions } from '../lib/firebase'
 import type { RankingItem } from '../const/home'
-import { useCampaignSettings } from './useCampaignSettings'
 
 type GetWeeklyTopBuyersRankingOutput = {
   updatedAtMs?: number
   weekId?: string
   weekStartAtMs?: number
   weekEndAtMs?: number
+  page?: number
+  pageSize?: number
+  totalItems?: number
+  totalPages?: number
   items?: RankingItem[]
 }
-const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
-const MIN_REFRESH_INTERVAL_MS = 8_000
-const PUBLIC_CACHE_DOC_PATH = ['draws', '_public-weekly-top-buyers-ranking'] as const
 
 type CallableEnvelope<T> = T | { result?: T }
 
@@ -52,16 +50,16 @@ function normalizeRankingItems(value: unknown): RankingItem[] {
     .filter((item) => item.pos > 0 && item.cotas > 0)
 }
 
-function shouldRefreshRanking(updatedAtMs: number | null, nowMs = Date.now()) {
-  if (!updatedAtMs || !Number.isFinite(updatedAtMs)) {
-    return true
+function sanitizePositiveInteger(value: unknown, fallback: number) {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return fallback
   }
 
-  return nowMs >= updatedAtMs + CACHE_TTL_MS
+  return parsed
 }
 
-export function useWeeklyTopBuyersRanking() {
-  const { campaign } = useCampaignSettings()
+export function useWeeklyTopBuyersRanking(page: number) {
   const [items, setItems] = useState<RankingItem[]>([])
   const [updatedAtMs, setUpdatedAtMs] = useState<number | null>(null)
   const [weekId, setWeekId] = useState<string | null>(null)
@@ -69,90 +67,34 @@ export function useWeeklyTopBuyersRanking() {
   const [weekEndAtMs, setWeekEndAtMs] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const hasCachedSnapshotRef = useRef(false)
-  const isRefreshingRef = useRef(false)
-  const lastRefreshStartedAtRef = useRef(0)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [totalItems, setTotalItems] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
   const getWeeklyRankingCallable = useMemo(
-    () => httpsCallable<{ limit: number }, unknown>(functions, 'getWeeklyTopBuyersRanking'),
+    () => httpsCallable<{ page: number }, unknown>(functions, 'getWeeklyTopBuyersRanking'),
     [],
   )
-  const rankingCacheDocRef = useMemo(
-    () => doc(db, PUBLIC_CACHE_DOC_PATH[0], PUBLIC_CACHE_DOC_PATH[1]),
-    [],
-  )
-  const requestedLimit = useMemo(() => {
-    const parsed = Number(campaign.topBuyersRankingLimit)
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      return DEFAULT_TOP_BUYERS_RANKING_LIMIT
-    }
-
-    return Math.min(parsed, DEFAULT_TOP_BUYERS_RANKING_LIMIT)
-  }, [campaign.topBuyersRankingLimit])
-
-  const refreshRanking = useCallback(async () => {
-    const nowMs = Date.now()
-    if (isRefreshingRef.current) {
-      return
-    }
-
-    // Evita tempestade de chamadas quando listener estiver desconectado.
-    if (nowMs - lastRefreshStartedAtRef.current < MIN_REFRESH_INTERVAL_MS) {
-      return
-    }
-
-    lastRefreshStartedAtRef.current = nowMs
-    isRefreshingRef.current = true
-    setIsLoading(true)
-
-    try {
-      const response = await getWeeklyRankingCallable({ limit: requestedLimit })
-      const payload = unwrapCallableData(response.data as CallableEnvelope<GetWeeklyTopBuyersRankingOutput>)
-      const nextItems = normalizeRankingItems(payload.items)
-      const nextUpdatedAtMs =
-        typeof payload.updatedAtMs === 'number' && Number.isFinite(payload.updatedAtMs)
-          ? payload.updatedAtMs
-          : Date.now()
-      const nextWeekId = typeof payload.weekId === 'string' ? payload.weekId : null
-      const nextWeekStartAtMs =
-        typeof payload.weekStartAtMs === 'number' && Number.isFinite(payload.weekStartAtMs)
-          ? payload.weekStartAtMs
-          : null
-      const nextWeekEndAtMs =
-        typeof payload.weekEndAtMs === 'number' && Number.isFinite(payload.weekEndAtMs)
-          ? payload.weekEndAtMs
-          : null
-
-      setItems(nextItems)
-      setUpdatedAtMs(nextUpdatedAtMs)
-      setWeekId(nextWeekId)
-      setWeekStartAtMs(nextWeekStartAtMs)
-      setWeekEndAtMs(nextWeekEndAtMs)
-      setErrorMessage(null)
-    } catch {
-      if (!hasCachedSnapshotRef.current) {
-        setErrorMessage('Nao foi possivel carregar o ranking semanal agora.')
-      }
-    } finally {
-      isRefreshingRef.current = false
-      setIsLoading(false)
-    }
-  }, [getWeeklyRankingCallable, requestedLimit])
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(
-      rankingCacheDocRef,
-      (snapshot) => {
-        if (!snapshot.exists()) {
-          void refreshRanking()
+    let isCancelled = false
+    const requestedPage = sanitizePositiveInteger(page, 1)
+
+    const load = async () => {
+      setIsLoading(true)
+
+      try {
+        const response = await getWeeklyRankingCallable({ page: requestedPage })
+        if (isCancelled) {
           return
         }
 
-        const payload = snapshot.data() as Record<string, unknown>
+        const payload = unwrapCallableData(response.data as CallableEnvelope<GetWeeklyTopBuyersRankingOutput>)
         const nextItems = normalizeRankingItems(payload.items)
         const nextUpdatedAtMs =
           typeof payload.updatedAtMs === 'number' && Number.isFinite(payload.updatedAtMs)
             ? payload.updatedAtMs
-            : null
+            : Date.now()
         const nextWeekId = typeof payload.weekId === 'string' ? payload.weekId : null
         const nextWeekStartAtMs =
           typeof payload.weekStartAtMs === 'number' && Number.isFinite(payload.weekStartAtMs)
@@ -162,50 +104,42 @@ export function useWeeklyTopBuyersRanking() {
           typeof payload.weekEndAtMs === 'number' && Number.isFinite(payload.weekEndAtMs)
             ? payload.weekEndAtMs
             : null
+        const nextPage = sanitizePositiveInteger(payload.page, requestedPage)
+        const nextPageSize = sanitizePositiveInteger(payload.pageSize, 10)
+        const nextTotalItems = Number.isInteger(payload.totalItems) && Number(payload.totalItems) >= 0
+          ? Number(payload.totalItems)
+          : nextItems.length
+        const nextTotalPages = Number.isInteger(payload.totalPages) && Number(payload.totalPages) >= 0
+          ? Number(payload.totalPages)
+          : (nextTotalItems > 0 ? Math.ceil(nextTotalItems / nextPageSize) : 0)
 
-        hasCachedSnapshotRef.current = true
         setItems(nextItems)
         setUpdatedAtMs(nextUpdatedAtMs)
         setWeekId(nextWeekId)
         setWeekStartAtMs(nextWeekStartAtMs)
         setWeekEndAtMs(nextWeekEndAtMs)
+        setCurrentPage(nextPage)
+        setPageSize(nextPageSize)
+        setTotalItems(nextTotalItems)
+        setTotalPages(nextTotalPages)
         setErrorMessage(null)
-        setIsLoading(false)
-
-        // Se o snapshot vier apenas do cache local (ou vazio), força refresh
-        // para evitar ficar preso em estado antigo do IndexedDB.
-        if (snapshot.metadata.fromCache || nextItems.length === 0 || shouldRefreshRanking(nextUpdatedAtMs)) {
-          void refreshRanking()
+      } catch {
+        if (!isCancelled) {
+          setErrorMessage('Nao foi possivel carregar o ranking semanal agora.')
         }
-      },
-      () => {
-        // Mantém fallback via callable.
-        void refreshRanking()
-      },
-    )
-
-    return unsubscribe
-  }, [rankingCacheDocRef, refreshRanking])
-
-  useEffect(() => {
-    if (!updatedAtMs || !Number.isFinite(updatedAtMs)) {
-      return
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false)
+        }
+      }
     }
 
-    const refreshAtMs = updatedAtMs + CACHE_TTL_MS
-    const delayMs = refreshAtMs - Date.now()
+    void load()
 
-    if (delayMs <= 0) {
-      void refreshRanking()
-      return
+    return () => {
+      isCancelled = true
     }
-
-    const timer = window.setTimeout(() => {
-      void refreshRanking()
-    }, delayMs)
-
-    return () => window.clearTimeout(timer)
-  }, [updatedAtMs, refreshRanking])
+  }, [getWeeklyRankingCallable, page])
 
   return {
     items,
@@ -215,5 +149,9 @@ export function useWeeklyTopBuyersRanking() {
     weekEndAtMs,
     isLoading,
     errorMessage,
+    page: currentPage,
+    pageSize,
+    totalItems,
+    totalPages,
   }
 }

@@ -2,10 +2,10 @@ import logo from '../../assets/logo.webp'
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { FOOTER_NAV_LINKS, FOOTER_SUPPORT_LINKS } from '../../const/home'
-import { useCampaignSettings } from '../../hooks/useCampaignSettings'
+import { useScopedCampaignSettings } from '../../hooks/useScopedCampaignSettings'
 
 export default function Footer() {
-  const { campaign } = useCampaignSettings()
+  const { campaign } = useScopedCampaignSettings()
 
   const whatsappLink = useMemo(() => {
     const digitsOnly = campaign.supportWhatsappNumber.replace(/\D/g, '').slice(0, 15)

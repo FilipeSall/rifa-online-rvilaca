@@ -38,7 +38,7 @@ import {
   readCampaignNumberRange,
 } from './numberStateStore.js'
 import { readStoredReservationNumbers } from './reservationHandlers.js'
-import { syncChampionsRankingLive, syncWeeklyTopBuyersRankingLive } from './rankingHandlers.js'
+import { markPublicRankingCachesDirty } from './rankingHandlers.js'
 import {
   asRecord,
   buildWebhookEventId,
@@ -1490,20 +1490,11 @@ export function createPixWebhookHandler(db: Firestore, secrets: HorsePaySecretRe
             )
 
             try {
-              await syncWeeklyTopBuyersRankingLive(db, { updatedBy: 'payment' })
-            } catch (rankingSyncError) {
-              logger.warn('pixWebhook:weekly-ranking-live-sync-failed', {
+              await markPublicRankingCachesDirty(db, 'payment')
+            } catch (rankingDirtyError) {
+              logger.warn('pixWebhook:ranking-cache-dirty-flag-failed', {
                 externalId,
-                error: String(rankingSyncError),
-              })
-            }
-
-            try {
-              await syncChampionsRankingLive(db)
-            } catch (rankingSyncError) {
-              logger.warn('pixWebhook:champions-ranking-live-sync-failed', {
-                externalId,
-                error: String(rankingSyncError),
+                error: String(rankingDirtyError),
               })
             }
 
