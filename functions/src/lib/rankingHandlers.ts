@@ -797,15 +797,15 @@ export async function syncChampionsRankingLive(
     const nowMs = Date.now()
 
     if (!options.forceRebuild) {
-      if (championsRankingCache && championsRankingCache.expiresAtMs > nowMs) {
-        return championsRankingCache
-      }
-
       const published = await readPublishedChampionsRankingCache(db)
       if (published && shouldUseChampionsCache(published, nowMs)) {
         const cacheEntry = toRankingCacheEntry(published)
         championsRankingCache = cacheEntry
         return cacheEntry
+      }
+
+      if (!published && championsRankingCache && championsRankingCache.expiresAtMs > nowMs) {
+        return championsRankingCache
       }
     }
 
@@ -916,7 +916,18 @@ export function createGetChampionsRankingHandler(db: Firestore) {
     const requestedPage = sanitizePage(payload.page, 1)
 
     try {
-      return await readChampionsRankingPage(db, requestedPage)
+      const cache = await syncChampionsRankingLive(db)
+      const pagination = paginateRankingItems(cache.items, requestedPage)
+
+      return {
+        campaignId: CAMPAIGN_DOC_ID,
+        updatedAtMs: cache.updatedAtMs,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalItems: pagination.totalItems,
+        totalPages: pagination.totalPages,
+        items: pagination.items,
+      }
     } catch (error) {
       logger.error('getChampionsRanking failed', {
         error: String(error),

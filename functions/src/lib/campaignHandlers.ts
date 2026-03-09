@@ -1,4 +1,4 @@
-import { FieldValue, Timestamp, type DocumentData, type Firestore } from 'firebase-admin/firestore'
+import { AggregateField, FieldValue, Timestamp, type DocumentData, type Firestore } from 'firebase-admin/firestore'
 import * as logger from 'firebase-functions/logger'
 import { HttpsError } from 'firebase-functions/v2/https'
 import {
@@ -188,6 +188,36 @@ function readCachedEntry<T>(entry: InMemoryCacheEntry<T> | null, nowMs = Date.no
   }
 
   return entry.payload
+}
+
+async function readSalesLedgerSummary(db: Firestore): Promise<{ totalRevenue: number; paidOrders: number; soldNumbers: number }> {
+  try {
+    const aggregateSnapshot = await db.collection('salesLedger').aggregate({
+      totalRevenue: AggregateField.sum('amount'),
+      paidOrders: AggregateField.count(),
+      soldNumbers: AggregateField.sum('soldNumbers'),
+    }).get()
+    const aggregateData = aggregateSnapshot.data()
+    const totalRevenue = readMetricNumber(aggregateData.totalRevenue)
+    const paidOrders = Math.max(0, Math.floor(Number(aggregateData.paidOrders) || 0))
+    const soldNumbers = Math.max(0, Math.floor(Number(aggregateData.soldNumbers) || 0))
+
+    return {
+      totalRevenue,
+      paidOrders,
+      soldNumbers,
+    }
+  } catch (error) {
+    logger.warn('readSalesLedgerSummary failed', {
+      error: String(error),
+    })
+
+    return {
+      totalRevenue: 0,
+      paidOrders: 0,
+      soldNumbers: 0,
+    }
+  }
 }
 
 function isMissingIndexError(error: unknown): boolean {
@@ -1423,7 +1453,7 @@ export function createGetDashboardSummaryHandler(db: Firestore) {
       return cached
     }
 
-    const [summarySnapshot, dailySnapshot, failedCountResult, expiredPendingOrders] = await Promise.all([
+    const [summarySnapshot, dailySnapshot, failedCountResult, expiredPendingOrders, ledgerSummary] = await Promise.all([
       db.collection('metrics').doc('sales_summary').get(),
       db
         .collection('salesMetricsDaily')
@@ -1436,21 +1466,25 @@ export function createGetDashboardSummaryHandler(db: Firestore) {
         .count()
         .get(),
       countExpiredPendingOrders(db, nowMs),
+      readSalesLedgerSummary(db),
     ])
 
     const backfilledSummary = !summarySnapshot.exists
       ? await backfillSalesSummaryOnce(db)
       : null
 
-    const totalRevenue = backfilledSummary
+    const metricsTotalRevenue = backfilledSummary
       ? backfilledSummary.totalRevenue
       : readMetricNumber(summarySnapshot.get('totalRevenue'))
-    const paidOrders = backfilledSummary
+    const metricsPaidOrders = backfilledSummary
       ? backfilledSummary.paidOrders
       : Math.max(0, Math.floor(readMetricNumber(summarySnapshot.get('paidOrders'))))
-    const soldNumbers = backfilledSummary
+    const metricsSoldNumbers = backfilledSummary
       ? backfilledSummary.soldNumbers
       : Math.max(0, Math.floor(readMetricNumber(summarySnapshot.get('soldNumbers'))))
+    const totalRevenue = Number(Math.max(metricsTotalRevenue, ledgerSummary.totalRevenue).toFixed(2))
+    const paidOrders = Math.max(metricsPaidOrders, ledgerSummary.paidOrders)
+    const soldNumbers = Math.max(metricsSoldNumbers, ledgerSummary.soldNumbers)
     const avgTicket = paidOrders > 0 ? Number((totalRevenue / paidOrders).toFixed(2)) : 0
     const failedOrders = failedCountResult.data().count
     const cancelledOrders = failedOrders + expiredPendingOrders

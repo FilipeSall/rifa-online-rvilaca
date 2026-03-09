@@ -307,7 +307,7 @@ export default function HeroSection({
                           </>
                         ) : null}
                         <button
-                          className={`relative w-full overflow-hidden rounded-xl border px-4 py-3.5 text-left transition-all duration-300 ${quantity === pack
+                          className={`relative w-full overflow-hidden rounded-xl border px-4 py-3.5 lg:px-2 lg:py-3 2xl:px-4 2xl:py-3.5 text-left transition-all duration-300 ${quantity === pack
                               ? 'border-neon-pink/90 bg-[linear-gradient(140deg,rgba(255,0,204,0.16),rgba(6,14,28,0.98))] text-neon-pink shadow-[0_0_0_1px_rgba(255,0,204,0.35),0_14px_28px_rgba(255,0,204,0.2)]'
                               : 'border-white/15 bg-[linear-gradient(160deg,rgba(15,23,42,0.9),rgba(8,13,24,0.95))] text-white hover:-translate-y-0.5 hover:border-cyan-300/45 hover:shadow-[0_14px_30px_rgba(34,211,238,0.14)]'
                             } disabled:cursor-not-allowed disabled:opacity-60`}
@@ -329,19 +329,19 @@ export default function HeroSection({
                             {hasPricing ? (
                               <>
                                 {hasPromotionDiscount ? (
-                                  <p className={`text-[11px] font-semibold tracking-tight line-through decoration-1 ${quantity === pack ? 'text-neon-pink/70' : 'text-gray-500'}`}>
+                                  <p className={`text-[11px] lg:text-[9px] 2xl:text-[11px] font-semibold tracking-tight line-through decoration-1 ${quantity === pack ? 'text-neon-pink/70' : 'text-gray-500'}`}>
                                     {formatCurrency(packPricing.subtotalBase)}
                                   </p>
                                 ) : null}
-                                <p className="text-xl font-black tracking-tight">{formatCurrency(packPricing.subtotalAfterPromotion)}</p>
-                                <p className={`mt-0.5 text-[10px] tracking-[0.12em] ${quantity === pack ? 'text-neon-pink/85' : 'text-gray-400'}`}>
+                                <p className="text-xl lg:text-sm 2xl:text-xl font-black tracking-tight">{formatCurrency(packPricing.subtotalAfterPromotion)}</p>
+                                <p className={`mt-0.5 text-[10px] lg:text-[8px] 2xl:text-[10px] tracking-[0.12em] ${quantity === pack ? 'text-neon-pink/85' : 'text-gray-400'}`}>
                                   {pack} numeros
                                 </p>
                               </>
                             ) : (
                               <>
-                                <p className="text-xl font-black tracking-tight">+{pack}</p>
-                                <p className={`mt-0.5 text-[10px] uppercase tracking-[0.18em] ${quantity === pack ? 'text-neon-pink/85' : 'text-gray-400'}`}>
+                                <p className="text-xl lg:text-sm 2xl:text-xl font-black tracking-tight">+{pack}</p>
+                                <p className={`mt-0.5 text-[10px] lg:text-[8px] 2xl:text-[10px] uppercase tracking-[0.18em] ${quantity === pack ? 'text-neon-pink/85' : 'text-gray-400'}`}>
                                   Numeros
                                 </p>
                               </>

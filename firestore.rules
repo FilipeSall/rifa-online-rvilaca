@@ -10,52 +10,6 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
-    function hasRoleField(data) {
-      return data.keys().hasAny(['role']);
-    }
-
-    function isValidRoleValue(roleValue) {
-      return roleValue == 'user' || roleValue == 'admin';
-    }
-
-    function isValidUserProfileBase() {
-      let allowed = ['uid', 'name', 'email', 'phone', 'cpf', 'role', 'photoURL',
-                    'providerIds', 'createdAtAuth', 'updatedAt', 'lastLoginAt',
-                    'nameSearch', 'emailSearch', 'cpfSearch', 'phoneSearch'];
-      return request.resource.data.keys().hasOnly(allowed)
-        && request.resource.data.uid == request.auth.uid;
-    }
-
-    function isValidUserProfileCreate() {
-      return isValidUserProfileBase()
-        && (
-          !hasRoleField(request.resource.data)
-          || (
-            isValidRoleValue(request.resource.data.role)
-            && request.resource.data.role == 'user'
-          )
-        );
-    }
-
-    function isValidUserProfileUpdate() {
-      let roleKeptUnchanged =
-        (!hasRoleField(resource.data) && !hasRoleField(request.resource.data))
-        || (
-          !hasRoleField(resource.data)
-          && hasRoleField(request.resource.data)
-          && isValidRoleValue(request.resource.data.role)
-          && request.resource.data.role == 'user'
-        )
-        || (
-          hasRoleField(resource.data)
-          && hasRoleField(request.resource.data)
-          && isValidRoleValue(request.resource.data.role)
-          && request.resource.data.role == resource.data.role
-        );
-
-      return isValidUserProfileBase() && roleKeptUnchanged;
-    }
-
     // Dados públicos de campanha usados pela landing page.
     match /campaigns/{campaignId} {
       allow get: if true;

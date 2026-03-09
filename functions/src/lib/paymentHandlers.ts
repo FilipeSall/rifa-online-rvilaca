@@ -855,29 +855,33 @@ export async function runPaidDepositBusinessLogic(
         createdAt: FieldValue.serverTimestamp(),
       })
 
-      if (normalizedAmount !== null) {
-        transaction.set(
-          metricsSummaryRef,
-          {
-            totalRevenue: FieldValue.increment(normalizedAmount),
-            paidOrders: FieldValue.increment(1),
-            soldNumbers: FieldValue.increment(soldNumbersInAttempt),
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        )
-        transaction.set(
-          dailyMetricsRef,
-          {
-            date: dateKey,
-            revenue: FieldValue.increment(normalizedAmount),
-            paidOrders: FieldValue.increment(1),
-            soldNumbers: FieldValue.increment(soldNumbersInAttempt),
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        )
+      const summaryMetricsUpdate: DocumentData = {
+        paidOrders: FieldValue.increment(1),
+        soldNumbers: FieldValue.increment(soldNumbersInAttempt),
+        updatedAt: FieldValue.serverTimestamp(),
       }
+      const dailyMetricsUpdate: DocumentData = {
+        date: dateKey,
+        paidOrders: FieldValue.increment(1),
+        soldNumbers: FieldValue.increment(soldNumbersInAttempt),
+        updatedAt: FieldValue.serverTimestamp(),
+      }
+
+      if (normalizedAmount !== null) {
+        summaryMetricsUpdate.totalRevenue = FieldValue.increment(normalizedAmount)
+        dailyMetricsUpdate.revenue = FieldValue.increment(normalizedAmount)
+      }
+
+      transaction.set(
+        metricsSummaryRef,
+        summaryMetricsUpdate,
+        { merge: true },
+      )
+      transaction.set(
+        dailyMetricsRef,
+        dailyMetricsUpdate,
+        { merge: true },
+      )
 
       if (order.campaignId === CAMPAIGN_DOC_ID && soldNumbersInAttempt > 0) {
         const championsAggregateRef = db.collection(CHAMPIONS_RANKING_USERS_COLLECTION).doc(userId)
