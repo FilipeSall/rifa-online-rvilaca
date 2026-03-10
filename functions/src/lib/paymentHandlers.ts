@@ -743,10 +743,20 @@ export async function runPaidDepositBusinessLogic(
   const soldNumbersCommitted = await db.runTransaction(async (transaction) => {
     transactionStats.transactionAttempts += 1
     let soldNumbersInAttempt = 0
+    const shouldReadChampionsAggregate = order.campaignId === CAMPAIGN_DOC_ID
+    const championsAggregateRef = shouldReadChampionsAggregate
+      ? db.collection(CHAMPIONS_RANKING_USERS_COLLECTION).doc(userId)
+      : null
+
     const headerRefs = reservationRef ? [reservationRef, salesLedgerRef] : [salesLedgerRef]
+    if (championsAggregateRef) {
+      headerRefs.push(championsAggregateRef)
+    }
     const headerSnapshots = await transaction.getAll(...headerRefs)
-    const reservationSnapshot = reservationRef ? headerSnapshots[0] : null
-    const salesLedgerSnapshot = reservationRef ? headerSnapshots[1] : headerSnapshots[0]
+    let headerSnapshotIndex = 0
+    const reservationSnapshot = reservationRef ? headerSnapshots[headerSnapshotIndex++] : null
+    const salesLedgerSnapshot = headerSnapshots[headerSnapshotIndex++]
+    const championsAggregateSnapshot = championsAggregateRef ? headerSnapshots[headerSnapshotIndex] : null
     transactionStats.uniqueStateReads = normalizedReservedNumbers.length
 
     const chunkStatesByStart = new Map<number, NumberChunkRuntimeState>()
@@ -883,9 +893,7 @@ export async function runPaidDepositBusinessLogic(
         { merge: true },
       )
 
-      if (order.campaignId === CAMPAIGN_DOC_ID && soldNumbersInAttempt > 0) {
-        const championsAggregateRef = db.collection(CHAMPIONS_RANKING_USERS_COLLECTION).doc(userId)
-        const championsAggregateSnapshot = await transaction.get(championsAggregateRef)
+      if (championsAggregateRef && championsAggregateSnapshot && soldNumbersInAttempt > 0) {
         const currentCotas = Number(championsAggregateSnapshot.get('cotas'))
         const currentFirstPurchaseAtMs = Number(championsAggregateSnapshot.get('firstPurchaseAtMs'))
         const nextCotas = (Number.isInteger(currentCotas) && currentCotas > 0 ? currentCotas : 0) + soldNumbersInAttempt
