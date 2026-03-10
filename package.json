@@ -34,7 +34,8 @@
     "reset:draws:apply:legacy": "bun run scripts/reset-draws.ts --confirm --include-legacy",
     "reset:campaign": "bun run scripts/reset-campaign.ts",
     "test:ui:unit": "node ./node_modules/vitest/vitest.mjs run --config vitest.config.ts",
-    "test:ui:unit:watch": "node ./node_modules/vitest/vitest.mjs --config vitest.config.ts"
+    "test:ui:unit:watch": "node ./node_modules/vitest/vitest.mjs --config vitest.config.ts",
+    "report:users:purchased-numbers": "bun run scripts/export-users-purchased-numbers.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
