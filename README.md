@@ -1,288 +1,147 @@
-# Rifa Online Web
+# JhonyBarber — Plataforma de Rifa Online
 
-Frontend React + backend Firebase Functions para reservas de numeros, pagamentos PIX e consolidacao de vendas.
+**Site em producao:** https://jhonnybarber.com.br
 
-## Inicio rapido
+Plataforma completa de rifa/sorteio online desenvolvida para o criador de conteudo **Jhony Barber**. Participantes compram cotas numeradas via PIX e concorrem a premios de alto valor — atualmente uma **BMW R1200 GS 2015/2016 Triple Black**, uma **Honda CG TITAN 160 2025** e **20 PIX de R$ 1.000 cada**. O sorteio e apurado com transparencia total pela **Loteria Federal**.
 
-### Testar local (2 comandos em 2 terminais)
+---
 
-Terminal 1:
+## Sobre o Projeto
 
-```bash
-bun run emulators:start
-```
+SPA com backend serverless que gerencia campanhas de sorteio de ponta a ponta:
 
-Terminal 2 (espere o terminal 1 concluir):
+- Venda de cotas numeradas com selecao rapida ou compra personalizada
+- Pagamento via PIX gerado automaticamente, com confirmacao instantanea via webhook
+- Reserva temporaria de numeros por 5 minutos durante o fluxo de pagamento
+- Ranking Geral e Ranking Semanal dos maiores compradores, atualizado em tempo real
+- Historico de ganhadores de edicoes anteriores
+- Painel Administrativo completo com dashboard de faturamento, campanhas, usuarios, sorteios e graficos de receita por dia
+- Sorteio Top e Sorteio Principal configuraveis pelo administrador
+- Comprovante em PDF gerado automaticamente apos pagamento confirmado
+- Ambiente seguro com App Check do Firebase e regras de seguranca no Firestore e Storage
 
-```bash
-bun run seed:emulator:users
-bun run dev:emulator
-```
+---
 
-Login admin local (emulator):
-- CPF: `00000000000`
-- Telefone: `99999999999`
-
-Quando gerar um PIX e quiser simular o pagamento HorsePay no emulator:
-
-```bash
-bun run webhook:mock:paid
-```
-
-### Voltar para producao
-
-1. Pare os emuladores (`Ctrl + C` no terminal 1).
-2. Rode o frontend normal:
-
-```bash
-bun run dev
-```
-
-Checklist rapido de producao:
-- `VITE_USE_FIREBASE_EMULATORS=false` (ou ausente).
-- `USE_MOCK_HORSEPAY` nao definido em producao.
-
-## Objetivo desta documentacao
-
-Este guia mostra exatamente:
-
-1. Como testar backend local sem usar producao e sem custo do Firebase.
-2. Quantos terminais abrir em cada fluxo.
-3. Como voltar para ambiente de producao com seguranca.
-
-## Modos de execucao
-
-### 1) Desenvolvimento local com Emulator Suite (fluxo manual)
-
-- Usa projeto demo `demo-rifa-online`.
-- Usa gateway PIX mock (`USE_MOCK_HORSEPAY=true`).
-- Nao toca dados de producao.
-- Nao gera custo de uso do Firebase em producao.
-- Terminais necessarios: **2**.
-
-### 2) Teste E2E automatizado do backend
-
-- Sobe emuladores temporariamente e encerra ao final.
-- Executa o cenario completo: reserva -> createPixDeposit(mock) -> webhook -> baixa.
-- Terminais necessarios: **1**.
-
-### 3) Ambiente de producao
-
-- Sem emuladores.
-- Usa projeto Firebase real (`rifa-online-395d9`).
-- Usa secrets reais no Secret Manager.
-
-## Pre-requisitos
-
-- Node.js instalado.
-- Dependencias do projeto instaladas (`bun install`).
-- Java instalado (necessario para Firestore Emulator).
-- Firebase CLI instalada.
-
-## Arquivos de configuracao de ambiente
+## Stack Tecnologica
 
 ### Frontend
 
-- `/.env` (base do frontend)
-- `/.env.emulator` (modo local com emuladores)
-- `/.env.production` (modo producao)
+| Tecnologia | Versao | Uso |
+|---|---|---|
+| React | 19 | Interface SPA, entrypoint em src/main.tsx |
+| TypeScript | — | Tipagem estatica no frontend e backend |
+| Vite | 7 | Bundler e dev server |
+| React Router DOM | 7 | Navegacao client-side |
+| Tailwind CSS | 3 | Estilizacao utilitaria com PostCSS e Autoprefixer |
+| TanStack React Query | — | Cache e fetch de dados assincronos |
+| Zustand | — | Estado global leve (authStore.ts) |
 
-### Functions
+### Backend e Infraestrutura
 
-- `/functions/.env.local` (flags locais do emulator)
-- `/functions/.secret.local` (secrets locais para Functions Emulator)
+| Tecnologia | Uso |
+|---|---|
+| Firebase Cloud Functions v2 | Handlers HTTP e callable para logica de negocio |
+| Firebase Admin SDK | Gerenciamento server-side e scripts de exportacao |
+| Firebase Firestore | Banco de dados NoSQL em tempo real |
+| Firebase Auth | Autenticacao de usuarios |
+| Firebase Storage | Armazenamento de arquivos e imagens |
+| Firebase Analytics | Metricas de uso |
+| Firebase App Check | Protecao contra abusos |
+| Firebase Hosting | Hospedagem do frontend |
+| Firebase Emulator Suite | Ambiente local de desenvolvimento |
 
-## Setup inicial (uma vez)
+### Pagamento PIX
 
-1. Instale dependencias da raiz:
+| Tecnologia | Uso |
+|---|---|
+| HorsePay | Gateway de pagamento PIX |
+| Axios | Chamadas HTTP no backend para a API HorsePay |
+| qrcode | Geracao do QR Code PIX |
 
-```bash
-bun install
-```
+### UI e UX
 
-2. Instale dependencias das functions (se ainda nao instalou):
+| Biblioteca | Uso |
+|---|---|
+| React Toastify | Notificacoes e alertas |
+| React Icons | Biblioteca de icones |
+| React Loading Skeleton | Skeletons de carregamento |
+| Swiper | Carrossel de premios |
+| Recharts | Graficos do dashboard (faturamento por dia) |
 
-```bash
-cd functions && bun install
-```
+### Utilitarios
 
-3. Crie arquivos de ambiente locais a partir dos exemplos:
+| Biblioteca | Uso |
+|---|---|
+| Luxon | Manipulacao e formatacao de datas |
+| jsPDF | Geracao de comprovantes em PDF |
 
-```bash
-cp .env.emulator.example .env.emulator
-cp functions/.env.local.example functions/.env.local
-cp functions/.secret.local.example functions/.secret.local
-```
+### Qualidade e Testes
 
-## Fluxo A: testar local sem producao (2 terminais)
+| Ferramenta | Uso |
+|---|---|
+| ESLint 9 | Linting e padronizacao de codigo |
+| Vitest | Testes unitarios |
+| Testing Library | Testes de componentes React |
+| Happy DOM | DOM virtual para testes |
 
-### Terminal 1: subir emuladores
+### Package Management e Runtime
+
+Bun e utilizado fortemente nos scripts do projeto. npm esta presente no fluxo de deploy e predeploy.
+
+---
+
+## Inicio Rapido
+
+### Testar localmente
+
+Terminal 1 — Emuladores Firebase:
 
 ```bash
 bun run emulators:start
 ```
 
-Servicos iniciados:
-- Auth Emulator
-- Firestore Emulator
-- Functions Emulator
-- Storage Emulator
-
-Projeto usado neste comando: `demo-rifa-online`.
-
-### Terminal 2: frontend apontando para emuladores
-
-```bash
-bun run dev:emulator
-```
-
-Esse comando usa `vite --mode emulator` e habilita:
-- `VITE_USE_FIREBASE_EMULATORS=true`
-- conexao local de Auth/Firestore/Functions/Storage
-- analytics desativado no modo emulator
-
-## Fluxo B: rodar teste E2E backend (1 terminal)
-
-```bash
-bun run emulators:exec:backend-e2e
-```
-
-Esse comando:
-1. sobe emuladores temporarios,
-2. executa seed local,
-3. roda `tests/backend-emulator.e2e.test.mjs`,
-4. encerra os emuladores.
-
-Cenarios cobertos:
-- reserva de numeros,
-- criacao de PIX com mock,
-- webhook idempotente,
-- gravacao em `payments` e `salesLedger`,
-- liberacao da reserva,
-- numero vendido na consulta publica.
-
-## Script de seed local do backend
-
-Se quiser apenas popular campanha de teste no emulator:
-
-```bash
-bun run seed:emulator:backend
-```
-
-Observacao: execute esse comando com emuladores ativos.
-
-## Simular pagamento PIX local (webhook fake)
-
-Quando `USE_MOCK_HORSEPAY=true`, o `createPixDeposit` gera pedido pendente e PIX mock, mas nao confirma pagamento sozinho.
-Para simular confirmacao sem pagar de verdade:
-
-1. Gere um PIX no frontend local (fluxo normal).
-2. Rode:
-
-```bash
-bun run webhook:mock:paid
-```
-
-Esse comando:
-- busca o pedido mais recente com `type=deposit` e `status=pending` no **Firestore Emulator**;
-- envia `POST` para `pixWebhook` local (`127.0.0.1:5001`);
-- marca o pedido como pago e executa a baixa de numeros.
-
-Opcional: forcar um pedido especifico:
-
-```bash
-bun run webhook:mock:paid -- --externalId=SEU_EXTERNAL_ID
-```
-
-Seguranca:
-- o script aborta se nao estiver no projeto `demo-rifa-online`;
-- o script aborta se os hosts nao forem locais (`127.0.0.1`/`localhost`);
-- nao consome HorsePay real e nao toca producao.
-
-## Script de seed de usuarios locais (Auth + Firestore)
-
-Para criar/atualizar contas de login no emulator (sem tocar producao):
+Terminal 2 — Frontend (aguarde Terminal 1 inicializar):
 
 ```bash
 bun run seed:emulator:users
+bun run dev:emulator
 ```
 
-Contas criadas:
+Login admin local: CPF 00000000000 / Senha admin123
 
-- admin: CPF `00000000000` / telefone `99999999999`
-- user: CPF `11111111111` / telefone `98911111111`
-- user: CPF `22222222222` / telefone `98922222222`
+---
 
-Comportamento do script:
+## Arquitetura
 
-- cria/atualiza usuario no **Auth Emulator** (sem email/senha, login por token custom);
-- cria/atualiza `cpfRegistry/{cpf}` e `phoneRegistry/{phone}` no **Firestore Emulator**;
-- cria/atualiza `users/{uid}` no **Firestore Emulator** com `role` correto;
-- e idempotente (rodar de novo so atualiza os mesmos usuarios).
+```
+rifa-online-rvilaca/
+src/              Frontend React (main.tsx, App.tsx, lib/firebase.ts, stores/authStore.ts)
+functions/        Backend Firebase Cloud Functions (index.ts, lib/paymentHandlers.ts, lib/horsepayClient.ts)
+scripts/          Scripts administrativos
+firebase.json     Firebase Hosting, Firestore, Storage, Emulators
+firestore.rules   Regras de seguranca do Firestore
+storage.rules     Regras de seguranca do Storage
+tailwind.config.js, vite.config.js, vitest.config.ts
+```
 
-Seguranca:
+---
 
-- o script aborta se o projeto nao for `demo-rifa-online`;
-- o script aborta se hosts de emulator nao forem locais (`127.0.0.1`/`localhost`).
+## Deploy
 
-## Build e testes de Functions
+Deploy via Firebase CLI. O predeploy compila o frontend com Vite e o backend com TypeScript antes de enviar para o Firebase Hosting e Functions.
 
 ```bash
-bun run functions:build
-bun run functions:test
+bun run deploy
 ```
 
-O build limpa `functions/lib` antes de compilar para evitar testes stale de compilacoes antigas.
+---
 
-## Como voltar para producao (passo a passo)
+## Seguranca
 
-### 1) Parar tudo do emulator
+Firebase App Check bloqueia requisicoes nao autorizadas. Firestore Rules e Storage Rules restringem acesso por perfil. Webhook PIX autenticado com validacao de assinatura no backend. Reserva temporaria de cotas evita conflito de compras simultaneas.
 
-- Pare o terminal dos emuladores (`Ctrl + C`).
+---
 
-### 2) Rodar frontend em modo normal (sem emulator)
+## Licenca
 
-```bash
-bun run dev
-```
-
-Nao use `dev:emulator` para producao.
-
-### 3) Validar flags e arquivos locais
-
-Checklist:
-
-1. `VITE_USE_FIREBASE_EMULATORS` deve estar `false` (ou ausente) no ambiente de producao.
-2. Nao usar `functions/.env.local` e `functions/.secret.local` em producao.
-3. `USE_MOCK_HORSEPAY` nao deve estar definido em producao.
-4. `HORSEPAY_WEBHOOK_CALLBACK_URL` so deve ser usado se houver necessidade explicita.
-
-### 4) Garantir secrets reais no Firebase
-
-As Functions em producao usam Secret Manager (`defineSecret`).
-
-Secrets obrigatorios:
-
-- `HORSEPAY_CLIENT_KEY`
-- `HORSEPAY_CLIENT_SECRET`
-- `HORSEPAY_WEBHOOK_TOKEN`
-
-### 5) Deploy
-
-Deploy completo:
-
-```bash
-firebase deploy --project rifa-online-395d9
-```
-
-Deploy apenas de rules:
-
-```bash
-bun run deploy:rules
-```
-
-## Resumo rapido: quantos terminais abrir?
-
-- Teste manual local (app + backend): **2 terminais**.
-- E2E automatizado backend: **1 terminal**.
-- Nao precisa 3 terminais no fluxo padrao.
+Projeto privado — todos os direitos reservados a JhonyBarber.
